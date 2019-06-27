@@ -4,32 +4,44 @@ __all__ = ['mol_to_file']
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
+from typing import (List, Optional, Container, Iterable, Union)
 
 import yaml
 import h5py
 import numpy as np
 import pandas as pd
 
+from scm.plams import Molecule
 import scm.plams.interfaces.molecule.rdkit as molkit
 
 from rdkit import Chem
+from rdkit.Chem import Mol
 
-from ..mol_utils import from_rdmol
-from ..utils import (get_time, get_template)
+from ..utils import (from_rdmol, get_time, get_template)
 
 
-def mol_to_file(mol_list, path=None, overwrite=False, mol_format=['xyz', 'pdb']):
-    """ Export all molecules in **mol_list** to .pdb and/or .xyz files.
+def mol_to_file(mol_list: Iterable[Molecule],
+                path: Optional[str] = None,
+                overwrite: bool = False,
+                mol_format: Container[str] = ('xyz', 'pdb')) -> None:
+    """Export all molecules in **mol_list** to .pdb and/or .xyz files.
 
-    :parameter mol_list: A list of PLAMS molecules.
-    :type mol_list: |list|_ [|plams.Molecule|_]
-    :parameter path: The path to the directory where the molecules will be stored. Defaults
-        to the current working directory if *None*.
-    :type path: |None|_ or |str|_
-    :parameter bool overwrite: If previously generated structures can be overwritten or not.
-    :parameter mol_format: A list of strings with the to-be exported file types. Accepted values
-        are *xyz* and/or *pdb*.
-    :type mol_format: |list|_ [|str|_]
+    Parameters
+    ----------
+    mol_list: |list|_ [|plams.Molecule|_]
+        An iterable consisting of PLAMS molecules.
+
+    path : str
+        Optional: The path to the directory where the molecules will be stored.
+        Defaults to the current working directory if ``None``.
+
+    overwrite : bool
+        If previously generated files can be overwritten or not.
+
+    mol_format : |list|_ [|str|_]
+        A list of strings with the to-be exported file types.
+        Accepted values are ``"xyz"`` and/or ``"pdb"``.
+
     """
     # Set the export path
     path = path or getcwd()
@@ -55,21 +67,27 @@ def mol_to_file(mol_list, path=None, overwrite=False, mol_format=['xyz', 'pdb'])
                 mol.write(mol_path + '.xyz')
 
 
-def get_nan_row(df):
-    """ Return a list of None-esque objects for each column in **df**.
+def get_nan_row(df: pd.DataFrame) -> list:
+    """Return a list of None-esque objects for each column in **df**.
+
     The object in question depends on the data type of the column.
-    Will default to *None* if a specific data type is not recognized
+    Will default to ``None`` if a specific data type is not recognized
 
-        * |np.int64|_: *-1*
+        * |np.int64|_: ``-1``
+        * |np.float64|_: ``np.nan``
+        * |object|_: ``None``
+        * |bool|_: ``False``
 
-        * |np.float64|_: *np.nan*
+    Parameters
+    ----------
+    df : |pd.DataFrame|_
+        A dataframe.
 
-        * |object|_: *None*
+    Returns
+    -------
+    |list|_ [|int|_, |float|_, |bool|_ and/or |None|_]
+        A list of none-esque objects, one for each column in **df**.
 
-    :parameter df: A dataframe
-    :type df: |pd.DataFrame|_
-    :return: A list of non-esque objects, one for each column in **df**.
-    :rtype: |list|_ [|int|_, |float|_ and/or |None|_]
     """
     dtype_dict = {
         np.dtype('int64'): -1,
@@ -91,16 +109,24 @@ def get_nan_row(df):
         return ret
 
 
-def as_pdb_array(mol_list, min_size=0):
-    """ Converts a list of PLAMS molecule into an array of strings representing (partially)
-    de-serialized .pdb files.
+def as_pdb_array(mol_list: Container[Molecule],
+                 min_size: int = 0) -> np.ndarray:
+    """Converts a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
 
-    :parameter mol_list: A list of PLAMS molecules.
-    :type mol_list: |list|_ [|plams.Molecule|_]
-    :parameter int min_size: The minimumum length of the pdb_array. The array is padded with empty
-        strings if required.
-    :return: An array with *m* partially deserialized .pdb files with up to *n* lines each.
-    :rtype: *m*n* |np.ndarray|_ [|np.bytes|_ *|S80*]
+    Parameters
+    ----------
+    mol_list: :math:`m` |list|_ [|plams.Molecule|_]
+        A list of :math:`m` PLAMS molecules.
+
+    min_size : int
+        The minimumum length of the pdb_array.
+        The array is padded with empty strings if required.
+
+    Returns
+    -------
+    :math:`m*n` |np.ndarray|_ [|np.bytes|_ *|S80*]
+        An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
+
     """
     pdb_list = []
     shape = min_size
@@ -118,15 +144,23 @@ def as_pdb_array(mol_list, min_size=0):
     return ret
 
 
-def from_pdb_array(array, rdmol=True):
-    """ Converts an array with a (partially) de-serialized .pdb file into an
-    RDKit or PLAMS molecule.
+def from_pdb_array(array: np.ndarray,
+                   rdmol: bool = True) -> Union[Molecule, Mol]:
+    """Converts an array with a (partially) de-serialized .pdb file into a molecule.
 
-    :parameter array: A (partially) de-serialized .pdb file with *n* lines.
-    :type array: *n* |np.ndarray|_ [|np.bytes|_ / S80]
-    :parameter bool rdmol: If *True*, return an RDKit molecule instead of a PLAMS molecule.
-    :return: A PLAMS or RDKit molecule build from **array**.
-    :rtype: |plams.Molecule|_ or |rdkit.Chem.Mol|_
+    Parameters
+    ----------
+    array : :math:`n` |np.ndarray|_ [|np.bytes|_ / S80]
+        A (partially) de-serialized .pdb file with :math:`n` lines.
+
+    rdmol : |bool|_
+        If ``True``, return an RDKit molecule instead of a PLAMS molecule.
+
+    Returns
+    -------
+    |plams.Molecule|_ or |rdkit.Chem.Mol|_
+        A PLAMS or RDKit molecule build from **array**.
+
     """
     pdb_str = ''.join([item.decode() + '\n' for item in array if item])
     ret = Chem.MolFromPDBBlock(pdb_str, removeHs=False, proximityBonding=False)
@@ -135,13 +169,23 @@ def from_pdb_array(array, rdmol=True):
     return ret
 
 
-def sanitize_yaml_settings(settings, job_type):
-    """ Remove a predetermined set of unwanted keys and values from a settings object.
+def sanitize_yaml_settings(settings: Settings,
+                           job_type: str) -> Settings:
+    """Remove a predetermined set of unwanted keys and values from a settings object.
 
-    :param settings: A settings object with, potentially, undesired keys and values.
-    :type settings: |plams.Settings|_ (superclass: |dict|_)
-    :return: A (nested) dictionary with unwanted keys and values removed.
-    :rtype: |dict|_
+    Parameters
+    ----------
+    settings : |Settings|_
+        A settings instance with, potentially, undesired keys and values.
+
+    job_type: |str|_
+        The name of key in the settings blacklist.
+
+    Returns
+    -------
+    |Settings|_
+        A Settings instance with unwanted keys and values removed.
+
     """
     def recursive_del(s, s_del):
         for key in s:
@@ -163,14 +207,23 @@ def sanitize_yaml_settings(settings, job_type):
     return settings
 
 
-def _create_csv(path, database='ligand'):
-    """ Create a ligand or QD database (csv format) and, if it does not exist, and return
-    its absolute path.
+def _create_csv(path: str,
+                database: str = 'ligand') -> str:
+    """Create a ligand or QD database (csv format) if it does not yet exist.
 
-    :param str path: The path to the database.
-    :param str database: The type of database, accepted values are *ligand* and *qd*.
-    :return: The absolute path to the ligand or QD database.
-    :rtype: |str|_
+    Parameters
+    ----------
+    path : str
+        The path (without filename) of the database.
+
+    database : |str|_
+        The type of database, accepted values are ``"ligand"`` and ``"qd"``.
+
+    Returns
+    -------
+    |str|_
+        The absolute path to the ligand or QD database.
+
     """
     path = join(path, database + '_database.csv')
 
@@ -297,7 +350,7 @@ def even_index(df1: pd.DataFrame,
     Returns
     -------
     |pd.DataFrame|_
-        A new
+        A new dataframe.
 
     """
     # Figure out if ``df1.index`` is a subset of ``df2.index``

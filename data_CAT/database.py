@@ -1,10 +1,10 @@
-""" A module which holds the Database class. """
+"""A module which holds the Database class."""
 
 __all__ = ['Database']
 
 from os import getcwd
 from time import sleep
-from typing import Optional
+from typing import (Optional, Sequence, List, Union)
 from itertools import count
 
 import yaml
@@ -12,34 +12,45 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from scm.plams import Settings
+from rdkit.Chem import Mol
+from scm.plams import Settings, Molecule
 
 from .database_functions import (
     _create_csv, _create_yaml, _create_hdf5, even_index,
     from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
-from ..mol_utils import from_rdmol
+from .utils import from_rdmol
 
 
 class Database():
-    """ The Database class.
+    """The Database class.
 
-    :Atributes:     * **csv_lig** (|str|_) – Path and filename of the .csv file containing all \
-                    ligand related results.
+    Paramaters
+    ----------
+    path : |str|_
+        The path+directory name of the directory which is to contain all database components.
 
-                    * **csv_qd** (|str|_) – Path and filename of the .csv file containing all \
-                    quantum dot related results.
+    Attributes
+    ----------
+    csv_lig : |str|_
+        Path+filename of the .csv file containing all ligand related results.
 
-                    * **yaml** (|str|_) – Path and filename of the .yaml file containing all \
-                    job settings.
+    csv_qd : |str|_
+        Path+filename of the .csv file containing all quantum dot related results.
 
-                    * **hdf5** (|str|_) – Path and filename of the .hdf5 file containing all \
-                    structures (as partiallize de-serialized .pdb files).
+    yaml : |str|_
+        Path and filename of the .yaml file containing all job settings.
 
-                    * **mongodb** (|None|_) – *None*.
+    hdf5 : |str|_
+        Path and filename of the .hdf5 file containing all structures
+        (as partiallize de-serialized .pdb files).
+
+    mongodb : |None|_
+        Placeholder.
+
     """
 
-    def __init__(self, path=None):
+    def __init__(self, path: str = None) -> None:
         path = path or getcwd()
 
         # Attributes which hold the absolute paths to various components of the database
@@ -49,7 +60,7 @@ class Database():
         self.hdf5 = _create_hdf5(path)
         self.mongodb = None  # Placeholder
 
-    def __str__(self):
+    def __str__(self) -> str:
         ret = Settings()
         attr_dict = vars(self)
         for key in attr_dict:
@@ -59,24 +70,42 @@ class Database():
     """ ###########################  Opening and closing the database ######################### """
 
     class open_yaml():
-        """ Context manager for opening and closing the job settings database.
+        """Context manager for opening and closing the job settings database (:attr:`.Database.yaml`).
 
-        :param str path: The path+filename to the database component.
-        :param bool write: Whether or not the database file should be updated after
-            closing **self**.
+        Paramaters
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.yaml`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        Attributes
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.yaml`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        settings: |None|_ or |Settings|_
+            An attribute for (temporary) storing the opened .yaml file
+            (:attr:`.filename`) as :class:`.Settings` instance.
+
         """
 
-        def __init__(self, path=None, write=True):
-            self.path = path or getcwd()
+        def __init__(self, filename: Optional[str] = None,
+                     write: bool = True) -> None:
+            self.filename = filename or getcwd()
             self.write = write
             self.settings = None
 
-        def __enter__(self):
-            with open(self.path, 'r') as f:
+        def __enter__(self) -> Settings:
+            with open(self.filename, 'r') as f:
                 self.settings = Settings(yaml.load(f, Loader=yaml.FullLoader))
                 return self.settings
 
-        def __exit__(self, type, value, traceback):
+        def __exit__(self, *args) -> None:
             if self.write:
                 yml_dict = self.settings.as_dict()
 
@@ -87,16 +116,33 @@ class Database():
                             yml_dict[key][i] = value.as_dict()
 
                 # Write to the .yaml file
-                with open(self.path, 'w') as f:
+                with open(self.filename, 'w') as f:
                     f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
             self.settings = False
 
     class open_csv_lig():
-        """ Context manager for opening and closing the ligand database.
+        """Context manager for opening and closing the ligand database.
 
-        :param str path: The path+filename to the database component.
-        :param bool write: Whether or not the database file should be updated after
-            closing **self**.
+        Paramaters
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.csv_lig`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        Attributes
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.csv_lig`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        df: |None|_ or |pd.DataFrame|_
+            An attribute for (temporary) storing the opened .csv file
+            (:attr:`.filename`) as :class:`.DataFrame` instance.
+
         """
 
         def __init__(self, path=None, write=True):
@@ -125,9 +171,25 @@ class Database():
     class open_csv_qd():
         """Context manager for opening and closing the quantum dot database.
 
-        :param str path: The path+filename to the database component.
-        :param bool write: Whether or not the database file should be updated after
-            closing **self**.
+        Paramaters
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.csv_qd`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        Attributes
+        ----------
+        filename: |str|_
+            The path+filename to the database component (:attr:`.Database.csv_qd`).
+
+        write: |bool|_
+            Whether or not the database file should be updated after closing this instance.
+
+        df: |None|_ or |pd.DataFrame|_
+            An attribute for (temporary) storing the opened .csv file
+            (:attr:`.filename`) as :class:`.DataFrame` instance.
 
         """
 
@@ -202,20 +264,37 @@ class Database():
 
     """ #################################  Updating the database ############################## """
 
-    def update_csv(self, df, database='ligand', columns=None, overwrite=False, job_recipe=None,
-                   opt=False):
-        """ Update **self.csv_lig** or **self.csv_qd** with
-        (potentially) new user provided settings.
+    def update_csv(self, df: pd.DataFrame,
+                   database: str = 'ligand',
+                   columns: Optional[Sequence] = None,
+                   overwrite: bool = False,
+                   job_recipe: Optional[Settings] = None,
+                   opt: bool = False) -> None:
+        """Update :attr:`.csv_lig` or :attr:`.csv_qd` with new user-provided settings.
 
-        :parameter df: A dataframe of new (potential) database entries.
-        :type df: |pd.DataFrame|_ (columns: |str|_, index: |str|_, values: |plams.Molecule|_)
-        :parameter str database: The type of database; accepted values are *ligand* and *QD*.
-        :parameter columns: A list of column keys in **df** which
-            (potentially) are to be added to **self**. If *None*: Add all columns.
-        :type columns: |None|_ or |list|_ [|tuple|_ [|str|_]]
-        :parameter bool overwrite: Whether or not previous entries can be overwritten or not.
-        :parameter job_recipe: A Settings object with settings specific to a job.
-        :type job_recipe: |None|_ or |plams.Settings|_ (superclass: |dict|_)
+        Parameters
+        ----------
+        df : |pd.DataFrame|_
+            A dataframe of new (potential) database entries.
+
+        database : str
+            The type of database; accepted values are ``"ligand"`` (:attr:`.csv_lig`)
+            and ``"QD"`` (:attr:`.csv_qd`).
+
+        columns : |Sequence|_
+            Optional: A list of column keys in **df** which
+            (potentially) are to be added to this instance.
+            If ``None``: Add all columns.
+
+        overwrite : |bool|_
+            Whether or not previous entries can be overwritten or not.
+
+        job_recipe : |plams.Settings|_
+            Optional: A :class:`.Settings` instance with settings specific to a job.
+
+        opt : |bool|_
+            WiP.
+
         """
         # Operate on either the ligand or quantum dot database
         if database in ('ligand', 'ligand_no_opt'):
@@ -264,14 +343,20 @@ class Database():
             if opt:
                 db.update(df[('opt', '')], overwrite=True)
 
-    def update_yaml(self, job_recipe):
-        """ Update **self.yaml** with (potentially) new user provided settings.
+    def update_yaml(self, job_recipe: Settings) -> dict:
+        """Update :attr:`.yaml` with (potentially) new user provided settings.
 
-        :parameter job_recipe: A settings object with one or more settings specific to a job.
-        :type job_recipe: |plams.Settings|_ (superclass: |dict|_)
-        :return: A dictionary with the column names as keys and the key for **self.yaml** as
-            matching values.
-        :rtype: |dict|_ (keys: |str|_, values: |str|_)
+        Paramaters
+        ----------
+        job_recipe : |plams.Settings|_
+            A settings object with one or more settings specific to a job.
+
+        Returns
+        -------
+        |dict|_
+            A dictionary with the column names as keys and the key for :attr:`.yaml`
+            as matching values.
+
         """
         ret = {}
         with self.open_yaml(self.yaml) as db:
@@ -298,16 +383,30 @@ class Database():
                     ret[item] = key + ' ' + str(len(db[key]) - 1)
         return ret
 
-    def update_hdf5(self, df, database='ligand', overwrite=False, opt=False):
-        """ Export molecules (see the *mol* column in **df**) to the structure database.
-        Returns a series with the **self.hdf5** indices of all new entries.
+    def update_hdf5(self, df: pd.DataFrame,
+                    database: str = 'ligand',
+                    overwrite: bool = False,
+                    opt: bool = False):
+        """ Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
-        :parameter df: A dataframe of new (potential) database entries.
-        :type df: |pd.DataFrame|_ (columns: |str|_, index: |str|_, values: |plams.Molecule|_)
-        :parameter str database: The type of database; accepted values are *ligand* and *QD*.
-        :parameter bool overwrite: Whether or not previous entries can be overwritten or not.
-        :return: A series with the index of all new molecules in **self.hdf5**
-        :rtype: |pd.Series|_ (index: |str|_, values: |np.int64|_)
+        Returns a series with the :attr:`.hdf5` indices of all new entries.
+
+        Paramaters
+        ----------
+        df : |pd.DataFrame|_
+            A dataframe of new (potential) database entries.
+
+        database : str
+            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+
+        overwrite : bool
+            Whether or not previous entries can be overwritten or not.
+
+        Returns
+        -------
+        |pd.Series|_
+            A series with the indices of all new molecules in :attr:`.hdf5`.
+
         """
         # Identify new and preexisting entries
         if opt:
@@ -351,7 +450,8 @@ class Database():
 
         return ret
 
-    def _update_hdf5_settings(self, df, column):
+    def _update_hdf5_settings(self, df: pd.DataFrame,
+                              column) -> None:
         # Add new entries to the database
         self.hdf5_availability()
         with h5py.File(self.hdf5, 'r+') as f:
@@ -374,7 +474,9 @@ class Database():
         return None
 
     @staticmethod
-    def _read_inp(job_paths, ax2=0, ax3=0):
+    def _read_inp(job_paths: Sequence[str],
+                  ax2: int = 0,
+                  ax3: int = 0) -> np.ndarray:
         """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
         # Determine the minimum size of the to-be returned 3D array
         line_count = [[Database._get_line_count(j) for j in i] for i in job_paths]
@@ -390,7 +492,7 @@ class Database():
         return ret
 
     @staticmethod
-    def _get_line_count(filename):
+    def _get_line_count(filename: str) -> int:
         """Return the total number of lines in **filename**."""
         substract = 0
         with open(filename, 'r') as f:
@@ -401,21 +503,37 @@ class Database():
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self, df, database='ligand', get_mol=True, inplace=True):
-        """ Pull results from **self.csv_lig** or **self.csv_qd**.
-        Performs in inplace update of **df** if **inplace** = *True*, returing *None*.
+    def from_csv(self,
+                 df: pd.DataFrame,
+                 database: str = 'ligand',
+                 get_mol: bool = True,
+                 inplace: bool = True) -> Optional[pd.Series]:
+        """Pull results from :attr:`.csv_lig` or :atr:`.csv_qd`.
 
-        :parameter df: A dataframe of new (potential) database entries.
-        :type df: |pd.DataFrame|_ (columns: |str|_, index: |str|_, values: |plams.Molecule|_)
-        :parameter str database: The type of database; accepted values are *ligand* and *QD*.
-        :parameter columns: A list of to be updated columns in **df**.
-        :parameter bool get_mol: Attempt to pull preexisting molecules from the database.
-            See **inplace** for more details.
-        :parameter bool inplace: If *True* perform an inplace update of the *mol* column in **df**.
-            Otherwise Return a new series of PLAMS molecules.
-        :return: If **inplace** = *False*: return a new series of PLAMS molecules pulled
-            from **self**, else return |None|_
-        :rtype: |None|_ or |pd.Series|_ (index: |str|_, values: |plams.Molecule|_)
+        Performs in inplace update of **df** if **inplace** = ``True``, thus returing ``None``.
+
+        Parameters
+        ----------
+        df : |pd.DataFrame|_
+            A dataframe of new (potential) database entries.
+
+        database : str
+            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+
+        get_mol : bool
+            Attempt to pull preexisting molecules from the database.
+            See the **inplace** argument for more details.
+
+        inplace : bool
+            If ``True`` perform an inplace update of the ``"mol"`` column in **df**.
+            Otherwise return a new series of PLAMS molecules.
+
+        Returns
+        -------
+        |pd.Series|_ [|plams.Molecule|_]
+            Optional: A Series of PLAMS molecules if **get_mol** = ``True``
+            and **inplace** = ``False``.
+
         """
         # Operate on either the ligand or quantum dot database
         if database == 'ligand':
@@ -439,19 +557,30 @@ class Database():
         # Return a new series if **inplace** = *False*; return *None* otherwise
         return ret
 
-    def _get_csv_mol(self, df, database='ligand', inplace=True):
-        """ A method which handles the retrieval and subsequent formatting of molecules.
-        Called internally by :meth:`Database.from_csv`.
+    def _get_csv_mol(self, df: pd.DataFrame,
+                     database: str = 'ligand',
+                     inplace: bool = True) -> Optional[pd.Series]:
+        """A method which handles the retrieval and subsequent formatting of molecules.
 
-        :parameter df: A dataframe of new (potential) database entries.
-        :type df: |pd.DataFrame|_ (columns: |str|_, index: |str|_, values: |plams.Molecule|_)
-        :parameter str database: The type of database; accepted values are *ligand* and *QD*.
-        :parameter bool inplace: If *True* perform an inplace update of the *mol* column in **df**.
-            Otherwise Return a new series of PLAMS molecules.
-        :parameter bool close: If the database component should be closed afterwards.
-        :return: If **inplace** = *False*: return a new series of PLAMS molecules pulled
-            from **self**, else return |None|_
-        :rtype: |None|_ or |pd.Series|_ (index: |str|_, values: |plams.Molecule|_)
+        Called internally by :meth:`.Database.from_csv`.
+
+        Parameters
+        ----------
+        df : |pd.DataFrame|_
+            A dataframe of new (potential) database entries.
+
+        database : str
+            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+
+        inplace : bool
+            If ``True`` perform an inplace update of the ``("mol", "")`` column in **df**.
+            Otherwise return a new series of PLAMS molecules.
+
+        Returns
+        -------
+        |pd.Series|_ [|plams.Molecule|_]
+            Optional: A Series of PLAMS molecules if **inplace** is ``False``.
+
         """
         # Sort and find all valid HDF5 indices
         df.sort_values(by=['hdf5 index'], inplace=True)
@@ -478,22 +607,35 @@ class Database():
 
         return ret
 
-    def from_hdf5(self, index, database='ligand', rdmol=True, close=True):
-        """ Import structures from the hdf5 database as RDKit or PLAMS molecules.
+    def from_hdf5(self, index: Sequence[int],
+                  database: str = 'ligand',
+                  rdmol: bool = True,
+                  close: bool = True) -> List[Union[Molecule, Mol]]:
+        """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
-        :parameter index: The indices of the to be retrieved structures.
-        :type index: |list|_ [|int|_]
-        :parameter str database: The type of database; accepted values are *ligand* and *QD*.
-        :parameter bool rdmol: If *True*, return an RDKit molecule instead of a PLAMS molecule.
-        :parameter bool close: If the database component should be closed afterwards.
-        :return: A list of PLAMS or RDKit molecules.
-        :rtype: |list|_ [|plams.Molecule|_ or |rdkit.Chem.Mol|_]
+        Parameters
+        ----------
+        index : |list|_ [|int|_]
+            The indices of the to be retrieved structures.
+
+        database : str
+            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+
+        rdmol : bool
+            If ``True``, return an RDKit molecule instead of a PLAMS molecule.
+
+        close : bool
+            If the database component (:attr:`.hdf5`) should be closed afterwards.
+
+        Returns
+        -------
+        |list|_ [|plams.Molecule|_ or |rdkit.Chem.Mol|_]
+            A list of PLAMS or RDKit molecules.
+
         """
         # Convert **index** to an array if it is a series or dataframe
-        if isinstance(index, (pd.Series, pd.DataFrame)):
-            index = index.values.tolist()
-        elif isinstance(index, np.ndarray):
-            index = index.tolist()
+        if hasattr(index, '__array__'):
+            index = np.asarray(index).tolist()
 
         # Open the database and pull entries
         self.hdf5_availability()
@@ -509,16 +651,18 @@ class Database():
 
         If two processes attempt to simultaneously open a single hdf5 file then
         h5py will raise an :class:`OSError`.
-        The purpose of this function is ensure that a .hdf5 is actually closed,
-        thus allowing :func:`to_hdf5` to safely access **filename** without the risk of raising
-        an :class:`OSError`.
+        The purpose of this method is ensure that a .hdf5 file is actually closed,
+        thus allowing the :meth:`.from_hdf5` method to safely access **filename** without
+        the risk of raising an :class:`OSError`.
 
         Parameters
         ----------
         filename : str
             The path+filename of the hdf5 file.
+
         timeout : float
             Time timeout, in seconds, between subsequent attempts of opening **filename**.
+
         max_attempts : int
             Optional: The maximum number attempts for opening **filename**.
             If the maximum number of attempts is exceeded, raise an ``OSError``.
