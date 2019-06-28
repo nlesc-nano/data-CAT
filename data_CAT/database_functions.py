@@ -111,7 +111,7 @@ def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
         ret = Settings()
         for key, value in input_dict_.items():
             s = ret
-            for k1, k2 in zip(key[:-1], key[1:]):
+            for k in key[:-1]:
                 s = s[k1]
             s[key[-1]] = value
         return ret.as_dict()

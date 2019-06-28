@@ -2,7 +2,7 @@
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar)
+from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar, List)
 
 import yaml
 import h5py
