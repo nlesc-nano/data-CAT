@@ -4,7 +4,7 @@ __all__ = ['mol_to_file', 'df_to_mongo_dict']
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (Optional, Container, Iterable, Union, Dict, Any, Tuple, TypeVar)
+from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar)
 
 import yaml
 import h5py
@@ -24,7 +24,7 @@ from .utils import (from_rdmol, get_time, get_template)
 def mol_to_file(mol_list: Iterable[Molecule],
                 path: Optional[str] = None,
                 overwrite: bool = False,
-                mol_format: Container[str] = ('xyz', 'pdb')) -> None:
+                mol_format: Collection[str] = ('xyz', 'pdb')) -> None:
     """Export all molecules in **mol_list** to .pdb and/or .xyz files.
 
     Parameters
@@ -215,9 +215,9 @@ def get_nan_row(df: pd.DataFrame) -> list:
         return ret
 
 
-def as_pdb_array(mol_list: Container[Molecule],
+def as_pdb_array(mol_list: Collection[Molecule],
                  min_size: int = 0) -> np.ndarray:
-    """Converts a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
+    """Convert a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
 
     Parameters
     ----------
@@ -239,11 +239,11 @@ def as_pdb_array(mol_list: Container[Molecule],
     for mol in mol_list:
         pdb_block = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
         pdb_list.append(pdb_block)
-        shape = max(shape, len(pdb_block))
+        shape_1d = max(shape, len(pdb_block))
 
     # Construct, fill and return the pdb array
-    shape = len(mol_list), shape
-    ret = np.zeros(shape, dtype='S80')
+    shape_2d = len(mol_list), shape_1d
+    ret = np.zeros(shape_2d, dtype='S80')
     for i, item in enumerate(pdb_list):
         ret[i][:len(item)] = item
 
@@ -252,7 +252,7 @@ def as_pdb_array(mol_list: Container[Molecule],
 
 def from_pdb_array(array: np.ndarray,
                    rdmol: bool = True) -> Union[Molecule, Mol]:
-    """Converts an array with a (partially) de-serialized .pdb file into a molecule.
+    """Convert an array with a (partially) de-serialized .pdb file into a molecule.
 
     Parameters
     ----------
@@ -335,22 +335,27 @@ def _create_csv(path: str,
 
     # Check if the database exists and has the proper keys; create it if it does not
     if not isfile(path):
-        print(get_time() + database + '_database.csv not found in ' +
-              path + ', creating ' + database + ' database')
+        msg = get_time() + '{}_database.csv not found in {}, creating {} database'
+        print(msg.format(database, path, database))
+
         if database == 'ligand':
             _create_csv_lig(path)
         elif database == 'QD':
             _create_csv_qd(path)
         else:
-            raise TypeError(str(database) + " is not an accepated value for the 'database' \
-                            argument")
+            err = "'{}' is not an accepated value for the 'database' argument"
+            raise ValueError(err.format(database))
     return path
 
 
-def _create_csv_lig(path):
-    """ Create a ligand database and and return its absolute path.
+def _create_csv_lig(filename: str) -> None:
+    """Create a ligand database and and return its absolute path.
 
-    :param str path: The path to the database.
+    Parameters
+    ----------
+    path : str
+        The path+filename of the ligand database.
+
     """
     idx = pd.MultiIndex.from_tuples([('-', '-')], names=['smiles', 'anchor'])
 
@@ -364,13 +369,17 @@ def _create_csv_lig(path):
     df['formula'] = 'str'
     df['settings'] = 'str'
     df['opt'] = False
-    df.to_csv(path)
+    df.to_csv(filename)
 
 
-def _create_csv_qd(path):
-    """ Create a QD database and and return its absolute path.
+def _create_csv_qd(filename: str) -> None:
+    """Create a QD database and and return its absolute path.
 
-    :param str path: The path to the database.
+    Parameters
+    ----------
+    path : str
+        The path+filename of the QD database.
+
     """
     idx = pd.MultiIndex.from_tuples(
         [('-', '-', '-', '-')],
@@ -387,17 +396,26 @@ def _create_csv_qd(path):
     df['ligand count'] = -1
     df['settings'] = 'str'
     df['opt'] = False
-    df.to_csv(path)
+    df.to_csv(filename)
 
 
-def _create_hdf5(path, name='structures.hdf5'):
-    """ Create a pdb structure database (hdf5 format), populate it with the *core*, *ligand*
-    and *QD* datasets and finally return its absolute path.
+def _create_hdf5(path: str,
+                 name: str = 'structures.hdf5') -> str:
+    """Create the .pdb structure database (hdf5 format).
 
-    :param str path: The path to the database.
-    :param str name: The filename of the database (excluding its path)
-    :return: The absolute path to the pdb structure database.
-    :rtype: |str|_
+    Parameters
+    ----------
+    path : str
+        The path (without filename) to the database.
+
+    name : str
+        The filename of the database (excluding its path).
+
+    Returns
+    -------
+    |str|_
+        The absolute path+filename to the pdb structure database.
+
     """
     # Define arguments for 2D datasets
     path = join(path, name)
@@ -423,13 +441,23 @@ def _create_hdf5(path, name='structures.hdf5'):
     return path
 
 
-def _create_yaml(path, name='job_settings.yaml'):
-    """ Create a job settings database (.yaml
+def _create_yaml(path: str,
+                 name: str = 'job_settings.yaml') -> str:
+    """Create a job settings database (yaml format).
 
-    :param str path: The path to the database.
-    :param str name: The filename of the database (excluding its path)
-    :return: The absolute path to the pdb structure database.
-    :rtype: |str|_
+    Parameters
+    ----------
+    path : str
+        The path (without filenameto the database.
+
+    name : str
+        The filename of the database (excluding its path).
+
+    Returns
+    -------
+    |str|_
+        The absolute path+filename to the pdb structure database.
+
     """
     # Define arguments
     path = join(path, name)
@@ -456,7 +484,7 @@ def even_index(df1: pd.DataFrame,
     Returns
     -------
     |pd.DataFrame|_
-        A new dataframe.
+        A new dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
 
     """
     # Figure out if ``df1.index`` is a subset of ``df2.index``
