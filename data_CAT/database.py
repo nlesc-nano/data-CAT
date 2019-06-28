@@ -4,7 +4,7 @@ __all__ = ['Database']
 
 from os import getcwd
 from time import sleep
-from typing import (Optional, Sequence, List, Union)
+from typing import (Optional, Sequence, List, Union, Any, Tuple, Callable)
 from itertools import count
 
 import yaml
@@ -20,6 +20,8 @@ from .database_functions import (
     from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
 from .utils import from_rdmol
+
+Immutable = Union[int, float, str, frozenset, tuple]
 
 
 class Database():
@@ -51,6 +53,7 @@ class Database():
     """
 
     def __init__(self, path: str = None) -> None:
+        """Initialize :class:`Database`."""
         path = path or getcwd()
 
         # Attributes which hold the absolute paths to various components of the database
@@ -61,6 +64,7 @@ class Database():
         self.mongodb = None  # Placeholder
 
     def __str__(self) -> str:
+        """Return a string-representation of this instance."""
         ret = Settings()
         attr_dict = vars(self)
         for key in attr_dict:
@@ -96,16 +100,19 @@ class Database():
 
         def __init__(self, filename: Optional[str] = None,
                      write: bool = True) -> None:
+            """Initialize the :class:`.open_yaml` context manager."""
             self.filename = filename or getcwd()
             self.write = write
             self.settings = None
 
         def __enter__(self) -> Settings:
+            """Open the :class:`.open_yaml` context manager, importing :attr:`.settings`."""
             with open(self.filename, 'r') as f:
                 self.settings = Settings(yaml.load(f, Loader=yaml.FullLoader))
                 return self.settings
 
         def __exit__(self, *args) -> None:
+            """Close the :class:`.open_yaml` context manager, exporting :attr:`.settings`."""
             if self.write:
                 yml_dict = self.settings.as_dict()
 
@@ -118,7 +125,7 @@ class Database():
                 # Write to the .yaml file
                 with open(self.filename, 'w') as f:
                     f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
-            self.settings = False
+            self.settings = None
 
     class open_csv_lig():
         """Context manager for opening and closing the ligand database.
@@ -145,12 +152,15 @@ class Database():
 
         """
 
-        def __init__(self, path=None, write=True):
+        def __init__(self, path: Optional[str] = None,
+                     write: bool = True) -> None:
+            """Initialize the :class:`.open_csv_lig` context manager."""
             self.path = path or getcwd()
             self.write = write
             self.df = None
 
-        def __enter__(self):
+        def __enter__(self) -> pd.DataFrame:
+            """Open the :class:`.open_csv_lig` context manager, importing :attr:`.df`."""
             # Open the .csv file
             dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
             self.df = Database.DF(
@@ -163,7 +173,8 @@ class Database():
             self.df.columns = columns
             return self.df
 
-        def __exit__(self, type, value, traceback):
+        def __exit__(self, *args) -> None:
+            """Close the :class:`.open_csv_lig` context manager, exporting :attr:`.df`."""
             if self.write:
                 self.df.to_csv(self.path)
             self.df = None
@@ -193,12 +204,15 @@ class Database():
 
         """
 
-        def __init__(self, path=None, write=True):
+        def __init__(self, path: Optional[str] = None,
+                     write: bool = True) -> None:
+            """Initialize the :class:`.open_csv_qd` context manager."""
             self.path = path or getcwd()
             self.write = write
             self.df = None
 
-        def __enter__(self):
+        def __enter__(self) -> pd.DataFrame:
+            """Open the :class:`.open_csv_qd` context manager, importing :attr:`.df`."""
             # Open the .csv file
             dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
             self.df = Database.DF(
@@ -211,7 +225,8 @@ class Database():
             self.df.columns = columns
             return self.df
 
-        def __exit__(self, type, value, traceback):
+        def __exit__(self, *args) -> None:
+            """Close the :class:`.open_csv_qd` context manager, exporting :attr:`.df`."""
             if self.write:
                 self.df.to_csv(self.path)
             self.df = None
@@ -229,18 +244,24 @@ class Database():
         """
 
         def __init__(self, df: pd.DataFrame) -> None:
+            """Initialize :class:`.DF`."""
             super().__init__()
             super().__setitem__('df', df)
 
-        def __getattribute__(self, key):
-            if key == 'update_df' or (key.startswith('__') and key.endswith('__')):
+        def __getattribute__(self, key: Immutable) -> Any:
+            """Call :meth:`pandas.DataFrame.__getattribute__`."""
+            if key.startswith('__') and key.endswith('__'):
                 return super().__getattribute__(key)
             return self['df'].__getattribute__(key)
 
-        def __setattr__(self, key, value):
+        def __setattr__(self, key: Immutable,
+                        value: Any) -> None:
+            """Call :meth:`pandas.DataFrame.__setattr__`."""
             self['df'].__setattr__(key, value)
 
-        def __setitem__(self, key, value):
+        def __setitem__(self, key: Immutable,
+                        value: Any) -> None:
+            """Call :meth:`pandas.DataFrame.__setitem__`."""
             if key == 'df' and not isinstance(value, pd.DataFrame):
                 try:
                     value = value['df']
@@ -256,13 +277,26 @@ class Database():
             else:
                 self['df'].__setitem__(key, value)
 
-        def __getitem__(self, key):
+        def __getitem__(self, key: Immutable) -> Any:
+            """Call :meth:`pandas.DataFrame.__getitem__`."""
             df = super().__getitem__('df')
             if isinstance(key, str) and key == 'df':
                 return df
             return df.__getitem__(key)
 
     """ #################################  Updating the database ############################## """
+
+    def _parse_database(self, database: str) -> Tuple[str, Callable]:
+        """Operate on either the ligand or quantum dot database."""
+        if database in ('ligand', 'ligand_no_opt'):
+            path = self.csv_lig
+            open_csv = self.open_csv_lig
+        elif database in ('QD', 'QD_no_opt'):
+            path = self.csv_qd
+            open_csv = self.open_csv_qd
+        else:
+            raise ValueError
+        return path, open_csv
 
     def update_csv(self, df: pd.DataFrame,
                    database: str = 'ligand',
@@ -297,12 +331,7 @@ class Database():
 
         """
         # Operate on either the ligand or quantum dot database
-        if database in ('ligand', 'ligand_no_opt'):
-            path = self.csv_lig
-            open_csv = self.open_csv_lig
-        elif database in ('QD', 'QD_no_opt'):
-            path = self.csv_qd
-            open_csv = self.open_csv_qd
+        path, open_csv = self._parse_database(database)
 
         # Update **self.yaml**
         if job_recipe is not None:
@@ -364,7 +393,7 @@ class Database():
                 # Unpack and sanitize keys
                 key = job_recipe[item].key
                 if isinstance(key, type):
-                    key = str(key).rsplit("'", 1)[0].rsplit('.', 1)[-1]
+                    key = key.__class__.__name__
 
                 # Unpack and sanitize values
                 value = job_recipe[item].value
@@ -377,17 +406,17 @@ class Database():
 
                 # Check if the appropiate value is available in **self.yaml**
                 if value in db[key]:
-                    ret[item] = key + ' ' + str(db[key].index(value))
+                    ret[item] = '{} {:d}'.format(key, db[key].index(value))
                 else:
                     db[key].append(value)
-                    ret[item] = key + ' ' + str(len(db[key]) - 1)
+                    ret[item] = '{} {:d}'.format(key, len(db[key]) - 1)
         return ret
 
     def update_hdf5(self, df: pd.DataFrame,
                     database: str = 'ligand',
                     overwrite: bool = False,
                     opt: bool = False):
-        """ Export molecules (see the ``"mol"`` column in **df**) to the structure database.
+        """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
         Returns a series with the :attr:`.hdf5` indices of all new entries.
 
@@ -451,7 +480,8 @@ class Database():
         return ret
 
     def _update_hdf5_settings(self, df: pd.DataFrame,
-                              column) -> None:
+                              column: str) -> None:
+        """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
         with h5py.File(self.hdf5, 'r+') as f:
@@ -460,7 +490,7 @@ class Database():
             # Create a 3D array of input files
             try:
                 job_ar = self._read_inp(df[column], j, k)
-            except ValueError:  # df[column] consists of empty lists
+            except ValueError:  # df[column] consists of empty lists, abort
                 return None
 
             # Reshape **self.hdf5**
@@ -503,8 +533,7 @@ class Database():
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self,
-                 df: pd.DataFrame,
+    def from_csv(self, df: pd.DataFrame,
                  database: str = 'ligand',
                  get_mol: bool = True,
                  inplace: bool = True) -> Optional[pd.Series]:
@@ -536,12 +565,7 @@ class Database():
 
         """
         # Operate on either the ligand or quantum dot database
-        if database == 'ligand':
-            path = self.csv_lig
-            open_csv = self.open_csv_lig
-        elif database == 'QD':
-            path = self.csv_qd
-            open_csv = self.open_csv_qd
+        path, open_csv = self._parse_database(database)
 
         # Update the *hdf5 index* column in **df**
         with open_csv(path, write=False) as db:
@@ -651,6 +675,7 @@ class Database():
 
         If two processes attempt to simultaneously open a single hdf5 file then
         h5py will raise an :class:`OSError`.
+
         The purpose of this method is ensure that a .hdf5 file is actually closed,
         thus allowing the :meth:`.from_hdf5` method to safely access **filename** without
         the risk of raising an :class:`OSError`.
@@ -678,7 +703,7 @@ class Database():
 
         while i:
             try:
-                with h5py.File(self.hdf5, 'r+', libver='latest') as _:
+                with h5py.File(self.hdf5, 'r+') as _:
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
                 print((warning).format(self.hdf5, timeout))
