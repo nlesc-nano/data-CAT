@@ -109,11 +109,11 @@ def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
     def _unflatten(input_dict_: Dict[Tuple[A], Any]) -> Dict[A, Dict[A, Any]]:
         """Unflatten a dictionary; dictionary keys are expected to be tuples."""
         ret = Settings()
-        for key, value in input_dict_.items():
+        for k1, value in input_dict_.items():
             s = ret
-            for k in key[:-1]:
-                s = s[k1]
-            s[key[-1]] = value
+            for k2 in k1[:-1]:
+                s = s[k2]
+            s[k1[-1]] = value
         return ret.as_dict()
 
     return zip(*[(k, _unflatten(v)) for k, v in input_dict.items()])
