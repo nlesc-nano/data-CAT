@@ -59,6 +59,7 @@ setup(
         'pandas',
         'pyyaml>=5.1',
         'schema',
+        'pymongo',
         'plams@git+https://github.com/SCM-NV/PLAMS@release',
         'qmflows@git+https://github.com/SCM-NV/qmflows@master'
     ],
@@ -74,7 +75,7 @@ setup(
         'pycodestyle',
     ],
     extras_require={
-        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'nbsphinx', 'pycodestyle'],
-        'doc': ['sphinx', 'sphinx_rtd_theme', 'nbsphinx']
+        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle'],
+        'doc': ['sphinx', 'sphinx_rtd_theme', 'nbsphinx', 'sphinx-autodoc-typehints']
     }
 )

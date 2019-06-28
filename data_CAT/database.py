@@ -11,13 +11,15 @@ import yaml
 import h5py
 import numpy as np
 import pandas as pd
+from pymongo import MongoClient
+from pymongo.errors import (ServerSelectionTimeoutError, BulkWriteError)
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule
 
 from .database_functions import (
-    _create_csv, _create_yaml, _create_hdf5, even_index,
-    from_pdb_array, sanitize_yaml_settings, as_pdb_array
+    _create_csv, _create_yaml, _create_hdf5, even_index, df_to_mongo_dict,
+    from_pdb_array, sanitize_yaml_settings, as_pdb_array, _create_mongodb
 )
 from .utils import from_rdmol
 
@@ -25,7 +27,7 @@ from .utils import from_rdmol
 class Database():
     """The Database class.
 
-    Paramaters
+    Parameters
     ----------
     path : |str|_
         The path+directory name of the directory which is to contain all database components.
@@ -45,12 +47,16 @@ class Database():
         Path and filename of the .hdf5 file containing all structures
         (as partiallize de-serialized .pdb files).
 
-    mongodb : |None|_
-        Placeholder.
+    mongodb : |dict|_
+        Optional: A dictionary with keyword arguments for
+        `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
 
     """
 
-    def __init__(self, path: str = None) -> None:
+    def __init__(self, path: Optional[str] = None,
+                 host: str = 'localhost',
+                 port: int = 27017,
+                 **kwargs: dict) -> None:
         path = path or getcwd()
 
         # Attributes which hold the absolute paths to various components of the database
@@ -58,7 +64,10 @@ class Database():
         self.csv_qd = _create_csv(path, database='QD')
         self.yaml = _create_yaml(path)
         self.hdf5 = _create_hdf5(path)
-        self.mongodb = None  # Placeholder
+        try:
+            self.mongodb = _create_mongodb(host, port, **kwargs)
+        except ServerSelectionTimeoutError:
+            self.mongodb = None
 
     def __str__(self) -> str:
         ret = Settings()
@@ -69,10 +78,10 @@ class Database():
 
     """ ###########################  Opening and closing the database ######################### """
 
-    class open_yaml():
-        """Context manager for opening and closing the job settings database (:attr:`.Database.yaml`).
+    class OpenYaml():
+        """Context manager for opening and closing job settings (:attr:`.Database.yaml`).
 
-        Paramaters
+        Parameters
         ----------
         filename: |str|_
             The path+filename to the database component (:attr:`.Database.yaml`).
@@ -88,9 +97,9 @@ class Database():
         write: |bool|_
             Whether or not the database file should be updated after closing this instance.
 
-        settings: |None|_ or |Settings|_
+        settings: |None|_ or |plams.Settings|_
             An attribute for (temporary) storing the opened .yaml file
-            (:attr:`.filename`) as :class:`.Settings` instance.
+            (:attr:`OpenYaml.filename`) as :class:`.Settings` instance.
 
         """
 
@@ -120,10 +129,10 @@ class Database():
                     f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
             self.settings = False
 
-    class open_csv_lig():
-        """Context manager for opening and closing the ligand database.
+    class OpenCsvLig():
+        """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`).
 
-        Paramaters
+        Parameters
         ----------
         filename: |str|_
             The path+filename to the database component (:attr:`.Database.csv_lig`).
@@ -141,7 +150,7 @@ class Database():
 
         df: |None|_ or |pd.DataFrame|_
             An attribute for (temporary) storing the opened .csv file
-            (:attr:`.filename`) as :class:`.DataFrame` instance.
+            (:attr:`OpenCsvLig.filename`) as :class:`.DataFrame` instance.
 
         """
 
@@ -168,10 +177,10 @@ class Database():
                 self.df.to_csv(self.path)
             self.df = None
 
-    class open_csv_qd():
-        """Context manager for opening and closing the quantum dot database.
+    class OpenCsvQd():
+        """Context manager for opening and closing the QD database (:attr:`Database.csv_qd`).
 
-        Paramaters
+        Parameters
         ----------
         filename: |str|_
             The path+filename to the database component (:attr:`.Database.csv_qd`).
@@ -189,7 +198,7 @@ class Database():
 
         df: |None|_ or |pd.DataFrame|_
             An attribute for (temporary) storing the opened .csv file
-            (:attr:`.filename`) as :class:`.DataFrame` instance.
+            (:attr:`OpenCsvQd.filename`) as :class:`.DataFrame` instance.
 
         """
 
@@ -264,13 +273,61 @@ class Database():
 
     """ #################################  Updating the database ############################## """
 
+    def update_mongodb(self, database: str = 'ligand',
+                       overwrite: bool = False) -> None:
+        """Export ligand or qd results to the MongoDB database.
+
+        Parameters
+        ----------
+        database : str
+            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+
+        overwrite : bool
+            Whether or not previous entries can be overwritten or not.
+
+        """
+        if self.mongodb is None:
+            raise ValueError
+
+        # Open the MongoDB database
+        client = MongoClient(**self.mongodb)
+        db = client.cat_database
+
+        # Operate on either the ligand or quantum dot database
+        if database == 'ligand':
+            idx_keys = ('smiles', 'anchor')
+            path = self.csv_lig
+            open_csv = self.open_csv_lig
+            collection = db.ligand_database
+        elif database == 'QD':
+            idx_keys = ('core', 'core anchor', 'ligand smiles', 'ligand anchor')
+            collection = db.qd_database
+            path = self.csv_qd
+            open_csv = self.open_csv_qd
+        else:
+            err = "database={}; accepted values for database are 'ligand' and 'QD'"
+            raise ValueError(err.format(database))
+
+        # Parse the ligand or qd dataframe
+        with open_csv(path, write=False) as db:
+            df_dict = df_to_mongo_dict(db)
+
+        # Update the collection
+        for item in df_dict:
+            try:
+                collection.insert_one(item)
+            except BulkWriteError:  # An item is already present in the collection
+                if overwrite:
+                    filter_ = {i: item[i] for i in idx_keys}
+                    collection.replace_one(filter_, item)
+
     def update_csv(self, df: pd.DataFrame,
                    database: str = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
                    job_recipe: Optional[Settings] = None,
                    opt: bool = False) -> None:
-        """Update :attr:`.csv_lig` or :attr:`.csv_qd` with new user-provided settings.
+        """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
         Parameters
         ----------
@@ -278,8 +335,8 @@ class Database():
             A dataframe of new (potential) database entries.
 
         database : str
-            The type of database; accepted values are ``"ligand"`` (:attr:`.csv_lig`)
-            and ``"QD"`` (:attr:`.csv_qd`).
+            The type of database; accepted values are ``"ligand"`` (:attr:`Database.csv_lig`)
+            and ``"QD"`` (:attr:`Database.csv_qd`).
 
         columns : |Sequence|_
             Optional: A list of column keys in **df** which
@@ -299,10 +356,10 @@ class Database():
         # Operate on either the ligand or quantum dot database
         if database in ('ligand', 'ligand_no_opt'):
             path = self.csv_lig
-            open_csv = self.open_csv_lig
+            open_csv = self.OpenCsvLig
         elif database in ('QD', 'QD_no_opt'):
             path = self.csv_qd
-            open_csv = self.open_csv_qd
+            open_csv = self.OpenCsvQd
 
         # Update **self.yaml**
         if job_recipe is not None:
@@ -344,9 +401,9 @@ class Database():
                 db.update(df[('opt', '')], overwrite=True)
 
     def update_yaml(self, job_recipe: Settings) -> dict:
-        """Update :attr:`.yaml` with (potentially) new user provided settings.
+        """Update :attr:`Database.yaml` with (potentially) new user provided settings.
 
-        Paramaters
+        Parameters
         ----------
         job_recipe : |plams.Settings|_
             A settings object with one or more settings specific to a job.
@@ -354,12 +411,12 @@ class Database():
         Returns
         -------
         |dict|_
-            A dictionary with the column names as keys and the key for :attr:`.yaml`
+            A dictionary with the column names as keys and the key for :attr:`Database.yaml`
             as matching values.
 
         """
         ret = {}
-        with self.open_yaml(self.yaml) as db:
+        with self.OpenYaml(self.yaml) as db:
             for item in job_recipe:
                 # Unpack and sanitize keys
                 key = job_recipe[item].key
@@ -387,11 +444,11 @@ class Database():
                     database: str = 'ligand',
                     overwrite: bool = False,
                     opt: bool = False):
-        """ Export molecules (see the ``"mol"`` column in **df**) to the structure database.
+        """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
-        Returns a series with the :attr:`.hdf5` indices of all new entries.
+        Returns a series with the :attr:`Database.hdf5` indices of all new entries.
 
-        Paramaters
+        Parameters
         ----------
         df : |pd.DataFrame|_
             A dataframe of new (potential) database entries.
@@ -405,7 +462,7 @@ class Database():
         Returns
         -------
         |pd.Series|_
-            A series with the indices of all new molecules in :attr:`.hdf5`.
+            A series with the indices of all new molecules in :attr:`Database.hdf5`.
 
         """
         # Identify new and preexisting entries
@@ -508,7 +565,7 @@ class Database():
                  database: str = 'ligand',
                  get_mol: bool = True,
                  inplace: bool = True) -> Optional[pd.Series]:
-        """Pull results from :attr:`.csv_lig` or :atr:`.csv_qd`.
+        """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
 
         Performs in inplace update of **df** if **inplace** = ``True``, thus returing ``None``.
 
@@ -538,10 +595,10 @@ class Database():
         # Operate on either the ligand or quantum dot database
         if database == 'ligand':
             path = self.csv_lig
-            open_csv = self.open_csv_lig
+            open_csv = self.OpenCsvLig
         elif database == 'QD':
             path = self.csv_qd
-            open_csv = self.open_csv_qd
+            open_csv = self.OpenCsvQd
 
         # Update the *hdf5 index* column in **df**
         with open_csv(path, write=False) as db:
@@ -625,7 +682,7 @@ class Database():
             If ``True``, return an RDKit molecule instead of a PLAMS molecule.
 
         close : bool
-            If the database component (:attr:`.hdf5`) should be closed afterwards.
+            If the database component (:attr:`Database.hdf5`) should be closed afterwards.
 
         Returns
         -------
@@ -652,7 +709,7 @@ class Database():
         If two processes attempt to simultaneously open a single hdf5 file then
         h5py will raise an :class:`OSError`.
         The purpose of this method is ensure that a .hdf5 file is actually closed,
-        thus allowing the :meth:`.from_hdf5` method to safely access **filename** without
+        thus allowing the :meth:`Database.from_hdf5` method to safely access **filename** without
         the risk of raising an :class:`OSError`.
 
         Parameters

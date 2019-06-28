@@ -1,23 +1,24 @@
 """A module for holding functions related to the Database class."""
 
-__all__ = ['mol_to_file']
+__all__ = ['mol_to_file', 'df_to_mongo_dict']
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (List, Optional, Container, Iterable, Union)
+from typing import (Optional, Container, Iterable, Union, Dict, Any, Tuple, TypeVar)
 
 import yaml
 import h5py
 import numpy as np
 import pandas as pd
+from pymongo import MongoClient, ASCENDING
 
-from scm.plams import Molecule
+from scm.plams import (Molecule, Settings)
 import scm.plams.interfaces.molecule.rdkit as molkit
 
 from rdkit import Chem
 from rdkit.Chem import Mol
 
-from ..utils import (from_rdmol, get_time, get_template)
+from .utils import (from_rdmol, get_time, get_template)
 
 
 def mol_to_file(mol_list: Iterable[Molecule],
@@ -65,6 +66,111 @@ def mol_to_file(mol_list: Iterable[Molecule],
                 molkit.writepdb(mol, mol_path + '.pdb')
             if 'xyz' in mol_format and not isfile(mol_path + '.xyz'):
                 mol.write(mol_path + '.xyz')
+
+
+A = TypeVar('A', str, int, float, frozenset, tuple)  # Immutable objects
+
+
+def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
+    """Flatten a dictionary and return a :class:`zip` instance consisting of keys and values.
+
+    Examples
+    --------
+
+    .. code:: python
+
+        >>> for key, value in input_dict.items():
+        >>>     print('{}: \t{}'.format(str(key), value))
+        ('C[O-]', 'O2'):        {('E_solv', 'Acetone'): -56.6, ('E_solv', 'Acetonitrile'): -57.9}
+        ('CC[O-]', 'O3'):       {('E_solv', 'Acetone'): -56.5, ('E_solv', 'Acetonitrile'): -57.6}
+        ('CCC[O-]', 'O4'):      {('E_solv', 'Acetone'): -57.1, ('E_solv', 'Acetonitrile'): -58.2}
+
+        >>> keys, values = get_unflattend(input_dict)
+
+        >>> print(keys)
+        (('C[O-]', 'O2'), ('CC[O-]', 'O3'), ('CCC[O-]', 'O4'))
+
+        >>> print(values)
+        ({'E_solv': {'Acetone': -56.6, 'Acetonitrile': -57.9}},
+         {'E_solv': {'Acetone': -56.5, 'Acetonitrile': -57.6}},
+         {'E_solv': {'Acetone': -57.1, 'Acetonitrile': -58.2}})
+
+    Parameters
+    ----------
+    input_dict : |dict|_
+        A dictionary constructed from a Pandas DataFrame.
+
+    Returns
+    -------
+    |zip|_
+        A :class:`zip` instance that yields a tuple of keys and a tuple of values.
+
+    """
+    def _unflatten(input_dict_: Dict[Tuple[A], Any]) -> Dict[A, Dict[A, Any]]:
+        """Unflatten a dictionary; dictionary keys are expected to be tuples."""
+        ret = Settings()
+        for key, value in input_dict_.items():
+            s = ret
+            for k1, k2 in zip(key[:-1], key[1:]):
+                s = s[k1]
+            s[key[-1]] = value
+        return ret.as_dict()
+
+    return zip(*[(k, _unflatten(v)) for k, v in input_dict.items()])
+
+
+def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
+    """Convert a dataframe into a dictionary suitable for a MongoDB_ database.
+
+    Tuple-keys present in **df** (*i.e.* pd.MultiIndex) are expanded into nested dictionaries.
+
+    .. _MongoDB: https://www.mongodb.com/
+
+    Examples
+    --------
+
+    .. code:: python
+
+        >>> print(df)
+        index           E_solv
+        sub index      Acetone Acetonitrile
+        smiles  anchor
+        C[O-]   O2       -56.6        -57.9
+        CC[O-]  O3       -56.5        -57.6
+        CCC[O-] O4       -57.1        -58.2
+
+        >>> output_tuple = df_to_mongo_dict(df)
+        >>> for item in output_tuple:
+        >>>     print(item)
+        {'E_solv': {'Acetone': -56.6, 'Acetonitrile': -57.9}, 'smiles': 'C[O-]', 'anchor': 'O2'}
+        {'E_solv': {'Acetone': -56.5, 'Acetonitrile': -57.6}, 'smiles': 'CC[O-]', 'anchor': 'O3'}
+        {'E_solv': {'Acetone': -57.1, 'Acetonitrile': -58.2}, 'smiles': 'CCC[O-]', 'anchor': 'O4'}
+
+    Parameters
+    ----------
+    df : |pd.DataFrame|_
+        A Pandas DataFrame whose axis and columns are instance of pd.MultiIndex.
+
+    Returns
+    -------
+    |tuple|_ [|dict|_]
+        A tuple of nested dictionaries construced from **df**.
+        Each row in **df** is converted into a single dictionary.
+        The to-be returned dictionaries are updated with a dictionary containing their respective
+        (multi-)index in **df**.
+
+    """
+    if not isinstance(df.index, pd.MultiIndex) or isinstance(df.columns, pd.MultiIndex):
+        raise TypeError("df.index and df.columns should be instances of pd.MultiIndex")
+
+    keys, ret = _get_unflattend(df.T.to_dict())
+    idx_names = df.index.names
+
+    for item, idx in zip(ret, keys):
+        idx_dict = dict(zip(idx_names, idx))
+        item.update(idx_dict)
+
+    return ret
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
@@ -175,7 +281,7 @@ def sanitize_yaml_settings(settings: Settings,
 
     Parameters
     ----------
-    settings : |Settings|_
+    settings : |plams.Settings|_
         A settings instance with, potentially, undesired keys and values.
 
     job_type: |str|_
@@ -183,7 +289,7 @@ def sanitize_yaml_settings(settings: Settings,
 
     Returns
     -------
-    |Settings|_
+    |plams.Settings|_
         A Settings instance with unwanted keys and values removed.
 
     """
@@ -363,3 +469,67 @@ def even_index(df1: pd.DataFrame,
     idx = df2.index[~bool_ar]
     df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
     return df1.append(df_tmp, sort=True)
+
+
+def _create_mongodb(host: str = 'localhost',
+                    port: int = 27017,
+                    **kwargs: Dict[str, Any]) -> dict:
+    """Create the the MongoDB collections and set their index.
+
+    Paramaters
+    ----------
+    host : |str|_
+        Hostname or IP address or Unix domain socket path of a single mongod or
+        mongos instance to connect to, or a mongodb URI, or a list of hostnames mongodb URIs.
+        If **host** is an IPv6 literal it must be enclosed in ``"["`` and ``"["`` characters
+        following the RFC2732 URL syntax (e.g. ``"[::1]"`` for localhost).
+        Multihomed and round robin DNS addresses are not supported.
+
+    port : |str|_
+        port number on which to connect.
+
+    kwargs : |dict|_
+        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+
+    Returns
+    -------
+    |dict|_
+        A dictionary with all supplied keyword arguments.
+
+    Raises
+    ------
+    ServerSelectionTimeoutError
+        Raised if no connection can be established with the host.
+
+    """
+    # Open the client
+    client = MongoClient(host, port, serverSelectionTimeoutMS=5000, **kwargs)
+    client.server_info()  # Raises an ServerSelectionTimeoutError error if the server is inaccesible
+
+    # Open the database
+    db = client.cat_database
+
+    # Open and set the index of the ligand collection
+    lig_collection = db.ligand_database
+    lig_key = 'smiles_1_anchor_1'
+    if lig_key not in lig_collection.index_information():
+        lig_collection.create_index([
+            ('smiles', ASCENDING),
+            ('anchor', ASCENDING)
+        ], unique=True)
+
+    # Open and set the index of the QD collection
+    qd_collection = db.QD_database
+    qd_key = 'core_1_core anchor_1_ligand smiles_1_ligand anchor_1'
+    if qd_key not in qd_collection.index_information():
+        qd_collection.create_index([
+            ('core', ASCENDING),
+            ('core anchor', ASCENDING),
+            ('ligand smiles', ASCENDING),
+            ('ligand anchor', ASCENDING)
+        ], unique=True)
+
+    # Return all provided keyword argument
+    ret = {'host': host, 'port': port}
+    ret.update(kwargs)
+    return ret

@@ -3,12 +3,12 @@
 import time
 import pkg_resources as pkg
 from os.path import join
-from typing import (List, Iterable, Optional, Settings)
+from typing import (List, Iterable, Optional)
 
 import yaml
 
 from rdkit.Chem import Mol
-from scm.plams import (add_to_class, Molecule, Atom)
+from scm.plams import (add_to_class, Molecule, Atom, Settings)
 
 __all__: List[str] = ['get_time', 'get_template']
 
