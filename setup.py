@@ -61,7 +61,8 @@ setup(
         'schema',
         'pymongo',
         'plams@git+https://github.com/SCM-NV/PLAMS@release',
-        'qmflows@git+https://github.com/SCM-NV/qmflows@master'
+        'qmflows@git+https://github.com/SCM-NV/qmflows@master',
+        'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
     setup_requires=[
         'pytest-runner',
@@ -76,6 +77,6 @@ setup(
     ],
     extras_require={
         'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle'],
-        'doc': ['sphinx', 'sphinx_rtd_theme', 'nbsphinx', 'sphinx-autodoc-typehints']
+        'doc': ['sphinx', 'sphinx_rtd_theme', 'sphinx-autodoc-typehints']
     }
 )
