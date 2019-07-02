@@ -17,11 +17,11 @@ from pymongo.errors import (ServerSelectionTimeoutError, BulkWriteError)
 from rdkit.Chem import Mol
 from scm.plams import (Settings, Molecule)
 
+from CAT.utils import from_rdmol
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
 from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb)
-from .utils import from_rdmol
 
 Immutable = Union[int, float, str, frozenset, tuple]
 

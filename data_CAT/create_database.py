@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from .utils import get_time
+from CAT.utils import get_time
 
 __all__: List[str] = []
 
