@@ -4,11 +4,8 @@ from os import getcwd
 from os.path import (join, isfile, isdir)
 from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar)
 
-import yaml
-import h5py
 import numpy as np
 import pandas as pd
-from pymongo import MongoClient, ASCENDING
 
 from scm.plams import (Molecule, Settings)
 import scm.plams.interfaces.molecule.rdkit as molkit

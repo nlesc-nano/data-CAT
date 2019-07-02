@@ -10,7 +10,7 @@ import yaml
 from rdkit.Chem import Mol
 from scm.plams import (add_to_class, Molecule, Atom, Settings)
 
-__all__: List[str] = ['get_time', 'get_template']
+__all__ = ['get_time', 'get_template']
 
 
 def get_time() -> str:

@@ -1,8 +1,7 @@
-"""A module for create database files for the Database class."""
+"""A module for creating database files for the Database class."""
 
-from os import getcwd
-from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar, List)
+from os.path import (join, isfile)
+from typing import (Dict, Any, List)
 
 import yaml
 import h5py
@@ -10,13 +9,7 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from scm.plams import (Molecule, Settings)
-import scm.plams.interfaces.molecule.rdkit as molkit
-
-from rdkit import Chem
-from rdkit.Chem import Mol
-
-from .utils import (from_rdmol, get_time, get_template)
+from .utils import get_time
 
 __all__: List[str] = []
 
