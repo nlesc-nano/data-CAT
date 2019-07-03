@@ -2,7 +2,7 @@
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar)
+from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple)
 
 import numpy as np
 import pandas as pd
@@ -13,7 +13,7 @@ import scm.plams.interfaces.molecule.rdkit as molkit
 from rdkit import Chem
 from rdkit.Chem import Mol
 
-from CAT.utils import (get_time, get_template)
+from CAT.utils import get_template
 from CAT.mol_utils import from_rdmol
 
 __all__ = ['mol_to_file', 'df_to_mongo_dict']
@@ -66,10 +66,10 @@ def mol_to_file(mol_list: Iterable[Molecule],
                 mol.write(mol_path + '.xyz')
 
 
-A = TypeVar('A', str, int, float, frozenset, tuple)  # Immutable objects
+Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
 
-def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
+def _get_unflattend(input_dict: Dict[Tuple[Immutable], Any]) -> zip:
     """Flatten a dictionary and return a :class:`zip` instance consisting of keys and values.
 
     Examples
@@ -233,11 +233,11 @@ def as_pdb_array(mol_list: Collection[Molecule],
 
     """
     pdb_list = []
-    shape = min_size
+    shape_1d = min_size
     for mol in mol_list:
         pdb_block = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
         pdb_list.append(pdb_block)
-        shape_1d = max(shape, len(pdb_block))
+        shape_1d = max(shape_1d, len(pdb_block))
 
     # Construct, fill and return the pdb array
     shape_2d = len(mol_list), shape_1d

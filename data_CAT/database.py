@@ -1,7 +1,5 @@
 """A module which holds the Database class."""
 
-__all__ = ['Database']
-
 from os import getcwd
 from time import sleep
 from typing import (Optional, Sequence, List, Union, Any, Tuple, Callable)
@@ -23,7 +21,14 @@ from .database_functions import (
 )
 from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb)
 
+__all__ = ['Database']
+
 Immutable = Union[int, float, str, frozenset, tuple]
+
+# Aliases for pd.MultiIndex columns
+HDF5_INDEX = ('hdf5 index', '')
+OPT = ('opt', '')
+MOL = ('mol', '')
 
 
 class Database():
@@ -163,13 +168,13 @@ class Database():
 
         def __init__(self, path: Optional[str] = None,
                      write: bool = True) -> None:
-            """Initialize the :class:`.open_csv_lig` context manager."""
+            """Initialize the :class:`.OpenCsvLig` context manager."""
             self.path = path or getcwd()
             self.write = write
             self.df = None
 
         def __enter__(self) -> pd.DataFrame:
-            """Open the :class:`.open_csv_lig` context manager, importing :attr:`.df`."""
+            """Open the :class:`.OpenCsvLig` context manager, importing :attr:`.df`."""
             # Open the .csv file
             dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
             self.df = Database.DF(
@@ -183,7 +188,7 @@ class Database():
             return self.df
 
         def __exit__(self, *args) -> None:
-            """Close the :class:`.open_csv_lig` context manager, exporting :attr:`.df`."""
+            """Close the :class:`.OpenCsvLig` context manager, exporting :attr:`.df`."""
             if self.write:
                 self.df.to_csv(self.path)
             self.df = None
@@ -215,13 +220,13 @@ class Database():
 
         def __init__(self, path: Optional[str] = None,
                      write: bool = True) -> None:
-            """Initialize the :class:`.open_csv_qd` context manager."""
+            """Initialize the :class:`.OpenCsvQd` context manager."""
             self.path = path or getcwd()
             self.write = write
             self.df = None
 
         def __enter__(self) -> pd.DataFrame:
-            """Open the :class:`.open_csv_qd` context manager, importing :attr:`.df`."""
+            """Open the :class:`.OpenCsvQd` context manager, importing :attr:`.df`."""
             # Open the .csv file
             dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
             self.df = Database.DF(
@@ -235,7 +240,7 @@ class Database():
             return self.df
 
         def __exit__(self, *args) -> None:
-            """Close the :class:`.open_csv_qd` context manager, exporting :attr:`.df`."""
+            """Close the :class:`.OpenCsvQd` context manager, exporting :attr:`.df`."""
             if self.write:
                 self.df.to_csv(self.path)
             self.df = None
@@ -299,10 +304,10 @@ class Database():
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
             path = self.csv_lig
-            open_csv = self.open_csv_lig
+            open_csv = self.OpenCsvLig
         elif database in ('QD', 'QD_no_opt'):
             path = self.csv_qd
-            open_csv = self.open_csv_qd
+            open_csv = self.OpenCsvQd
         else:
             err = "database={}; accepted values for database are 'ligand' and 'QD'"
             raise ValueError(err.format(database))
@@ -422,7 +427,7 @@ class Database():
             db.update(df[columns], overwrite=overwrite)
             db.update(hdf5_series, overwrite=True)
             if opt:
-                db.update(df[('opt', '')], overwrite=True)
+                db.update(df[OPT], overwrite=True)
 
     def update_yaml(self, job_recipe: Settings) -> dict:
         """Update :attr:`Database.yaml` with (potentially) new user provided settings.
@@ -491,11 +496,11 @@ class Database():
         """
         # Identify new and preexisting entries
         if opt:
-            new = df['hdf5 index'][df['opt'] == False]  # noqa
-            old = df['hdf5 index'][df['opt'] == True]  # noqa
+            new = df[HDF5_INDEX][df[OPT] == False]  # noqa
+            old = df[HDF5_INDEX][df[OPT] == True]  # noqa
         else:
-            new = df['hdf5 index'][df['hdf5 index'] == -1]
-            old = df['hdf5 index'][df['hdf5 index'] >= 0]
+            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1]
+            old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
 
         # Add new entries to the database
         self.hdf5_availability()
@@ -503,23 +508,23 @@ class Database():
             i, j = f[database].shape
 
             if new.any():
-                pdb_array = as_pdb_array(df['mol'][new.index], min_size=j)
+                pdb_array = as_pdb_array(df[MOL][new.index], min_size=j)
 
                 # Reshape and update **self.hdf5**
                 k = i + pdb_array.shape[0]
                 f[database].shape = k, pdb_array.shape[1]
                 f[database][i:k] = pdb_array
 
-                ret = pd.Series(np.arange(i, k), index=new.index, name=('hdf5 index', ''))
+                ret = pd.Series(np.arange(i, k), index=new.index, name=HDF5_INDEX)
                 df.update(ret, overwrite=True)
                 if opt:
-                    df.loc[new.index, ('opt', '')] = True
+                    df.loc[new.index, OPT] = True
             else:
-                ret = pd.Series(name=('hdf5 index', ''), dtype=int)
+                ret = pd.Series(name=HDF5_INDEX, dtype=int)
 
             # If **overwrite** is *True*
             if overwrite and old.any():
-                ar = as_pdb_array(df['mol'][old.index], min_size=j)
+                ar = as_pdb_array(df[MOL][old.index], min_size=j)
 
                 # Ensure that the hdf5 indices are sorted
                 # import pdb; pdb.set_trace()
@@ -527,7 +532,7 @@ class Database():
                 old = old[idx]
                 f[database][old] = ar[idx]
                 if opt:
-                    df.loc[idx.index, ('opt', '')] = True
+                    df.loc[idx.index, OPT] = True
 
         return ret
 
@@ -546,11 +551,11 @@ class Database():
                 return None
 
             # Reshape **self.hdf5**
-            k = max(i, 1 + int(df['hdf5 index'].max()))
+            k = max(i, 1 + int(df[HDF5_INDEX].max()))
             f[column].shape = k, job_ar.shape[1], job_ar.shape[2]
 
             # Update the hdf5 dataset
-            idx = df['hdf5 index'].astype(int, copy=False)
+            idx = df[HDF5_INDEX].astype(int, copy=False)
             idx_argsort = np.argsort(idx)
             f[column][idx[idx_argsort]] = job_ar[idx_argsort]
         return None
@@ -622,16 +627,13 @@ class Database():
         # Update the *hdf5 index* column in **df**
         with open_csv(path, write=False) as db:
             df.update(db['df'], overwrite=True)
-            df['hdf5 index'] = df['hdf5 index'].astype(int, copy=False)
+            df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
 
         # **df** has been updated and **get_mol** = *False*
-        if get_mol:
-            ret = self._get_csv_mol(df, database, inplace)
+        if not get_mol:
+            return None
         else:
-            ret = None
-
-        # Return a new series if **inplace** = *False*; return *None* otherwise
-        return ret
+            return self._get_csv_mol(df, database, inplace)
 
     def _get_csv_mol(self, df: pd.DataFrame,
                      database: str = 'ligand',
@@ -659,27 +661,27 @@ class Database():
 
         """
         # Sort and find all valid HDF5 indices
-        df.sort_values(by=['hdf5 index'], inplace=True)
-        df_slice = df['opt'] == True  # noqa
-        idx = df['hdf5 index'][df_slice].values
+        df.sort_values(by=[HDF5_INDEX], inplace=True)
+        df_slice = df[OPT] == True  # noqa
+        idx = df[HDF5_INDEX][df_slice].values
 
         # If no HDF5 indices are availble in **df** then abort the function
         if not df_slice.any():
             if inplace:
                 return None
-            return pd.Series(None, name=('mol', ''), dtype=object)
+            return pd.Series(None, name=MOL, dtype=object)
 
         # Update **df** with preexisting molecules from **self**, returning *None*
         if inplace:
             mol_list = self.from_hdf5(idx, database=database)
             for i, rdmol in zip(df_slice.index, mol_list):
-                df.loc[i, ('mol', '')].from_rdmol(rdmol)
+                df.loc[i, MOL].from_rdmol(rdmol)
             ret = None
 
         # Create and return a new series of PLAMS molecules
         else:
             mol_list = self.from_hdf5(idx, database=database, rdmol=False)
-            ret = pd.Series(mol_list, index=df[df_slice].index, name=('mol', ''))
+            ret = pd.Series(mol_list, index=df[df_slice].index, name=MOL)
 
         return ret
 
