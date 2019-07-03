@@ -202,7 +202,7 @@ def _create_mongodb(host: str = 'localhost',
 
     """
     # Open the client
-    client = MongoClient(host, port, serverSelectionTimeoutMS=5000, **kwargs)
+    client = MongoClient(host, port, serverSelectionTimeoutMS=1000, **kwargs)
     client.server_info()  # Raises an ServerSelectionTimeoutError error if the server is inaccesible
 
     # Open the database

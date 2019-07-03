@@ -13,7 +13,8 @@ import scm.plams.interfaces.molecule.rdkit as molkit
 from rdkit import Chem
 from rdkit.Chem import Mol
 
-from CAT.utils import (from_rdmol, get_time, get_template)
+from CAT.utils import (get_time, get_template)
+from CAT.mol_utils import from_rdmol
 
 __all__ = ['mol_to_file', 'df_to_mongo_dict']
 

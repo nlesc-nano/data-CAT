@@ -17,7 +17,7 @@ from pymongo.errors import (ServerSelectionTimeoutError, BulkWriteError)
 from rdkit.Chem import Mol
 from scm.plams import (Settings, Molecule)
 
-from CAT.utils import from_rdmol
+from CAT.mol_utils import from_rdmol
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
