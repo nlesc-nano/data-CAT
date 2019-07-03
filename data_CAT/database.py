@@ -79,11 +79,44 @@ class Database():
 
     def __str__(self) -> str:
         """Return a string-representation of this instance."""
-        ret = Settings()
-        attr_dict = vars(self)
-        for key in attr_dict:
-            ret[key] = type(attr_dict[key])
-        return str(ret)
+        ret = 'Database(\n'
+        vars_dict = vars(self)
+        width = 4 + max(len(k) for k in vars_dict)
+        for k, v in vars_dict.items():
+            if isinstance(v, dict):
+                v = self._dict_to_str(v, width)
+            else:
+                v = repr(v)
+            ret += '    {:{width}}:    {}\n'.format(k, v, width=width)
+        return ret + ')'
+
+    def __repr__(self) -> str:
+        """Return a string-representation of this instance."""
+        ret = 'Database(\n'
+        vars_dict = vars(self)
+        width = 4 + max(len(k) for k in vars_dict)
+        for k, v in vars_dict.items():
+            ret += '    {:{width}}:    {}\n'.format(k, str(type(v)), width=width)
+        return ret + ')'
+
+    @staticmethod
+    def _dict_to_str(dict_: dict,
+                     initial_width: int) -> str:
+        """Convert a :class:`dict` into a :class:`str` suitable for :meth:`.__str__`."""
+        width = initial_width + 9
+        width2 = max(len(repr(k)) for k in dict_)
+        kwargs = {'width': width, 'width2': width2}
+
+        ret = ''
+        for i, (k, v) in enumerate(sorted(dict_.items(), key=str)):
+            if i == 0:
+                k = '{' + k
+                ret += '\n{:{width}}{:{width2}}: {},'.format('', repr(k), repr(v), **kwargs)
+                kwargs['width'] += 1
+            else:
+                ret += '\n{:{width}}{:{width2}}: {},'.format('', repr(k), repr(v), **kwargs)
+        ret = ret[:-1] + '}'
+        return ret[kwargs['width']:]
 
     """ ###########################  Opening and closing the database ######################### """
 
