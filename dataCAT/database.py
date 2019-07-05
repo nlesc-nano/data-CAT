@@ -1,4 +1,20 @@
-"""A module which holds the Database class."""
+"""
+dataCAT.database
+================
+
+A module which holds the :class:`.Database` class.
+
+Index
+-----
+.. currentmodule:: dataCAT.database
+.. autosummary::
+    Database
+
+API
+---
+.. autofunction:: dataCAT.database.Database
+
+"""
 
 from os import getcwd
 from time import sleep
@@ -695,7 +711,10 @@ class Database():
         """
         # Sort and find all valid HDF5 indices
         df.sort_values(by=[HDF5_INDEX], inplace=True)
-        df_slice = df[OPT] == True  # noqa
+        if 'no_opt' in database:
+            df_slice = df[HDF5_INDEX] >= 0
+        else:
+            df_slice = df[OPT] == True  # noqa
         idx = df[HDF5_INDEX][df_slice].values
 
         # If no HDF5 indices are availble in **df** then abort the function
@@ -706,9 +725,9 @@ class Database():
 
         # Update **df** with preexisting molecules from **self**, returning *None*
         if inplace:
-            mol_list = self.from_hdf5(idx, database=database)
-            for i, rdmol in zip(df_slice.index, mol_list):
-                df.loc[i, MOL].from_rdmol(rdmol)
+            rdmol_list = self.from_hdf5(idx, database=database)
+            for mol, rdmol in zip(df.loc[df_slice, MOL], rdmol_list):
+                mol.from_rdmol(rdmol)
             ret = None
 
         # Create and return a new series of PLAMS molecules

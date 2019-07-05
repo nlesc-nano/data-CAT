@@ -1,4 +1,10 @@
-"""A databasing framework for the Compound Attachment Tools package (CAT)."""
+"""
+Data-CAT
+========
+
+A databasing framework for the Compound Attachment Tools package (CAT).
+
+"""
 
 from .__version__ import __version__
 

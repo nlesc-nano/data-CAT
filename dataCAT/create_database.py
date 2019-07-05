@@ -1,4 +1,30 @@
-"""A module for creating database files for the Database class."""
+"""
+dataCAT.create_database
+=======================
+
+A module for creating database files for the Database class.
+
+Index
+-----
+.. currentmodule:: dataCAT.create_database
+.. autosummary::
+    _create_csv
+    _create_csv_lig
+    _create_csv_qd
+    _create_hdf5
+    _create_yaml
+    _create_mongodb
+
+API
+---
+.. autofunction:: dataCAT.create_database._create_csv
+.. autofunction:: dataCAT.create_database._create_csv_lig
+.. autofunction:: dataCAT.create_database._create_csv_qd
+.. autofunction:: dataCAT.create_database._create_hdf5
+.. autofunction:: dataCAT.create_database._create_yaml
+.. autofunction:: dataCAT.create_database._create_mongodb
+
+"""
 
 from os.path import (join, isfile)
 from typing import (Dict, Any, List)
