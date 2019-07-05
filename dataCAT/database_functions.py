@@ -1,8 +1,38 @@
-"""A module for holding functions related to the Database class."""
+"""
+dataCAT.database_functions
+==========================
+
+A module for holding functions related to the :class:`.Database` class.
+
+Index
+-----
+.. currentmodule:: dataCAT.database_functions
+.. autosummary::
+    mol_to_file
+    _get_unflattend
+    df_to_mongo_dict
+    get_nan_row
+    as_pdb_array
+    from_pdb_array
+    sanitize_yaml_settings
+    even_index
+
+API
+---
+.. autofunction:: dataCAT.database_functions.mol_to_file
+.. autofunction:: dataCAT.database_functions._get_unflattend
+.. autofunction:: dataCAT.database_functions.df_to_mongo_dict
+.. autofunction:: dataCAT.database_functions.get_nan_row
+.. autofunction:: dataCAT.database_functions.as_pdb_array
+.. autofunction:: dataCAT.database_functions.from_pdb_array
+.. autofunction:: dataCAT.database_functions.sanitize_yaml_settings
+.. autofunction:: dataCAT.database_functions.even_index
+
+"""
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, TypeVar)
+from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, List)
 
 import numpy as np
 import pandas as pd
@@ -13,7 +43,8 @@ import scm.plams.interfaces.molecule.rdkit as molkit
 from rdkit import Chem
 from rdkit.Chem import Mol
 
-from CAT.utils import (from_rdmol, get_time, get_template)
+from CAT.utils import get_template
+from CAT.mol_utils import from_rdmol
 
 __all__ = ['mol_to_file', 'df_to_mongo_dict']
 
@@ -65,10 +96,10 @@ def mol_to_file(mol_list: Iterable[Molecule],
                 mol.write(mol_path + '.xyz')
 
 
-A = TypeVar('A', str, int, float, frozenset, tuple)  # Immutable objects
+Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
 
-def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
+def _get_unflattend(input_dict: Dict[Tuple[Immutable], Any]) -> zip:
     """Flatten a dictionary and return a :class:`zip` instance consisting of keys and values.
 
     Examples
@@ -103,7 +134,7 @@ def _get_unflattend(input_dict: Dict[Tuple[A], Any]) -> zip:
         A :class:`zip` instance that yields a tuple of keys and a tuple of values.
 
     """
-    def _unflatten(input_dict_: Dict[Tuple[A], Any]) -> Dict[A, Dict[A, Any]]:
+    def _unflatten(input_dict_: dict) -> dict:
         """Unflatten a dictionary; dictionary keys are expected to be tuples."""
         ret = Settings()
         for k1, value in input_dict_.items():
@@ -231,16 +262,16 @@ def as_pdb_array(mol_list: Collection[Molecule],
         An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
 
     """
-    pdb_list = []
-    shape = min_size
-    for mol in mol_list:
-        pdb_block = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
-        pdb_list.append(pdb_block)
-        shape_1d = max(shape, len(pdb_block))
+    def _get_value(mol: Molecule) -> Tuple[List[str], int]:
+        """Return a partially deserialized .pdb file and the length of aforementioned file."""
+        ret = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
+        return ret, len(ret)
+
+    pdb_list, shape_list = zip(*[_get_value(mol) for mol in mol_list])
 
     # Construct, fill and return the pdb array
-    shape_2d = len(mol_list), shape_1d
-    ret = np.zeros(shape_2d, dtype='S80')
+    shape = len(mol_list), max(min_size, max(shape_list))
+    ret = np.zeros(shape, dtype='S80')
     for i, item in enumerate(pdb_list):
         ret[i][:len(item)] = item
 
