@@ -12,7 +12,10 @@ Index
 
 API
 ---
-.. autofunction:: dataCAT.database.Database
+.. autoclass:: dataCAT.database.Database
+    :members:
+    :private-members:
+    :special-members:
 
 """
 
@@ -50,6 +53,8 @@ MOL = ('mol', '')
 class Database():
     """The Database class.
 
+    .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
+
     Parameters
     ----------
     path : |str|_
@@ -71,8 +76,9 @@ class Database():
         (as partiallize de-serialized .pdb files).
 
     mongodb : |dict|_
-        Optional: A dictionary with keyword arguments for
-        `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+        Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
+        Defaults to ``None`` if a :exc:`ServerSelectionTimeoutError` is raised when failing to
+        contact the host.
 
     """
 
