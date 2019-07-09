@@ -12,13 +12,16 @@ Index
 
 API
 ---
-.. autofunction:: dataCAT.database.Database
+.. autoclass:: dataCAT.database.Database
+    :members:
+    :private-members:
+    :special-members:
 
 """
 
 from os import getcwd
 from time import sleep
-from typing import (Optional, Sequence, List, Union, Any, Tuple, Callable)
+from typing import (Optional, Sequence, List, Union, Any, Tuple, Callable, Dict)
 from itertools import count
 
 import yaml
@@ -26,7 +29,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from pymongo import MongoClient
-from pymongo.errors import (ServerSelectionTimeoutError, BulkWriteError)
+from pymongo.errors import (ServerSelectionTimeoutError, DuplicateKeyError)
 
 from rdkit.Chem import Mol
 from scm.plams import (Settings, Molecule)
@@ -39,6 +42,7 @@ from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_m
 
 __all__ = ['Database']
 
+# Union of immutable objects suitable as dictionary keys
 Immutable = Union[int, float, str, frozenset, tuple]
 
 # Aliases for pd.MultiIndex columns
@@ -50,29 +54,49 @@ MOL = ('mol', '')
 class Database():
     """The Database class.
 
+    .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
+
     Parameters
     ----------
-    path : |str|_
+    path : str
         The path+directory name of the directory which is to contain all database components.
+
+    host : str
+        Hostname or IP address or Unix domain socket path of a single mongod or
+        mongos instance to connect to, or a mongodb URI, or a list of hostnames mongodb URIs.
+        If **host** is an IPv6 literal it must be enclosed in ``"["`` and ``"]"`` characters
+        following the RFC2732 URL syntax (e.g. ``"[::1]"`` for localhost).
+        Multihomed and round robin DNS addresses are not supported.
+        See :attr:`Database.mongodb`.
+
+    port : str
+        port number on which to connect.
+        See :attr:`Database.mongodb`.
+
+    kwargs : dict
+        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+        See :attr:`Database.mongodb`.
 
     Attributes
     ----------
-    csv_lig : |str|_
+    csv_lig : str
         Path+filename of the .csv file containing all ligand related results.
 
-    csv_qd : |str|_
+    csv_qd : str
         Path+filename of the .csv file containing all quantum dot related results.
 
-    yaml : |str|_
+    yaml : str
         Path and filename of the .yaml file containing all job settings.
 
-    hdf5 : |str|_
+    hdf5 : str
         Path and filename of the .hdf5 file containing all structures
         (as partiallize de-serialized .pdb files).
 
-    mongodb : |dict|_
-        Optional: A dictionary with keyword arguments for
-        `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+    mongodb : dict
+        Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
+        Defaults to ``None`` if a :exc:`ServerSelectionTimeoutError` is raised when failing to
+        contact the host.
+        See the **host**, **port** and **kwargs** parameter.
 
     """
 
@@ -362,14 +386,35 @@ class Database():
             raise ValueError(err.format(database))
         return path, open_csv
 
-    def update_mongodb(self, database: str = 'ligand',
+    def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
         """Export ligand or qd results to the MongoDB database.
 
+        Examples
+        --------
+
+        .. code:: python
+
+            >>> from CAT import Database
+
+            >>> db = Database(**kwargs)
+
+            # Update from db.csv_lig
+            >>> db.update_mongodb('ligand')
+
+            # Update from a lig_df, a user-provided DataFrame
+            >>> db.update_mongodb({'ligand': lig_df})
+            >>> print(type(lig_df))
+            <class 'pandas.core.frame.DataFrame'>
+
         Parameters
         ----------
-        database : str
-            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+        database : |str|_ or |dict|_ [|str|_, |pd.DataFrame|_]
+            The type of database.
+            Accepted values are ``"ligand"`` and ``"QD"``,
+            opening :attr:`Database.csv_lig` and :attr:`Database.csv_qd`, respectivelly.
+            Alternativelly, a dictionary with the database name and a matching DataFrame
+            can be passed directly.
 
         overwrite : bool
             Whether or not previous entries can be overwritten or not.
@@ -380,26 +425,32 @@ class Database():
 
         # Open the MongoDB database
         client = MongoClient(**self.mongodb)
-        db = client.cat_database
+        mongo_db = client.cat_database
 
-        # Operate on either the ligand or quantum dot database
-        path, open_csv = self._parse_database(database)
-        if database == 'ligand':
-            idx_keys = ('smiles', 'anchor')
-            path = self.csv_lig
-        elif database == 'QD':
-            idx_keys = ('core', 'core anchor', 'ligand smiles', 'ligand anchor')
-            collection = db.qd_database
-
-        # Parse the ligand or qd dataframe
-        with open_csv(path, write=False) as db:
+        if isinstance(database, dict):
+            database, db = next(iter(database.items()))
             df_dict = df_to_mongo_dict(db)
+            idx_keys = db.index.names
+            collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
+        else:
+            # Operate on either the ligand or quantum dot database
+            path, open_csv = self._parse_database(database)
+            if database == 'ligand':
+                idx_keys = ('smiles', 'anchor')
+                collection = mongo_db.ligand_database
+            elif database == 'QD':
+                idx_keys = ('core', 'core anchor', 'ligand smiles', 'ligand anchor')
+                collection = mongo_db.qd_database
+
+            # Parse the ligand or qd dataframe
+            with open_csv(path, write=False) as db:
+                df_dict = df_to_mongo_dict(db)
 
         # Update the collection
         for item in df_dict:
             try:
                 collection.insert_one(item)
-            except BulkWriteError:  # An item is already present in the collection
+            except DuplicateKeyError:  # An item is already present in the collection
                 if overwrite:
                     filter_ = {i: item[i] for i in idx_keys}
                     collection.replace_one(filter_, item)
