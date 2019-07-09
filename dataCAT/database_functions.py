@@ -188,8 +188,10 @@ def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
         (multi-)index in **df**.
 
     """
-    if not isinstance(df.index, pd.MultiIndex) or isinstance(df.columns, pd.MultiIndex):
-        raise TypeError("df.index and df.columns should be instances of pd.MultiIndex")
+    if not (isinstance(df.index, pd.MultiIndex) and isinstance(df.columns, pd.MultiIndex)):
+        raise TypeError(
+            "DataFrame.index and DataFrame.columns should be instances of pandas.MultiIndex"
+        )
 
     keys, ret = _get_unflattend(df.T.to_dict())
     idx_names = df.index.names
