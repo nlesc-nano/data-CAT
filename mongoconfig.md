@@ -19,21 +19,13 @@ docker run -d -p 27017-27019:27017-27019 -v <path/db/local/host>:/data/db --name
 docker exec -it mongodb bash
 ```
 
-### Connect mongo instance in the container
+### Conect with the admin user
 ```
 mongo -u admin -p <previous password>
 ```
 
-### Create CAT Database user
-```
-use admin
-db.createUser( { user: "cat", pwd: "passwd", roles: [ { role: "dbOwner", db: "cat_database" } ] } )
-```
 ### Exit the mongo shell and the container
 ```
 exit
 exit
 ```
-
-### Conect with the admin user
-mongo -u useradmin -p "passwd" <HOSTNAME/IP> --authenticationDatabase "admin"
