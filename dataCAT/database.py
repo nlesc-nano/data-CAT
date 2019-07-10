@@ -429,7 +429,7 @@ class Database():
 
         if isinstance(database, dict):
             database, db = next(iter(database.items()))
-            df_dict = df_to_mongo_dict(db)
+            dict_gen = df_to_mongo_dict(db)
             idx_keys = db.index.names
             collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
         else:
@@ -444,10 +444,19 @@ class Database():
 
             # Parse the ligand or qd dataframe
             with open_csv(path, write=False) as db:
-                df_dict = df_to_mongo_dict(db)
+                dict_gen = df_to_mongo_dict(db)
 
         # Update the collection
-        for item in df_dict:
+        # Try to insert al keys at once
+        try:
+            collection.insert_many(dict_gen)
+        except DuplicateKeyError:
+            pass
+        else:
+            return
+
+        # Simultaneous insertion failed, resort to plan B
+        for item in dict_gen:
             try:
                 collection.insert_one(item)
             except DuplicateKeyError:  # An item is already present in the collection

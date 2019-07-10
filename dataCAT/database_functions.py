@@ -32,7 +32,7 @@ API
 
 from os import getcwd
 from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Dict, Any, Tuple, List)
+from typing import (Optional, Collection, Iterable, Union, Sequence, Tuple, List, Generator)
 
 import numpy as np
 import pandas as pd
@@ -99,56 +99,9 @@ def mol_to_file(mol_list: Iterable[Molecule],
 Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
 
-def _get_unflattend(input_dict: Dict[Tuple[Immutable], Any]) -> zip:
-    """Flatten a dictionary and return a :class:`zip` instance consisting of keys and values.
-
-    Examples
-    --------
-
-    .. code:: python
-
-        >>> for key, value in input_dict.items():
-        >>>     print('{}: \t{}'.format(str(key), value))
-        ('C[O-]', 'O2'):        {('E_solv', 'Acetone'): -56.6, ('E_solv', 'Acetonitrile'): -57.9}
-        ('CC[O-]', 'O3'):       {('E_solv', 'Acetone'): -56.5, ('E_solv', 'Acetonitrile'): -57.6}
-        ('CCC[O-]', 'O4'):      {('E_solv', 'Acetone'): -57.1, ('E_solv', 'Acetonitrile'): -58.2}
-
-        >>> keys, values = get_unflattend(input_dict)
-
-        >>> print(keys)
-        (('C[O-]', 'O2'), ('CC[O-]', 'O3'), ('CCC[O-]', 'O4'))
-
-        >>> print(values)
-        ({'E_solv': {'Acetone': -56.6, 'Acetonitrile': -57.9}},
-         {'E_solv': {'Acetone': -56.5, 'Acetonitrile': -57.6}},
-         {'E_solv': {'Acetone': -57.1, 'Acetonitrile': -58.2}})
-
-    Parameters
-    ----------
-    input_dict : |dict|_
-        A dictionary constructed from a Pandas DataFrame.
-
-    Returns
-    -------
-    |zip|_
-        A :class:`zip` instance that yields a tuple of keys and a tuple of values.
-
-    """
-    def _unflatten(input_dict_: dict) -> dict:
-        """Unflatten a dictionary; dictionary keys are expected to be tuples."""
-        ret = Settings()
-        for k1, value in input_dict_.items():
-            s = ret
-            for k2 in k1[:-1]:
-                s = s[k2]
-            s[k1[-1]] = value
-        return ret.as_dict()
-
-    return zip(*[(k, _unflatten(v)) for k, v in input_dict.items()])
-
-
-def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
-    """Convert a dataframe into a dictionary suitable for a MongoDB_ database.
+def df_to_mongo_dict(df: pd.DataFrame,
+                     as_gen: bool = True) -> Union[Generator, list]:
+    """Convert a dataframe into a generator of dictionaries suitable for a MongoDB_ databases.
 
     Tuple-keys present in **df** (*i.e.* pd.MultiIndex) are expanded into nested dictionaries.
 
@@ -156,7 +109,6 @@ def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
 
     Examples
     --------
-
     .. code:: python
 
         >>> print(df)
@@ -167,8 +119,11 @@ def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
         CC[O-]  O3       -56.5        -57.6
         CCC[O-] O4       -57.1        -58.2
 
-        >>> output_tuple = df_to_mongo_dict(df)
-        >>> for item in output_tuple:
+        >>> gen = df_to_mongo_dict(df)
+        >>> print(type(gen))
+        <class 'generator'>
+
+        >>> for item in gen:
         >>>     print(item)
         {'E_solv': {'Acetone': -56.6, 'Acetonitrile': -57.9}, 'smiles': 'C[O-]', 'anchor': 'O2'}
         {'E_solv': {'Acetone': -56.5, 'Acetonitrile': -57.6}, 'smiles': 'CC[O-]', 'anchor': 'O3'}
@@ -179,28 +134,35 @@ def df_to_mongo_dict(df: pd.DataFrame) -> Tuple[dict]:
     df : |pd.DataFrame|_
         A Pandas DataFrame whose axis and columns are instance of pd.MultiIndex.
 
+    as_gen : bool
+        If ``True``, return a generator of dictionaries rather than a list of dictionaries.
+
     Returns
     -------
-    |tuple|_ [|dict|_]
-        A tuple of nested dictionaries construced from **df**.
+    |Generator|_ [|dict|_] or |list|_ [|dict|_]
+        A generator or list of nested dictionaries construced from **df**.
         Each row in **df** is converted into a single dictionary.
         The to-be returned dictionaries are updated with a dictionary containing their respective
         (multi-)index in **df**.
 
     """
+    def _get_dict(idx: Sequence[Immutable],
+                  row: pd.Series,
+                  idx_names: Sequence[Immutable]) -> dict:
+        ret = {i: row[i].to_dict() for i in row.index.levels[0]}  # Add values
+        ret.update(dict(zip(idx_names, idx)))  # Add index
+        return ret
+
     if not (isinstance(df.index, pd.MultiIndex) and isinstance(df.columns, pd.MultiIndex)):
         raise TypeError(
             "DataFrame.index and DataFrame.columns should be instances of pandas.MultiIndex"
         )
 
-    keys, ret = _get_unflattend(df.T.to_dict())
     idx_names = df.index.names
-
-    for item, idx in zip(ret, keys):
-        idx_dict = dict(zip(idx_names, idx))
-        item.update(idx_dict)
-
-    return ret
+    if as_gen:
+        return (_get_dict(idx, row, idx_names) for idx, row in df.iterrows())
+    else:
+        return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
