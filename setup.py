@@ -26,27 +26,20 @@ setup(
         'dataCAT'
     ],
     package_dir={'dataCAT': 'dataCAT'},
-    package_data={
-        'dataCAT': []
-    },
-    entry_points={},
     include_package_data=True,
     license='GNU Lesser General Public License v3 or later',
     zip_safe=False,
     keywords=[
-        'quantum-mechanics',
-        'molecular-mechanics',
+        'database',
         'science',
         'chemistry',
         'python-3',
         'python-3-7',
-        'automation',
-        'scientific-workflows'
+        'automation'
     ],
     classifiers=[
         'Development Status :: 2 - Pre-Alpha',
         'Intended Audience :: Science/Research',
-        'Topic :: Scientific/Engineering :: Chemistry',
         'Topic :: Database',
         'License :: OSI Approved :: GNU Lesser General Public License',
         'Natural Language :: English',
@@ -55,20 +48,14 @@ setup(
     test_suite='tests',
     install_requires=[
         'numpy',
-        'scipy',
         'pandas',
         'pyyaml>=5.1',
-        'schema',
         'pymongo',
         'plams@git+https://github.com/SCM-NV/PLAMS@release',
-        'qmflows@git+https://github.com/SCM-NV/qmflows@master',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
     setup_requires=[
-        'pytest-runner',
-        'sphinx',
-        'sphinx_rtd_theme',
-        'recommonmark'
+        'pytest-runner'
     ],
     tests_require=[
         'pytest',
@@ -77,6 +64,6 @@ setup(
     ],
     extras_require={
         'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle'],
-        'doc': ['sphinx', 'sphinx_rtd_theme', 'sphinx-autodoc-typehints']
+        'doc': ['sphinx>=2.0', 'sphinx_rtd_theme', 'sphinx-autodoc-typehints']
     }
 )

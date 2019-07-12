@@ -12,7 +12,7 @@ Index
 
 API
 ---
-.. autoclass:: dataCAT.database.Database
+.. autoclass:: Database
     :members:
     :private-members:
     :special-members:
@@ -74,7 +74,7 @@ class Database():
         See :attr:`Database.mongodb`.
 
     kwargs : dict
-        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
         See :attr:`Database.mongodb`.
 
     Attributes
@@ -98,7 +98,7 @@ class Database():
         contact the host.
         See the **host**, **port** and **kwargs** parameter.
 
-    """
+    """  # noqa
 
     def __init__(self, path: Optional[str] = None,
                  host: str = 'localhost',
