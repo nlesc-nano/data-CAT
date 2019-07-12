@@ -2,7 +2,7 @@
 dataCAT.create_database
 =======================
 
-A module for creating database files for the Database class.
+A module for creating database files for the :class:`.Database` class.
 
 Index
 -----
@@ -17,12 +17,12 @@ Index
 
 API
 ---
-.. autofunction:: dataCAT.create_database._create_csv
-.. autofunction:: dataCAT.create_database._create_csv_lig
-.. autofunction:: dataCAT.create_database._create_csv_qd
-.. autofunction:: dataCAT.create_database._create_hdf5
-.. autofunction:: dataCAT.create_database._create_yaml
-.. autofunction:: dataCAT.create_database._create_mongodb
+.. autofunction:: _create_csv
+.. autofunction:: _create_csv_lig
+.. autofunction:: _create_csv_qd
+.. autofunction:: _create_hdf5
+.. autofunction:: _create_yaml
+.. autofunction:: _create_mongodb
 
 """
 
@@ -214,7 +214,7 @@ def _create_mongodb(host: str = 'localhost',
         port number on which to connect.
 
     kwargs : |dict|_
-        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.  # noqa
+        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
 
     Returns
     -------
@@ -226,7 +226,7 @@ def _create_mongodb(host: str = 'localhost',
     ServerSelectionTimeoutError
         Raised if no connection can be established with the host.
 
-    """
+    """  # noqa
     # Open the client
     client = MongoClient(host, port, serverSelectionTimeoutMS=1000, **kwargs)
     client.server_info()  # Raises an ServerSelectionTimeoutError error if the server is inaccesible

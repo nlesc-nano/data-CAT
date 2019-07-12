@@ -19,14 +19,14 @@ Index
 
 API
 ---
-.. autofunction:: dataCAT.database_functions.mol_to_file
-.. autofunction:: dataCAT.database_functions._get_unflattend
-.. autofunction:: dataCAT.database_functions.df_to_mongo_dict
-.. autofunction:: dataCAT.database_functions.get_nan_row
-.. autofunction:: dataCAT.database_functions.as_pdb_array
-.. autofunction:: dataCAT.database_functions.from_pdb_array
-.. autofunction:: dataCAT.database_functions.sanitize_yaml_settings
-.. autofunction:: dataCAT.database_functions.even_index
+.. autofunction:: mol_to_file
+.. autofunction:: _get_unflattend
+.. autofunction:: df_to_mongo_dict
+.. autofunction:: get_nan_row
+.. autofunction:: as_pdb_array
+.. autofunction:: from_pdb_array
+.. autofunction:: sanitize_yaml_settings
+.. autofunction:: even_index
 
 """
 

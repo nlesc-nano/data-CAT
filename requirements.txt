@@ -1,3 +1,9 @@
-sphinx>=1.4
+sphinx>=2.0
 sphinx_rtd_theme
 sphinx-autodoc-typehints
+numpy
+pandas
+pyyaml>=5.1
+pymongo
+plams@git+https://github.com/SCM-NV/PLAMS@release
+CAT@git+https://github.com/nlesc-nano/CAT@master
