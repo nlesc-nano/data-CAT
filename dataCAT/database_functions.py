@@ -44,6 +44,7 @@ from rdkit import Chem
 from rdkit.Chem import Mol
 
 from CAT.utils import get_template
+from CAT.logger import logger
 from CAT.mol_utils import from_rdmol
 
 __all__ = ['mol_to_file', 'df_to_mongo_dict']
@@ -154,9 +155,9 @@ def df_to_mongo_dict(df: pd.DataFrame,
         return ret
 
     if not (isinstance(df.index, pd.MultiIndex) and isinstance(df.columns, pd.MultiIndex)):
-        raise TypeError(
-            "DataFrame.index and DataFrame.columns should be instances of pandas.MultiIndex"
-        )
+        err = "DataFrame.index and DataFrame.columns should be instances of pandas.MultiIndex"
+        logger.critical('TypeError: ' + err)
+        raise TypeError(err)
 
     idx_names = df.index.names
     if as_gen:

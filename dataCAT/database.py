@@ -34,6 +34,7 @@ from pymongo.errors import (ServerSelectionTimeoutError, DuplicateKeyError)
 from rdkit.Chem import Mol
 from scm.plams import (Settings, Molecule)
 
+from CAT.logger import logger
 from CAT.mol_utils import from_rdmol
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
@@ -353,14 +354,18 @@ class Database():
                 try:
                     value = value['df']
                     if not isinstance(value, pd.DataFrame):
+                        logger.critical('KeyError')
                         raise KeyError
                     super().__setitem__('df', value)
                 except KeyError:
                     err = ("Instance of 'pandas.DataFrame' or 'CAT.Database.DF' expected;"
-                           " observed type: '{}'")
-                    raise TypeError(err.format(value.__class__.__name__))
+                           " observed type: '{value.__class__.__name__}'")
+                    logger.critical('TypeError: ' + err)
+                    raise TypeError(err)
+
             elif key == 'df':
                 super().__setitem__('df', value)
+
             else:
                 self['df'].__setitem__(key, value)
 
@@ -382,8 +387,9 @@ class Database():
             path = self.csv_qd
             open_csv = self.OpenCsvQd
         else:
-            err = "database={}; accepted values for database are 'ligand' and 'QD'"
-            raise ValueError(err.format(database))
+            err = f"database={database}; accepted values for database are 'ligand' and 'QD'"
+            logger.critical('ValueError: ' + err)
+            raise ValueError(err)
         return path, open_csv
 
     def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
@@ -421,7 +427,9 @@ class Database():
 
         """
         if self.mongodb is None:
-            raise ValueError
+            err = 'Database.Mongodb is None'
+            logger.critical('ValueError: ' + err)
+            raise ValueError(err)
 
         # Open the MongoDB database
         client = MongoClient(**self.mongodb)
@@ -864,7 +872,7 @@ class Database():
             Raised if **max_attempts** is exceded.
 
         """
-        warning = "OSWarning: '{}' is currently unavailable; repeating attempt in {:.0f} seconds"
+        err = f"'{self.hdf5}' is currently unavailable; repeating attempt in {timeout:.0f} seconds"
         i = max_attempts or np.inf
 
         while i:
@@ -872,8 +880,10 @@ class Database():
                 with h5py.File(self.hdf5, 'r+') as _:
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
-                print((warning).format(self.hdf5, timeout))
+                logger.warn(err)
                 error = ex
                 sleep(timeout)
             i -= 1
-        raise error
+
+        logger.critical(f'{error.__class__.__name__}: {error}')
+        raise error.__class__(error)
