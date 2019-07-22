@@ -35,7 +35,7 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from CAT.utils import get_time
+from CAT.logger import logger
 
 __all__: List[str] = []
 
@@ -62,16 +62,15 @@ def _create_csv(path: str,
 
     # Check if the database exists and has the proper keys; create it if it does not
     if not isfile(path):
-        msg = get_time() + '{}_database.csv not found in {}, creating {} database'
-        print(msg.format(database, path, database))
+        msg = f'{database}_database.csv not found in {path}, creating {database} database'
+        logger.info(msg)
 
         if database == 'ligand':
             _create_csv_lig(path)
         elif database == 'QD':
             _create_csv_qd(path)
         else:
-            err = "'{}' is not an accepated value for the 'database' argument"
-            raise ValueError(err.format(database))
+            raise ValueError(f"'{database}' is not an accepated value for the 'database' argument")
     return path
 
 
