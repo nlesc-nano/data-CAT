@@ -155,9 +155,8 @@ def df_to_mongo_dict(df: pd.DataFrame,
         return ret
 
     if not (isinstance(df.index, pd.MultiIndex) and isinstance(df.columns, pd.MultiIndex)):
-        err = "DataFrame.index and DataFrame.columns should be instances of pandas.MultiIndex"
-        logger.critical('TypeError: ' + err)
-        raise TypeError(err)
+        raise TypeError("DataFrame.index and DataFrame.columns should be "
+                        "instances of pandas.MultiIndex")
 
     idx_names = df.index.names
     if as_gen:

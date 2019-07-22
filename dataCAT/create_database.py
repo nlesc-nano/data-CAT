@@ -70,9 +70,7 @@ def _create_csv(path: str,
         elif database == 'QD':
             _create_csv_qd(path)
         else:
-            err = f"'{database}' is not an accepated value for the 'database' argument"
-            logger.critical('ValueError: ' + err)
-            raise ValueError(err)
+            raise ValueError(f"'{database}' is not an accepated value for the 'database' argument")
     return path
 
 

@@ -354,14 +354,12 @@ class Database():
                 try:
                     value = value['df']
                     if not isinstance(value, pd.DataFrame):
-                        logger.critical('KeyError')
                         raise KeyError
                     super().__setitem__('df', value)
+
                 except KeyError:
-                    err = ("Instance of 'pandas.DataFrame' or 'CAT.Database.DF' expected;"
-                           " observed type: '{value.__class__.__name__}'")
-                    logger.critical('TypeError: ' + err)
-                    raise TypeError(err)
+                    raise TypeError("Instance of 'pandas.DataFrame' or 'CAT.Database.DF' expected;"
+                                    " observed type: '{value.__class__.__name__}'")
 
             elif key == 'df':
                 super().__setitem__('df', value)
@@ -387,9 +385,7 @@ class Database():
             path = self.csv_qd
             open_csv = self.OpenCsvQd
         else:
-            err = f"database={database}; accepted values for database are 'ligand' and 'QD'"
-            logger.critical('ValueError: ' + err)
-            raise ValueError(err)
+            raise ValueError(f"database={database}; accepted values for are 'ligand' and 'QD'")
         return path, open_csv
 
     def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
@@ -427,9 +423,7 @@ class Database():
 
         """
         if self.mongodb is None:
-            err = 'Database.Mongodb is None'
-            logger.critical('ValueError: ' + err)
-            raise ValueError(err)
+            raise ValueError('Database.Mongodb is None')
 
         # Open the MongoDB database
         client = MongoClient(**self.mongodb)
@@ -885,5 +879,4 @@ class Database():
                 sleep(timeout)
             i -= 1
 
-        logger.critical(f'{error.__class__.__name__}: {error}')
         raise error.__class__(error)
