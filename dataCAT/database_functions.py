@@ -50,53 +50,6 @@ from CAT.mol_utils import from_rdmol
 __all__ = ['mol_to_file', 'df_to_mongo_dict']
 
 
-def mol_to_file(mol_list: Iterable[Molecule],
-                path: Optional[str] = None,
-                overwrite: bool = False,
-                mol_format: Collection[str] = ('xyz', 'pdb')) -> None:
-    """Export all molecules in **mol_list** to .pdb and/or .xyz files.
-
-    Parameters
-    ----------
-    mol_list: |list|_ [|plams.Molecule|_]
-        An iterable consisting of PLAMS molecules.
-
-    path : str
-        Optional: The path to the directory where the molecules will be stored.
-        Defaults to the current working directory if ``None``.
-
-    overwrite : bool
-        If previously generated files can be overwritten or not.
-
-    mol_format : |list|_ [|str|_]
-        A list of strings with the to-be exported file types.
-        Accepted values are ``"xyz"`` and/or ``"pdb"``.
-
-    """
-    # Set the export path
-    path = path or getcwd()
-    assert isdir(path)
-
-    if not mol_format:
-        return None
-
-    if overwrite:  # Export molecules while allowing for file overriding
-        for mol in mol_list:
-            mol_path = join(path, mol.properties.name)
-            if 'pdb' in mol_format:
-                molkit.writepdb(mol, mol_path + '.pdb')
-            if 'xyz' in mol_format:
-                mol.write(mol_path + '.xyz')
-
-    else:  # Export molecules without allowing for file overriding
-        for mol in mol_list:
-            mol_path = join(path, mol.properties.name)
-            if 'pdb' in mol_format and not isfile(mol_path + '.pdb'):
-                molkit.writepdb(mol, mol_path + '.pdb')
-            if 'xyz' in mol_format and not isfile(mol_path + '.xyz'):
-                mol.write(mol_path + '.xyz')
-
-
 Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
 
