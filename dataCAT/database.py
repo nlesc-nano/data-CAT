@@ -120,25 +120,24 @@ class Database():
 
     def __str__(self) -> str:
         """Return a string-representation of this instance."""
-        ret = 'Database(\n'
-        vars_dict = vars(self)
-        width = 4 + max(len(k) for k in vars_dict)
-        for k, v in vars_dict.items():
-            if isinstance(v, dict):
-                v = self._dict_to_str(v, width)
-            else:
-                v = repr(v)
-            ret += '    {:{width}}:    {}\n'.format(k, v, width=width)
-        return ret + ')'
+        def _dict_to_str(value: dict) -> str:
+            iterator = sorted(value.items(), key=str)
+            return '{' + newline.join(f'{repr(k)}: {repr(v)}' for k, v in iterator) + '}'
 
-    def __repr__(self) -> str:
-        """Return a string-representation of this instance."""
-        ret = 'Database(\n'
-        vars_dict = vars(self)
-        width = 4 + max(len(k) for k in vars_dict)
-        for k, v in vars_dict.items():
-            ret += '    {:{width}}:    {}\n'.format(k, str(type(v)), width=width)
-        return ret + ')'
+        def _get_str(key: str, value: Any) -> str:
+            func = _dict_to_str if isinstance(value, dict) else repr
+            value_str = func(value)
+            return f'    {key:{offset}} = {value_str}'
+
+        offset = max(len(k) for k in vars(self))
+        newline = ',\n' + ' ' * (6 + offset)
+
+        ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
+        return f'{self.__class__.__name__}(\n{ret}\n)'
+
+    def __eq__(self, value: Any) -> bool:
+        """Check if this instance is equivalent to **value**."""
+        return vars(self) == vars(value)
 
     @staticmethod
     def _dict_to_str(dict_: dict,
