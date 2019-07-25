@@ -10,6 +10,9 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 * Updated the ``Database.__str__`` and ``Database.__repr__`` methods.
 * Added the ``Database.__eq__`` method.
+* Moved context managers to ``dataCAT.context_managers``
+* Moved (and renamed) the ``DF()`` class to ``dataCAT.df_collection.DFCollection()``.
+* Added more tests.
 
 
 0.1.1

@@ -114,8 +114,7 @@ def df_to_mongo_dict(df: pd.DataFrame,
     idx_names = df.index.names
     if as_gen:
         return (_get_dict(idx, row, idx_names) for idx, row in df.iterrows())
-    else:
-        return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
+    return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
@@ -149,15 +148,15 @@ def get_nan_row(df: pd.DataFrame) -> list:
 
     if not isinstance(df.index, pd.MultiIndex):
         return [dtype_dict[df[i].dtype] for i in df]
-    else:
-        ret = []
-        for _, value in df.items():
-            try:
-                j = dtype_dict[value.dtype]
-            except KeyError:  # dtype is neither int, float nor object
-                j = None
-            ret.append(j)
-        return ret
+
+    ret = []
+    for _, value in df.items():
+        try:
+            j = dtype_dict[value.dtype]
+        except KeyError:  # dtype is neither int, float nor object
+            j = None
+        ret.append(j)
+    return ret
 
 
 def as_pdb_array(mol_list: Collection[Molecule],
