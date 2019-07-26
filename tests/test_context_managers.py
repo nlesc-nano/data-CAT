@@ -9,7 +9,6 @@ from CAT.assertion_functions import assert_eq
 from dataCAT.context_managers import (MetaManager, OpenYaml, OpenLig, OpenQD)
 
 PATH = join('tests', 'test_files')
-PATH = '/Users/basvanbeek/Documents/GitHub/data-CAT/tests/test_files'
 PATH1 = join(PATH, 'qd.csv')
 
 
