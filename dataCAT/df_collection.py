@@ -19,7 +19,7 @@ API
 
 """
 
-from typing import (Any, Iterator)
+from typing import Any
 from textwrap import indent
 from collections.abc import Collection
 

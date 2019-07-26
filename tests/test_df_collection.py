@@ -47,7 +47,7 @@ def test_setattr() -> None:
     assert_id(df1.columns, idx)
 
     _df = pd.DataFrame(np.ones([3, 10]))
-    df2 = DFCollection(_df)
+    df2 = get_df_collection(_df)
     assert_id(df2.df, _df)
 
 
@@ -60,7 +60,7 @@ def test_repr() -> None:
 
 def test_str() -> None:
     """Test :meth:`.DFCollection.__str__`."""
-    df = DFCollection(pd.DataFrame(np.ones([3, 10])))
+    df = get_df_collection(pd.DataFrame(np.ones([3, 10])))
     out = str(df)
     ref = (
         'DFCollection(\n         0    1    2    3    4    5    6    7    8    9\n'
