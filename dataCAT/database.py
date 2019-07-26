@@ -657,7 +657,7 @@ class Database(Container):
 
         while i:
             try:
-                with self.hdf5.open('r+') as _:
+                with self.hdf5.open('r+'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
                 logger.warning(err)

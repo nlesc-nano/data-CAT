@@ -24,7 +24,7 @@ API
 """
 
 from os import getcwd
-from typing import (Callable, Optional)
+from typing import (Callable, Optional, Any)
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
 
@@ -33,7 +33,7 @@ import pandas as pd
 
 from scm.plams import Settings
 
-from .df_collection import DFCollection
+from .df_collection import get_df_collection
 
 __all__ = ['MetaManager', 'OpenYaml', 'OpenLig', 'OpenQD']
 
@@ -47,12 +47,19 @@ class MetaManager:
 
     Note
     ----
-    :attr:`MetaManager.filename` will be the first argument provided to :attr:`MetaManager.manager`.
+    :attr:`MetaManager.filename` will be the first positional argument provided
+    to :attr:`MetaManager.manager`.
 
     Paramaters
     ----------
     filename : str
-        The path+filename of a database component (see :attr:`MetaManager.filename`).
+        The path+filename of a database component
+        See :attr:`MetaManager.filename`.
+
+    manager : |type|_ [|AbstractContextManager|_]
+        A type object of a context manager.
+        TThe first positional argument of the context manager should be the filename.
+        See :attr:`MetaManager.manager`.
 
     Attributes
     ----------
@@ -61,14 +68,14 @@ class MetaManager:
 
     manager : |type|_ [|AbstractContextManager|_]
         A type object of a context manager.
-        The provided context manager should have access to the **filename** argument.
+        The first positional argument of the context manager should be the filename.
 
     """
 
     filename: str
     manager: Callable[..., AbstractContextManager]
 
-    def open(self, *args, **kwargs) -> AbstractContextManager:
+    def open(self, *args: Any, **kwargs: Any) -> AbstractContextManager:
         """Call and return :attr:`MetaManager.manager`."""
         return self.manager(self.filename, *args, **kwargs)
 
@@ -98,21 +105,21 @@ class OpenYaml(AbstractContextManager):
 
     """
 
-    def __init__(self, path: Optional[str] = None,
+    def __init__(self, filename: Optional[str] = None,
                  write: bool = True) -> None:
-        """Initialize the :class:`.open_yaml` context manager."""
-        self.path: str = path or getcwd()
+        """Initialize the :class:`.OpenYaml` context manager."""
+        self.filename: str = filename or getcwd()
         self.write: bool = write
-        self.settings: Optional[Settings] = None
+        self.settings = None
 
     def __enter__(self) -> Settings:
-        """Open the :class:`.open_yaml` context manager, importing :attr:`.settings`."""
+        """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
         with open(self.filename, 'r') as f:
             self.settings = Settings(yaml.load(f, Loader=yaml.FullLoader))
         return self.settings
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        """Close the :class:`.open_yaml` context manager, exporting :attr:`.settings`."""
+        """Close the :class:`.OpenYaml` context manager, exporting :attr:`.settings`."""
         if self.write:
             yml_dict = self.settings.as_dict()
 
@@ -126,6 +133,7 @@ class OpenYaml(AbstractContextManager):
             with open(self.filename, 'w') as f:
                 f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
         self.settings = None
+        assert self.settings is None
 
 
 class OpenLig(AbstractContextManager):
@@ -149,34 +157,34 @@ class OpenLig(AbstractContextManager):
 
     df : |None|_ or |pd.DataFrame|_
         An attribute for (temporary) storing the opened .csv file
-        (see :attr:`OpenCsvLig.filename`) as a :class:`.DataFrame` instance.
+        (see :attr:`OpenLig.filename`) as a :class:`.DataFrame` instance.
 
     """
 
-    def __init__(self, path: Optional[str] = None,
+    def __init__(self, filename: Optional[str] = None,
                  write: bool = True) -> None:
-        """Initialize the :class:`.OpenCsvLig` context manager."""
-        self.path: str = path or getcwd()
+        """Initialize the :class:`.OpenLig` context manager."""
+        self.filename: str = filename or getcwd()
         self.write: bool = write
-        self.df: Optional[DFCollection] = None
+        self.df: Optional['DFCollection'] = None
 
-    def __enter__(self) -> DFCollection:
-        """Open the :class:`.OpenCsvLig` context manager, importing :attr:`.df`."""
+    def __enter__(self) -> 'DFCollection':
+        """Open the :class:`.OpenLig` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
-        self.df = df = DFCollection(
-            pd.read_csv(self.path, index_col=[0, 1], header=[0, 1], dtype=dtype)
+        self.df = df = get_df_collection(
+            pd.read_csv(self.filename, index_col=[0, 1], header=[0, 1], dtype=dtype)
         )
 
         # Fix the columns
         idx_tups = [(i, '') if 'Unnamed' in j else (i, j) for i, j in df.columns]
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
-        return self.df
+        return df
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        """Close the :class:`.OpenCsvLig` context manager, exporting :attr:`.df`."""
+        """Close the :class:`.OpenLig` context manager, exporting :attr:`.df`."""
         if self.write:
-            self.df.to_csv(self.path)
+            self.df.to_csv(self.filename)
         self.df = None
 
 
@@ -201,32 +209,32 @@ class OpenQD(AbstractContextManager):
 
     df : |None|_ or |pd.DataFrame|_
         An attribute for (temporary) storing the opened .csv file
-        (:attr:`OpenCsvQd.filename`) as :class:`.DataFrame` instance.
+        (:attr:`OpenQD.filename`) as :class:`.DataFrame` instance.
 
     """
 
-    def __init__(self, path: Optional[str] = None,
+    def __init__(self, filename: Optional[str] = None,
                  write: bool = True) -> None:
-        """Initialize the :class:`.OpenCsvQd` context manager."""
-        self.path: str = path or getcwd()
+        """Initialize the :class:`.OpenQD` context manager."""
+        self.filename: str = filename or getcwd()
         self.write: bool = write
-        self.df: Optional[DFCollection] = None
+        self.df: Optional['DFCollection'] = None
 
-    def __enter__(self) -> DFCollection:
-        """Open the :class:`.OpenCsvQd` context manager, importing :attr:`.df`."""
+    def __enter__(self) -> 'DFCollection':
+        """Open the :class:`.OpenQD` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
-        self.df = df = DFCollection(
-            pd.read_csv(self.path, index_col=[0, 1, 2, 3], header=[0, 1], dtype=dtype)
+        self.df = df = get_df_collection(
+            pd.read_csv(self.filename, index_col=[0, 1, 2, 3], header=[0, 1], dtype=dtype)
         )
 
         # Fix the columns
         idx_tups = [(i, '') if 'Unnamed' in j else (i, j) for i, j in df.columns]
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
-        return DFCollection(self.df)
+        return df
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
-        """Close the :class:`.OpenCsvQD` context manager, exporting :attr:`.df`."""
+        """Close the :class:`.OpenQD` context manager, exporting :attr:`.df`."""
         if self.write:
-            self.df.to_csv(self.path)
+            self.df.to_csv(self.filename)
         self.df = None

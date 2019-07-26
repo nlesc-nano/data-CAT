@@ -30,9 +30,7 @@ API
 
 """
 
-from os import getcwd
-from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Sequence, Tuple, List, Generator)
+from typing import (Collection, Union, Sequence, Tuple, List, Generator)
 
 import numpy as np
 import pandas as pd
@@ -44,10 +42,9 @@ from rdkit import Chem
 from rdkit.Chem import Mol
 
 from CAT.utils import get_template
-from CAT.logger import logger
 from CAT.mol_utils import from_rdmol
 
-__all__ = ['mol_to_file', 'df_to_mongo_dict']
+__all__ = ['df_to_mongo_dict']
 
 
 Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects

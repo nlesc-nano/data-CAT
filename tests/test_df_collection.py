@@ -4,10 +4,10 @@ import numpy as np
 import pandas as pd
 
 from CAT.assertion_functions import assert_hasattr, assert_eq, assert_id
-from dataCAT.df_collection import DFCollection
+from dataCAT.df_collection import get_df_collection
 
 _DF = pd.DataFrame(np.random.rand(3, 10))
-DF = DFCollection(_DF)
+DF = get_df_collection(_DF)
 
 REF_CAT = ('__init__', '__getattribute__', '__setattr__', '__str__', '__repr__', 'df')
 REF_PANDAS = (
@@ -32,16 +32,16 @@ def test_getattribute() -> None:
     """Test :meth:`.DFCollection.__getattribute__`."""
     for key in REF_PANDAS:
         method = getattr(DF, key)
-        assert method.__self__ is _DF
+        assert assert_id(method.__self__, _DF)
 
     for key in REF_CAT[:-1]:
         method = getattr(DF, key)
-        assert method.__self__ is DF
+        assert assert_id(method.__self__, DF)
 
 
 def test_setattr() -> None:
     """Test :meth:`.DFCollection.__setattr__`."""
-    df1 = DFCollection(pd.DataFrame(np.random.rand(3, 10)))
+    df1 = get_df_collection(pd.DataFrame(np.random.rand(3, 10)))
     idx = pd.RangeIndex(10, 20)
     df1.columns = idx
     assert_id(df1.columns, idx)
