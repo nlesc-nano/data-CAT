@@ -19,7 +19,7 @@ API
 
 """
 
-from typing import Any
+from typing import (Any, Iterator)
 from textwrap import indent
 from collections.abc import Collection
 
@@ -41,7 +41,65 @@ def _is_magic(key: str) -> bool:
     return key.startswith('__') and key.endswith('__')
 
 
-def get_df_collection(df: pd.DataFrame):
+class _DFCollection(Collection):
+    """A mutable collection for holding dataframes.
+
+    Paramaters
+    ----------
+    df : |pd.DataFrame|_
+        A Pandas DataFrame (see :attr:`_DFCollection.df`).
+
+    Attributes
+    ----------
+    df : |pd.DataFrame|_
+        A Pandas DataFrame.
+
+    Warning
+    -------
+    The :class:`._DFCollection` class should never be directly called on its own.
+    See :func:`.get_df_collection`, which returns an actually usable
+    :class:`.DFCollection` instance (a subclass).
+
+    """
+
+    def __init__(self, df: pd.DataFrame) -> None:
+        """Initialize the :class:`DFCollection` instance."""
+        object.__setattr__(self, 'df', df)
+
+    def __getattribute__(self, key: str) -> Any:
+        """Call :meth:`pandas.DataFrame.__getattribute__` unless a magic method is provided."""
+        if key == 'df' or _is_magic(key):
+            return object.__getattribute__(self, key)
+        else:
+            return self.df.__getattribute__(key)
+
+    def __setattr__(self, key: str, value: Any) -> None:
+        """Call :meth:`pandas.DataFrame.__setattr__` unless ``"df"`` is provided as **key**."""
+        if key == 'df':
+            object.__setattr__(self, key, value)
+            for k in _MAGIC_METHODS:  # Populate this instance with **df** magic methods
+                method = getattr(value, k)
+                setattr(self.__class__, k, method)
+        else:
+            self.df.__setattr__(key, value)
+
+    def __repr__(self) -> str:
+        """Return a machine readable string representation of this instance."""
+        df = self.df
+        args = self.__class__.__name__, df.__class__.__module__, df.__class__.__name__, hex(id(df))
+        return '{}(df=<{}.{} at {}>)'.format(*args)
+
+    def __str__(self) -> str:
+        """Return a human readable string representation of this instance."""
+        df = indent(str(self.df), '    ', bool)
+        return f'{self.__class__.__name__}(\n{df}\n)'
+
+    def __contains__(self, value: Any) -> bool: pass
+    def __len__(self) -> int: pass
+    def __iter__(self) -> Iterator[pd.Series]: pass
+
+
+def get_df_collection(df: pd.DataFrame) -> 'DFCollection':
     """Return a mutable collection for holding dataframes.
 
     Paramaters
@@ -66,9 +124,12 @@ def get_df_collection(df: pd.DataFrame):
         >>> import pandas as pd
 
         >>> df = pd.DataFrame(np.random.rand(5, 5))
-
         >>> collection1 = get_df_collection(df)
         >>> collection2 = get_df_collection(df)
+
+        >>> print(df is collection1.df is collection2.df)
+        True
+
         >>> print(collection1.__class__.__name__ == collection2.__class__.__name__)
         True
 
@@ -76,62 +137,16 @@ def get_df_collection(df: pd.DataFrame):
         False
 
     """
-    class DFCollection:
-        """A mutable collection for holding dataframes.
-
-        Paramaters
-        ----------
-        df : |pd.DataFrame|_
-            A Pandas DataFrame (see :attr:`DFCollection.df`).
-
-        Attributes
-        ----------
-        df : |pd.DataFrame|_
-            A Pandas DataFrame (see :attr:`DFCollection.df`).
-
-        """
-
-        def __init__(self, df: pd.DataFrame) -> None:
-            """Initialize the :class:`DFCollection` instance."""
-            super().__setattr__('df', df)
-
-        def __getattribute__(self, key: str) -> Any:
-            """Call :meth:`pd.DataFrame.__getattribute__` unless a magic method is provided."""
-            if key == 'df' or _is_magic(key):
-                return super().__getattribute__(key)
-            else:
-                return self.df.__getattribute__(key)
-
-        def __setattr__(self, key: str, value: Any) -> None:
-            """Call :meth:`pd.DataFrame.__setattr__` unless a ``"df"`` is provided as **key**."""
-            if key == 'df':
-                super().__setattr__(key, value)
-                for k in _MAGIC_METHODS:  # Populate this instance with **df** magic methods
-                    method = getattr(value, k)
-                    setattr(self.__class__, k, method)
-            else:
-                self.df.__setattr__(key, value)
-
-        def __repr__(self) -> str:
-            """Return a machine string representation of this instance."""
-            df = self.df
-            args = (
-                self.__class__.__name__, df.__class__.__module__, df.__class__.__name__, hex(id(df))
-            )
-            return '{}(df=<{}.{} at {}>)'.format(*args)
-
-        def __str__(self) -> str:
-            """Return a human string representation of this instance."""
-            df = indent(str(self.df), '    ', bool)
-            return f'{self.__class__.__name__}(\n{df}\n)'
+    class DFCollection(_DFCollection):
+        pass
 
     if not isinstance(df, pd.DataFrame):
-        raise TypeError(f"df expects an instance of 'pandas.DataFrame'; "
-                        "observed type: '{df.__class__.__name__}'")
+        raise TypeError("df expects an instance of 'pandas.DataFrame'; "
+                        f"observed type: '{df.__class__.__name__}'")
 
     ret = DFCollection
+    ret.__doc__ = _DFCollection.__doc__.rsplit('\n', 7)[0]
     for key in _MAGIC_METHODS:
         method = getattr(df, key)
         setattr(ret, key, method)
-    Collection.register(ret)
     return ret(df)
