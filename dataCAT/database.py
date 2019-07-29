@@ -291,7 +291,7 @@ class Database(Container):
 
         with manager.open(write=True) as db:
             # Update **db.index**
-            db.df = even_index(db, df)
+            db.df = even_index(db.df, df)
 
             # Filter columns
             if not columns:

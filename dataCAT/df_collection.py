@@ -71,11 +71,16 @@ class _DFCollection(Collection):
         if key == 'df' or _is_magic(key):
             return object.__getattribute__(self, key)
         else:
-            return object.__getattribute__(self, 'df').__getattribute__(key)
+            df = object.__getattribute__(self, 'df')
+            return df.__getattribute__(key)
 
     def __setattr__(self, key: str, value: Any) -> None:
         """Call :meth:`pandas.DataFrame.__setattr__` unless ``"df"`` is provided as **key**."""
         if key == 'df':
+            if not isinstance(value, pd.DataFrame):
+                raise TypeError(f"The {self.__class__.__name__}.df key expects an instance of "
+                                f"'pandas.DataFrame'; observed type '{value.__class__.__name__}'")
+
             object.__setattr__(self, key, value)
             for k in _MAGIC_METHODS:  # Populate this instance with **df** magic methods
                 method = getattr(value, k)
