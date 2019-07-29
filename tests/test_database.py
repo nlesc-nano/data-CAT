@@ -9,7 +9,7 @@ from CAT.assertion_functions import assert_exception, assert_eq, assert_id, asse
 from dataCAT.database import Database
 from dataCAT.context_managers import OpenLig, OpenQD, OpenYaml
 
-PATH = join('tests', 'test_file', 'database')
+PATH = join('tests', 'test_files', 'database')
 DB = Database(PATH)
 
 
