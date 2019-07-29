@@ -1,21 +1,23 @@
 """
-dataCAT.df_container
-====================
+dataCAT.df_collection
+=====================
 
 A module which holds the :class:`DFCollection` class, a mutable collection for holding DataFrames.
 
 Index
 -----
-.. currentmodule:: dataCAT.df_container
+.. currentmodule:: dataCAT.df_collection
 .. autosummary::
     DFCollection
+    get_df_collection
 
 API
 ---
-.. autoclass:: DFCollection
+.. autoclass:: _DFCollection
     :members:
     :private-members:
     :special-members:
+.. autofunction:: get_df_collection
 
 """
 
@@ -44,7 +46,7 @@ def _is_magic(key: str) -> bool:
 class _DFCollection(Collection):
     """A mutable collection for holding dataframes.
 
-    Paramaters
+    Parameters
     ----------
     df : |pd.DataFrame|_
         A Pandas DataFrame (see :attr:`_DFCollection.df`).
@@ -107,14 +109,17 @@ class _DFCollection(Collection):
 def get_df_collection(df: pd.DataFrame) -> 'DFCollection':
     """Return a mutable collection for holding dataframes.
 
-    Paramaters
+    Parameters
     ----------
     df : |pd.DataFrame|_
         A Pandas DataFrame.
 
     Returns
     -------
-    A :class:`DFCollection` instance.
+    |dataCAT.DFCollection|_
+        A :class:`DFCollection` instance.
+        The class is described in more detail in the documentation of its superclass:
+        :class:`_DFCollection`.
 
     Note
     ----

@@ -62,7 +62,8 @@ class Database(Container):
     Parameters
     ----------
     path : str
-        The path+directory name of the directory which is to contain all database components.
+        The path+directory name of the directory which is to contain all database components
+        (see :attr:`Database.dirname`).
 
     host : str
         Hostname or IP address or Unix domain socket path of a single mongod or
@@ -82,19 +83,22 @@ class Database(Container):
 
     Attributes
     ----------
-    csv_lig : |CAT.MetaManager|_
+    dirname : str
+        The path+filename of the directory containing all database components.
+
+    csv_lig : |dataCAT.MetaManager|_
         A dataclass for accesing the context manager for opening
         the .csv file containing all ligand related results.
 
-    csv_qd : |CAT.MetaManager|_
+    csv_qd : |dataCAT.MetaManager|_
         A dataclass for accesing the context manager for opening
         the .csv file containing all quantum dot related results.
 
-    yaml : |CAT.MetaManager|_
+    yaml : |dataCAT.MetaManager|_
         A dataclass for accesing the context manager for opening
         the .yaml file containing all job settings.
 
-    hdf5 : |CAT.MetaManager|_
+    hdf5 : |dataCAT.MetaManager|_
         A dataclass for accesing the context manager for opening
         the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
 

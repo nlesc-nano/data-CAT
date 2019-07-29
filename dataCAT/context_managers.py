@@ -51,7 +51,7 @@ class MetaManager:
     :attr:`MetaManager.filename` will be the first positional argument provided
     to :attr:`MetaManager.manager`.
 
-    Paramaters
+    Parameters
     ----------
     filename : str
         The path+filename of a database component
@@ -85,7 +85,22 @@ class MetaManager:
         return '{}(\n    filename = {},\n    manager  = {}\n)'.format(*args)
 
     def open(self, *args: Any, **kwargs: Any) -> AbstractContextManager:
-        """Call and return :attr:`MetaManager.manager`."""
+        r"""Call and return :attr:`MetaManager.manager`.
+
+        Parameters
+        ----------
+        *args:
+            Positional arguments for :attr:`MetaManager.manager`.
+
+        **kwargs:
+            Keyword arguments for :attr:`MetaManager.manager`.
+
+        Returns
+        ------
+        |AbstractContextManager|_
+            An instance of a context manager.
+
+        """
         return self.manager(self.filename, *args, **kwargs)
 
 
