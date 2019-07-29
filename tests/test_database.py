@@ -9,13 +9,17 @@ from CAT.assertion_functions import assert_exception, assert_eq, assert_id, asse
 from dataCAT.database import Database
 from dataCAT.context_managers import OpenLig, OpenQD, OpenYaml
 
-PATH = join('tests', 'test_file', 'database')
+PATH = join('tests', 'test_files', 'database')
 DB = Database(PATH)
+
+MOL = ('mol', '')
+HDF5_INDEX = ('hdf5 index', '')
+OPT = ('opt', '')
 
 
 def test_init() -> None:
     """Test :meth:`dataCAT.database.Database.__init__`."""
-    assert_eq(DB.path, PATH)
+    assert_eq(DB.dirname, PATH)
 
     assert_eq(DB.csv_lig.filename, join(PATH, 'ligand_database.csv'))
     assert_id(DB.csv_lig.manager, OpenLig)
@@ -101,4 +105,27 @@ def test_from_hdf5() -> None:
     idx2 = np.arange(0, 2)
     mol_list2 = DB.from_hdf5(idx2, 'ligand', rdmol=False)
     for mol, ref in zip(mol_list2, ref_tup[0:2]):
+        assert_eq(mol.get_formula(), ref)
+
+
+def test_from_csv() -> None:
+    """Test :meth:`dataCAT.database.Database.from_csv`."""
+    columns = pd.MultiIndex.from_tuples(
+        [('mol', ''), ('hdf5 index', ''), ('opt', '')]
+    )
+    idx = pd.MultiIndex.from_tuples(
+        [('C[O-]', 'O2'), ('CC[O-]', 'O3'), ('CCC[O-]', 'O4')]
+    )
+    df = pd.DataFrame(np.nan, index=idx, columns=columns)
+
+    df[MOL] = None
+    df[HDF5_INDEX] = np.arange(0, 3, dtype=int)
+    df[OPT] = True
+
+    out1 = DB.from_csv(df, 'ligand', get_mol=False)
+    assert_id(out1, None)
+
+    ref_tup = ('C3H7O1', 'C2H5O1', 'C1H3O1')
+    out2 = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
+    for mol, ref in zip(out2, ref_tup):
         assert_eq(mol.get_formula(), ref)
