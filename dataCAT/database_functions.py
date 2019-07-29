@@ -30,6 +30,7 @@ API
 
 """
 
+import reprlib
 from typing import (Collection, Union, Sequence, Tuple, List, Generator, Dict, Any)
 
 import numpy as np
@@ -114,8 +115,8 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
 #: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
 DTYPE_DICT: Dict[np.dtype, Any] = {
-    np.dtype('int64'): -1,
-    np.dtype('float64'): np.nan,
+    np.dtype('int'): -1,
+    np.dtype('float'): np.nan,
     np.dtype('O'): None,
     np.dtype('bool'): False
 }
@@ -221,31 +222,45 @@ def sanitize_yaml_settings(settings: Settings,
     Returns
     -------
     |plams.Settings|_
-        A Settings instance with unwanted keys and values removed.
+        A new Settings instance with all unwanted keys and values removed.
+
+    Raises
+    ------
+    KeyError
+        Raised if **jobtype** is not found in .../CAT/data/templates/settings_blacklist.yaml.
 
     """
     # Prepare a blacklist of specific keys
     blacklist = get_template('settings_blacklist.yaml')
+    if job_type not in blacklist:
+        raise KeyError(f"{repr(job_type)} not available in "
+                       "'.../CAT/data/templates/settings_blacklist.yaml'; "
+                       f"available keys: {reprlib.repr(tuple(blacklist))}")
+
     settings_del = blacklist['generic']
     settings_del.update(blacklist[job_type])
 
     # Recursivelly delete all keys from **s** if aforementioned keys are present in the s_del
-    del_nested(settings, settings_del)
-    return settings
+    ret = settings.copy()
+    del_nested(settings, ret, settings_del)
+    return ret
 
 
-def del_nested(collection: Union[list, dict], del_item: Union[list, dict]) -> None:
+def del_nested(s_ref: Settings, s_ret: dict, del_item: dict) -> None:
     """Remove all keys in **del_item** from **collection**: a (nested) dictionary and/or list."""
-    iterator = collection.items() if isinstance(collection, dict) else enumerate(collection)
+    empty = Settings()
+    iterator = s_ref.items() if isinstance(s_ref, dict) else enumerate(s_ref)
+
     for key, value in iterator:
         if key in del_item:
             value_del = del_item[key]
             if isinstance(value_del, (dict, list)):
-                del_nested(value, value_del)
+                del_nested(value, s_ret[key], value_del)
             else:
-                del collection[key]
-        if not value:  # Empty entry: delete it
-            del collection[key]
+                del s_ret[key]
+
+        if value == empty:  # An empty (leftover) Settings instance: delete it
+            del s_ret[key]
 
 
 def even_index(df1: pd.DataFrame,
@@ -263,7 +278,8 @@ def even_index(df1: pd.DataFrame,
     Returns
     -------
     |pd.DataFrame|_
-        A new dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
+        A new (sorted) dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
+        Returns **df1** if ``df2.index`` is already a subset of ``df1.index``
 
     """
     # Figure out if ``df1.index`` is a subset of ``df2.index``
