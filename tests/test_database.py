@@ -10,7 +10,6 @@ from dataCAT.database import Database
 from dataCAT.context_managers import OpenLig, OpenQD, OpenYaml
 
 PATH = join('tests', 'test_file', 'database')
-PATH = '/Users/basvanbeek/Documents/GitHub/data-CAT/tests/test_files/database'
 DB = Database(PATH)
 
 
