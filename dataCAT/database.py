@@ -21,10 +21,10 @@ API
 
 from os import getcwd
 from time import sleep
-from typing import (Optional, Sequence, List, Union, Any, Tuple, Callable, Dict)
+from typing import (Optional, Sequence, List, Union, Any, Dict)
 from itertools import count
+from collections.abc import Container
 
-import yaml
 import h5py
 import numpy as np
 import pandas as pd
@@ -36,10 +36,12 @@ from scm.plams import (Settings, Molecule)
 
 from CAT.logger import logger
 from CAT.mol_utils import from_rdmol
+
+from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb)
+from .context_managers import (MetaManager, OpenYaml, OpenLig, OpenQD)
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
-from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb)
 
 __all__ = ['Database']
 
@@ -52,7 +54,7 @@ OPT = ('opt', '')
 MOL = ('mol', '')
 
 
-class Database():
+class Database(Container):
     """The Database class.
 
     .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
@@ -74,24 +76,27 @@ class Database():
         port number on which to connect.
         See :attr:`Database.mongodb`.
 
-    kwargs : dict
+    **kwargs
         Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
         See :attr:`Database.mongodb`.
 
     Attributes
     ----------
-    csv_lig : str
-        Path+filename of the .csv file containing all ligand related results.
+    csv_lig : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .csv file containing all ligand related results.
 
-    csv_qd : str
-        Path+filename of the .csv file containing all quantum dot related results.
+    csv_qd : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .csv file containing all quantum dot related results.
 
-    yaml : str
-        Path and filename of the .yaml file containing all job settings.
+    yaml : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .yaml file containing all job settings.
 
-    hdf5 : str
-        Path and filename of the .hdf5 file containing all structures
-        (as partiallize de-serialized .pdb files).
+    hdf5 : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
 
     mongodb : dict
         Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
@@ -104,289 +109,66 @@ class Database():
     def __init__(self, path: Optional[str] = None,
                  host: str = 'localhost',
                  port: int = 27017,
-                 **kwargs: dict) -> None:
+                 **kwargs) -> None:
         """Initialize :class:`Database`."""
-        path = path or getcwd()
+        self.dirname = path or getcwd()
 
-        # Attributes which hold the absolute paths to various components of the database
-        self.csv_lig = _create_csv(path, database='ligand')
-        self.csv_qd = _create_csv(path, database='QD')
-        self.yaml = _create_yaml(path)
-        self.hdf5 = _create_hdf5(path)
+        # Create the database components and return the filename
+        lig_path = _create_csv(self.dirname, database='ligand')
+        qd_path = _create_csv(self.dirname, database='QD')
+        yaml_path = _create_yaml(self.dirname)
+        hdf5_path = _create_hdf5(self.dirname)
+
+        # Populate attributes with MetaManager instances
+        self.csv_lig = MetaManager(lig_path, OpenLig)
+        self.csv_qd = MetaManager(qd_path, OpenQD)
+        self.yaml = MetaManager(yaml_path, OpenYaml)
+        self.hdf5 = MetaManager(hdf5_path, h5py.File)
+
+        # Try to create or access the mongodb database
         try:
             self.mongodb = _create_mongodb(host, port, **kwargs)
         except ServerSelectionTimeoutError:
             self.mongodb = None
 
     def __str__(self) -> str:
-        """Return a string-representation of this instance."""
-        ret = 'Database(\n'
-        vars_dict = vars(self)
-        width = 4 + max(len(k) for k in vars_dict)
-        for k, v in vars_dict.items():
-            if isinstance(v, dict):
-                v = self._dict_to_str(v, width)
-            else:
-                v = repr(v)
-            ret += '    {:{width}}:    {}\n'.format(k, v, width=width)
-        return ret + ')'
+        """Return a human string representation of this instance."""
+        def _dict_to_str(value: dict) -> str:
+            iterator = sorted(value.items(), key=str)
+            return '{' + newline.join(f'{repr(k)}: {repr(v)}' for k, v in iterator) + '}'
+
+        def _get_str(key: str, value: Any) -> str:
+            func = _dict_to_str if isinstance(value, dict) else repr
+            return f'    {key:{offset}} = {func(value)}'
+
+        offset = max(len(k) for k in vars(self))
+        newline = ',\n' + ' ' * (6 + offset)
+
+        ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
+        return f'Database(\n{ret}\n)'
 
     def __repr__(self) -> str:
-        """Return a string-representation of this instance."""
-        ret = 'Database(\n'
-        vars_dict = vars(self)
-        width = 4 + max(len(k) for k in vars_dict)
-        for k, v in vars_dict.items():
-            ret += '    {:{width}}:    {}\n'.format(k, str(type(v)), width=width)
-        return ret + ')'
+        """Return a machine string representation of this instance."""
+        return self.__str__()
 
-    @staticmethod
-    def _dict_to_str(dict_: dict,
-                     initial_width: int) -> str:
-        """Convert a :class:`dict` into a :class:`str` suitable for :meth:`.__str__`."""
-        width = initial_width + 9
-        width2 = max(len(repr(k)) for k in dict_)
-        kwargs = {'width': width, 'width2': width2}
+    def __eq__(self, value: Any) -> bool:
+        """Check if this instance is equivalent to **value**."""
+        return vars(self) == vars(value)
 
-        ret = ''
-        for i, (k, v) in enumerate(sorted(dict_.items(), key=str)):
-            if i == 0:
-                k = '{' + k
-                ret += '\n{:{width}}{:{width2}}: {},'.format('', repr(k), repr(v), **kwargs)
-                kwargs['width'] += 1
-            else:
-                ret += '\n{:{width}}{:{width2}}: {},'.format('', repr(k), repr(v), **kwargs)
-        ret = ret[:-1] + '}'
-        return ret[kwargs['width']:]
-
-    """ ###########################  Opening and closing the database ######################### """
-
-    class OpenYaml():
-        """Context manager for opening and closing job settings (:attr:`.Database.yaml`).
-
-        Parameters
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.yaml`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        Attributes
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.yaml`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        settings: |None|_ or |plams.Settings|_
-            An attribute for (temporary) storing the opened .yaml file
-            (:attr:`OpenYaml.filename`) as :class:`.Settings` instance.
-
-        """
-
-        def __init__(self, filename: Optional[str] = None,
-                     write: bool = True) -> None:
-            """Initialize the :class:`.open_yaml` context manager."""
-            self.filename = filename or getcwd()
-            self.write = write
-            self.settings = None
-
-        def __enter__(self) -> Settings:
-            """Open the :class:`.open_yaml` context manager, importing :attr:`.settings`."""
-            with open(self.filename, 'r') as f:
-                self.settings = Settings(yaml.load(f, Loader=yaml.FullLoader))
-                return self.settings
-
-        def __exit__(self, *args) -> None:
-            """Close the :class:`.open_yaml` context manager, exporting :attr:`.settings`."""
-            if self.write:
-                yml_dict = self.settings.as_dict()
-
-                # A fix for Settings.as_dict() not functioning when containg a lists of Settings
-                for key in yml_dict:
-                    for i, value in enumerate(yml_dict[key]):
-                        if isinstance(value, Settings):
-                            yml_dict[key][i] = value.as_dict()
-
-                # Write to the .yaml file
-                with open(self.filename, 'w') as f:
-                    f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
-            self.settings = None
-
-    class OpenCsvLig():
-        """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`).
-
-        Parameters
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.csv_lig`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        Attributes
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.csv_lig`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        df: |None|_ or |pd.DataFrame|_
-            An attribute for (temporary) storing the opened .csv file
-            (:attr:`OpenCsvLig.filename`) as :class:`.DataFrame` instance.
-
-        """
-
-        def __init__(self, path: Optional[str] = None,
-                     write: bool = True) -> None:
-            """Initialize the :class:`.OpenCsvLig` context manager."""
-            self.path = path or getcwd()
-            self.write = write
-            self.df = None
-
-        def __enter__(self) -> pd.DataFrame:
-            """Open the :class:`.OpenCsvLig` context manager, importing :attr:`.df`."""
-            # Open the .csv file
-            dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
-            self.df = Database.DF(
-                pd.read_csv(self.path, index_col=[0, 1], header=[0, 1], dtype=dtype)
-            )
-
-            # Fix the columns
-            idx_tups = [(i, '') if 'Unnamed' in j else (i, j) for i, j in self.df.columns]
-            columns = pd.MultiIndex.from_tuples(idx_tups, names=self.df.columns.names)
-            self.df.columns = columns
-            return self.df
-
-        def __exit__(self, *args) -> None:
-            """Close the :class:`.OpenCsvLig` context manager, exporting :attr:`.df`."""
-            if self.write:
-                self.df.to_csv(self.path)
-            self.df = None
-
-    class OpenCsvQd():
-        """Context manager for opening and closing the QD database (:attr:`Database.csv_qd`).
-
-        Parameters
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.csv_qd`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        Attributes
-        ----------
-        filename: |str|_
-            The path+filename to the database component (:attr:`.Database.csv_qd`).
-
-        write: |bool|_
-            Whether or not the database file should be updated after closing this instance.
-
-        df: |None|_ or |pd.DataFrame|_
-            An attribute for (temporary) storing the opened .csv file
-            (:attr:`OpenCsvQd.filename`) as :class:`.DataFrame` instance.
-
-        """
-
-        def __init__(self, path: Optional[str] = None,
-                     write: bool = True) -> None:
-            """Initialize the :class:`.OpenCsvQd` context manager."""
-            self.path = path or getcwd()
-            self.write = write
-            self.df = None
-
-        def __enter__(self) -> pd.DataFrame:
-            """Open the :class:`.OpenCsvQd` context manager, importing :attr:`.df`."""
-            # Open the .csv file
-            dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
-            self.df = Database.DF(
-                pd.read_csv(self.path, index_col=[0, 1, 2, 3], header=[0, 1], dtype=dtype)
-            )
-
-            # Fix the columns
-            idx_tups = [(i, '') if 'Unnamed' in j else (i, j) for i, j in self.df.columns]
-            columns = pd.MultiIndex.from_tuples(idx_tups, names=self.df.columns.names)
-            self.df.columns = columns
-            return self.df
-
-        def __exit__(self, *args) -> None:
-            """Close the :class:`.OpenCsvQd` context manager, exporting :attr:`.df`."""
-            if self.write:
-                self.df.to_csv(self.path)
-            self.df = None
-
-    class DF(dict):
-        """A mutable container for holding dataframes.
-
-        A subclass of :class:`dict` containing a single key (``"df"``) and value
-        (a Pandas DataFrame).
-        Calling an item or attribute of :class:`.DF` will call said method on the
-        underlaying DataFrame (``self["df"]``).
-        An exception to this is the ``"df"`` key, which will get/set the DataFrame
-        instead.
-
-        """
-
-        def __init__(self, df: pd.DataFrame) -> None:
-            """Initialize :class:`.DF`."""
-            super().__init__()
-            super().__setitem__('df', df)
-
-        def __getattribute__(self, key: Immutable) -> Any:
-            """Call :meth:`pandas.DataFrame.__getattribute__`."""
-            if key.startswith('__') and key.endswith('__'):
-                return super().__getattribute__(key)
-            return self['df'].__getattribute__(key)
-
-        def __setattr__(self, key: Immutable,
-                        value: Any) -> None:
-            """Call :meth:`pandas.DataFrame.__setattr__`."""
-            self['df'].__setattr__(key, value)
-
-        def __setitem__(self, key: Immutable,
-                        value: Any) -> None:
-            """Call :meth:`pandas.DataFrame.__setitem__`."""
-            if key == 'df' and not isinstance(value, pd.DataFrame):
-                try:
-                    value = value['df']
-                    if not isinstance(value, pd.DataFrame):
-                        raise KeyError
-                    super().__setitem__('df', value)
-
-                except KeyError:
-                    raise TypeError("Instance of 'pandas.DataFrame' or 'CAT.Database.DF' expected;"
-                                    " observed type: '{value.__class__.__name__}'")
-
-            elif key == 'df':
-                super().__setitem__('df', value)
-
-            else:
-                self['df'].__setitem__(key, value)
-
-        def __getitem__(self, key: Immutable) -> Any:
-            """Call :meth:`pandas.DataFrame.__getitem__`."""
-            df = super().__getitem__('df')
-            if isinstance(key, str) and key == 'df':
-                return df
-            return df.__getitem__(key)
+    def __contains__(self, value: Any) -> bool:
+        """Check if **value** is in this instance."""
+        return value in vars(self)
 
     """ #################################  Updating the database ############################## """
 
-    def _parse_database(self, database: str) -> Tuple[str, Callable]:
+    def _parse_database(self, database: str) -> MetaManager:
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
-            path = self.csv_lig
-            open_csv = self.OpenCsvLig
+            return self.csv_lig
         elif database in ('QD', 'QD_no_opt'):
-            path = self.csv_qd
-            open_csv = self.OpenCsvQd
+            return self.csv_qd
         else:
             raise ValueError(f"database={database}; accepted values for are 'ligand' and 'QD'")
-        return path, open_csv
 
     def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
@@ -394,7 +176,6 @@ class Database():
 
         Examples
         --------
-
         .. code:: python
 
             >>> from CAT import Database
@@ -436,16 +217,17 @@ class Database():
             collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
         else:
             # Operate on either the ligand or quantum dot database
-            path, open_csv = self._parse_database(database)
             if database == 'ligand':
                 idx_keys = ('smiles', 'anchor')
                 collection = mongo_db.ligand_database
+                manager = self.csv_lig
             elif database == 'QD':
                 idx_keys = ('core', 'core anchor', 'ligand smiles', 'ligand anchor')
                 collection = mongo_db.qd_database
+                manager = self.csv_lig
 
             # Parse the ligand or qd dataframe
-            with open_csv(path, write=False) as db:
+            with manager.open(write=False) as db:
                 dict_gen = df_to_mongo_dict(db)
 
         # Update the collection
@@ -499,7 +281,7 @@ class Database():
 
         """
         # Operate on either the ligand or quantum dot database
-        path, open_csv = self._parse_database(database)
+        manager = self._parse_database(database)
 
         # Update **self.yaml**
         if job_recipe is not None:
@@ -507,9 +289,9 @@ class Database():
             for key, value in job_settings.items():
                 df[('settings', key)] = value
 
-        with open_csv(path, write=True) as db:
+        with manager.open(write=True) as db:
             # Update **db.index**
-            db['df'] = even_index(db['df'], df)
+            db.df = even_index(db.df, df)
 
             # Filter columns
             if not columns:
@@ -556,7 +338,7 @@ class Database():
 
         """
         ret = {}
-        with self.OpenYaml(self.yaml) as db:
+        with self.yaml.open() as db:
             for item in job_recipe:
                 # Unpack and sanitize keys
                 key = job_recipe[item].key
@@ -615,7 +397,7 @@ class Database():
 
         # Add new entries to the database
         self.hdf5_availability()
-        with h5py.File(self.hdf5, 'r+') as f:
+        with self.hdf5.open('r+') as f:
             i, j = f[database].shape
 
             if new.any():
@@ -652,7 +434,7 @@ class Database():
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
-        with h5py.File(self.hdf5, 'r+') as f:
+        with self.hdf5.open('r+') as f:
             i, j, k = f[column].shape
 
             # Create a 3D array of input files
@@ -733,18 +515,17 @@ class Database():
 
         """
         # Operate on either the ligand or quantum dot database
-        path, open_csv = self._parse_database(database)
+        manager = self._parse_database(database)
 
         # Update the *hdf5 index* column in **df**
-        with open_csv(path, write=False) as db:
-            df.update(db['df'], overwrite=True)
+        with manager.open(write=False) as db:
+            df.update(db.df, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
 
         # **df** has been updated and **get_mol** = *False*
         if not get_mol:
             return None
-        else:
-            return self._get_csv_mol(df, database, inplace)
+        return self._get_csv_mol(df, database, inplace)
 
     def _get_csv_mol(self, df: pd.DataFrame,
                      database: str = 'ligand',
@@ -801,8 +582,7 @@ class Database():
 
     def from_hdf5(self, index: Sequence[int],
                   database: str = 'ligand',
-                  rdmol: bool = True,
-                  close: bool = True) -> List[Union[Molecule, Mol]]:
+                  rdmol: bool = True) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
         Parameters
@@ -831,7 +611,7 @@ class Database():
 
         # Open the database and pull entries
         self.hdf5_availability()
-        with h5py.File(self.hdf5, 'r') as f:
+        with self.hdf5.open('r') as f:
             pdb_array = f[database][index]
 
         # Return a list of RDKit or PLAMS molecules
@@ -866,17 +646,18 @@ class Database():
             Raised if **max_attempts** is exceded.
 
         """
-        err = f"'{self.hdf5}' is currently unavailable; repeating attempt in {timeout:.0f} seconds"
+        err = (f"h5py.File('{self.hdf5.filename}') is currently unavailable; "
+               f"repeating attempt in {timeout:1.1f} seconds")
         i = max_attempts or np.inf
 
         while i:
             try:
-                with h5py.File(self.hdf5, 'r+') as _:
+                with self.hdf5.open('r+'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
-                logger.warn(err)
-                error = ex
+                logger.warning(err)
+                exception = ex
                 sleep(timeout)
             i -= 1
 
-        raise error.__class__(error)
+        raise exception

@@ -58,20 +58,18 @@ def _create_csv(path: str,
         The absolute path to the ligand or QD database.
 
     """
-    path = join(path, database + '_database.csv')
+    filename = join(path, database + '_database.csv')
 
     # Check if the database exists and has the proper keys; create it if it does not
-    if not isfile(path):
-        msg = f'{database}_database.csv not found in {path}, creating {database} database'
-        logger.info(msg)
-
+    if not isfile(filename):
         if database == 'ligand':
-            _create_csv_lig(path)
+            _create_csv_lig(filename)
         elif database == 'QD':
-            _create_csv_qd(path)
+            _create_csv_qd(filename)
         else:
             raise ValueError(f"'{database}' is not an accepated value for the 'database' argument")
-    return path
+        logger.info(f'{database}_database.csv not found in {path}, creating {database} database')
+    return filename
 
 
 def _create_csv_lig(filename: str) -> None:
@@ -186,13 +184,13 @@ def _create_yaml(path: str,
 
     """
     # Define arguments
-    path = join(path, name)
+    filename = join(path, name)
 
     # Create a new .yaml file if it does not yet exist
-    if not isfile(path):
-        with open(path, 'w') as f:
+    if not isfile(filename):
+        with open(filename, 'w') as f:
             f.write(yaml.dump({None: [None]}, default_flow_style=False, indent=4))
-    return path
+    return filename
 
 
 def _create_mongodb(host: str = 'localhost',

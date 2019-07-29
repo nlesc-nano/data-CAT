@@ -30,9 +30,8 @@ API
 
 """
 
-from os import getcwd
-from os.path import (join, isfile, isdir)
-from typing import (Optional, Collection, Iterable, Union, Sequence, Tuple, List, Generator)
+import reprlib
+from typing import (Collection, Union, Sequence, Tuple, List, Generator, Dict, Any)
 
 import numpy as np
 import pandas as pd
@@ -44,11 +43,8 @@ from rdkit import Chem
 from rdkit.Chem import Mol
 
 from CAT.utils import get_template
-from CAT.logger import logger
-from CAT.mol_utils import from_rdmol
 
-__all__ = ['mol_to_file', 'df_to_mongo_dict']
-
+__all__ = ['df_to_mongo_dict']
 
 Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
@@ -114,8 +110,16 @@ def df_to_mongo_dict(df: pd.DataFrame,
     idx_names = df.index.names
     if as_gen:
         return (_get_dict(idx, row, idx_names) for idx, row in df.iterrows())
-    else:
-        return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
+    return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
+
+
+#: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
+DTYPE_DICT: Dict[np.dtype, Any] = {
+    np.dtype('int'): -1,
+    np.dtype('float'): np.nan,
+    np.dtype('O'): None,
+    np.dtype('bool'): False
+}
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
@@ -140,24 +144,7 @@ def get_nan_row(df: pd.DataFrame) -> list:
         A list of none-esque objects, one for each column in **df**.
 
     """
-    dtype_dict = {
-        np.dtype('int64'): -1,
-        np.dtype('float64'): np.nan,
-        np.dtype('O'): None,
-        np.dtype('bool'): False
-    }
-
-    if not isinstance(df.index, pd.MultiIndex):
-        return [dtype_dict[df[i].dtype] for i in df]
-    else:
-        ret = []
-        for _, value in df.items():
-            try:
-                j = dtype_dict[value.dtype]
-            except KeyError:  # dtype is neither int, float nor object
-                j = None
-            ret.append(j)
-        return ret
+    return [(DTYPE_DICT[v.dtype] if v.dtype in DTYPE_DICT else None) for _, v in df.items()]
 
 
 def as_pdb_array(mol_list: Collection[Molecule],
@@ -235,27 +222,45 @@ def sanitize_yaml_settings(settings: Settings,
     Returns
     -------
     |plams.Settings|_
-        A Settings instance with unwanted keys and values removed.
+        A new Settings instance with all unwanted keys and values removed.
+
+    Raises
+    ------
+    KeyError
+        Raised if **jobtype** is not found in .../CAT/data/templates/settings_blacklist.yaml.
 
     """
-    def recursive_del(s, s_del):
-        for key in s:
-            if key in s_del:
-                if isinstance(s_del[key], dict):
-                    recursive_del(s[key], s_del[key])
-                else:
-                    del s[key]
-            if not s[key]:
-                del s[key]
-
     # Prepare a blacklist of specific keys
     blacklist = get_template('settings_blacklist.yaml')
+    if job_type not in blacklist:
+        raise KeyError(f"{repr(job_type)} not available in "
+                       "'.../CAT/data/templates/settings_blacklist.yaml'; "
+                       f"available keys: {reprlib.repr(tuple(blacklist))}")
+
     settings_del = blacklist['generic']
     settings_del.update(blacklist[job_type])
 
     # Recursivelly delete all keys from **s** if aforementioned keys are present in the s_del
-    recursive_del(settings, settings_del)
-    return settings
+    ret = settings.copy()
+    del_nested(settings, ret, settings_del)
+    return ret
+
+
+def del_nested(s_ref: Settings, s_ret: dict, del_item: dict) -> None:
+    """Remove all keys in **del_item** from **collection**: a (nested) dictionary and/or list."""
+    empty = Settings()
+    iterator = s_ref.items() if isinstance(s_ref, dict) else enumerate(s_ref)
+
+    for key, value in iterator:
+        if key in del_item:
+            value_del = del_item[key]
+            if isinstance(value_del, (dict, list)):
+                del_nested(value, s_ret[key], value_del)
+            else:
+                del s_ret[key]
+
+        if value == empty:  # An empty (leftover) Settings instance: delete it
+            del s_ret[key]
 
 
 def even_index(df1: pd.DataFrame,
@@ -273,7 +278,8 @@ def even_index(df1: pd.DataFrame,
     Returns
     -------
     |pd.DataFrame|_
-        A new dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
+        A new (sorted) dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
+        Returns **df1** if ``df2.index`` is already a subset of ``df1.index``
 
     """
     # Figure out if ``df1.index`` is a subset of ``df2.index``
