@@ -71,7 +71,7 @@ class _DFCollection(Collection):
         if key == 'df' or _is_magic(key):
             return object.__getattribute__(self, key)
         else:
-            return self.df.__getattribute__(key)
+            return object.__getattribute__(self, 'df').__getattribute__(key)
 
     def __setattr__(self, key: str, value: Any) -> None:
         """Call :meth:`pandas.DataFrame.__setattr__` unless ``"df"`` is provided as **key**."""
