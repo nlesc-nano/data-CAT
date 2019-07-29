@@ -30,7 +30,7 @@ API
 
 """
 
-from typing import (Collection, Union, Sequence, Tuple, List, Generator)
+from typing import (Collection, Union, Sequence, Tuple, List, Generator, Dict, Any)
 
 import numpy as np
 import pandas as pd
@@ -42,10 +42,8 @@ from rdkit import Chem
 from rdkit.Chem import Mol
 
 from CAT.utils import get_template
-from CAT.mol_utils import from_rdmol
 
 __all__ = ['df_to_mongo_dict']
-
 
 Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
@@ -114,6 +112,15 @@ def df_to_mongo_dict(df: pd.DataFrame,
     return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
+#: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
+DTYPE_DICT: Dict[np.dtype, Any] = {
+    np.dtype('int64'): -1,
+    np.dtype('float64'): np.nan,
+    np.dtype('O'): None,
+    np.dtype('bool'): False
+}
+
+
 def get_nan_row(df: pd.DataFrame) -> list:
     """Return a list of None-esque objects for each column in **df**.
 
@@ -136,24 +143,7 @@ def get_nan_row(df: pd.DataFrame) -> list:
         A list of none-esque objects, one for each column in **df**.
 
     """
-    dtype_dict = {
-        np.dtype('int64'): -1,
-        np.dtype('float64'): np.nan,
-        np.dtype('O'): None,
-        np.dtype('bool'): False
-    }
-
-    if not isinstance(df.index, pd.MultiIndex):
-        return [dtype_dict[df[i].dtype] for i in df]
-
-    ret = []
-    for _, value in df.items():
-        try:
-            j = dtype_dict[value.dtype]
-        except KeyError:  # dtype is neither int, float nor object
-            j = None
-        ret.append(j)
-    return ret
+    return [(DTYPE_DICT[v.dtype] if v.dtype in DTYPE_DICT else None) for _, v in df.items()]
 
 
 def as_pdb_array(mol_list: Collection[Molecule],
@@ -234,24 +224,28 @@ def sanitize_yaml_settings(settings: Settings,
         A Settings instance with unwanted keys and values removed.
 
     """
-    def recursive_del(s, s_del):
-        for key in s:
-            if key in s_del:
-                if isinstance(s_del[key], dict):
-                    recursive_del(s[key], s_del[key])
-                else:
-                    del s[key]
-            if not s[key]:
-                del s[key]
-
     # Prepare a blacklist of specific keys
     blacklist = get_template('settings_blacklist.yaml')
     settings_del = blacklist['generic']
     settings_del.update(blacklist[job_type])
 
     # Recursivelly delete all keys from **s** if aforementioned keys are present in the s_del
-    recursive_del(settings, settings_del)
+    del_nested(settings, settings_del)
     return settings
+
+
+def del_nested(collection: Union[list, dict], del_item: Union[list, dict]) -> None:
+    """Remove all keys in **del_item** from **collection**: a (nested) dictionary and/or list."""
+    iterator = collection.items() if isinstance(collection, dict) else enumerate(collection)
+    for key, value in iterator:
+        if key in del_item:
+            value_del = del_item[key]
+            if isinstance(value_del, (dict, list)):
+                del_nested(value, value_del)
+            else:
+                del collection[key]
+        if not value:  # Empty entry: delete it
+            del collection[key]
 
 
 def even_index(df1: pd.DataFrame,
