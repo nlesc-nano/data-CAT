@@ -82,18 +82,21 @@ class Database(Container):
 
     Attributes
     ----------
-    csv_lig : str
-        Path+filename of the .csv file containing all ligand related results.
+    csv_lig : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .csv file containing all ligand related results.
 
-    csv_qd : str
-        Path+filename of the .csv file containing all quantum dot related results.
+    csv_qd : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .csv file containing all quantum dot related results.
 
-    yaml : str
-        Path and filename of the .yaml file containing all job settings.
+    yaml : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .yaml file containing all job settings.
 
-    hdf5 : str
-        Path and filename of the .hdf5 file containing all structures
-        (as partiallize de-serialized .pdb files).
+    hdf5 : |CAT.MetaManager|_
+        A dataclass for accesing the context manager for opening
+        the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
 
     mongodb : dict
         Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
@@ -108,13 +111,13 @@ class Database(Container):
                  port: int = 27017,
                  **kwargs) -> None:
         """Initialize :class:`Database`."""
-        _path = path or getcwd()
+        self.dirname = path or getcwd()
 
         # Create the database components and return the filename
-        lig_path = _create_csv(_path, database='ligand')
-        qd_path = _create_csv(_path, database='QD')
-        yaml_path = _create_yaml(_path)
-        hdf5_path = _create_hdf5(_path)
+        lig_path = _create_csv(self.dirname, database='ligand')
+        qd_path = _create_csv(self.dirname, database='QD')
+        yaml_path = _create_yaml(self.dirname)
+        hdf5_path = _create_hdf5(self.dirname)
 
         # Populate attributes with MetaManager instances
         self.csv_lig = MetaManager(lig_path, OpenLig)
@@ -146,13 +149,7 @@ class Database(Container):
 
     def __repr__(self) -> str:
         """Return a machine string representation of this instance."""
-        def _get_str(key: str, value: Any) -> str:
-            args = value.__class__.__module__, value.__class__.__name__, hex(id(value))
-            return f'    {key:{offset}} = ' + '<{}.{} at {}>'.format(*args)
-
-        offset = max(len(k) for k in vars(self))
-        ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
-        return f'Database(\n{ret}\n)'
+        return self.__str__()
 
     def __eq__(self, value: Any) -> bool:
         """Check if this instance is equivalent to **value**."""
@@ -160,10 +157,7 @@ class Database(Container):
 
     def __contains__(self, value: Any) -> bool:
         """Check if **value** is in this instance."""
-        try:
-            return bool(self.__getattribute__(value))
-        except AttributeError:
-            return False
+        return value in vars(self)
 
     """ #################################  Updating the database ############################## """
 
@@ -525,7 +519,7 @@ class Database(Container):
 
         # Update the *hdf5 index* column in **df**
         with manager.open(write=False) as db:
-            df.update(db['df'], overwrite=True)
+            df.update(db.df, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
 
         # **df** has been updated and **get_mol** = *False*
@@ -652,7 +646,8 @@ class Database(Container):
             Raised if **max_attempts** is exceded.
 
         """
-        err = f"'{self.hdf5}' is currently unavailable; repeating attempt in {timeout:.0f} seconds"
+        err = (f"h5py.File('{self.hdf5.filename}') is currently unavailable; "
+               f"repeating attempt in {timeout:1.1f} seconds")
         i = max_attempts or np.inf
 
         while i:

@@ -23,7 +23,8 @@ API
 
 """
 
-from os import getcwd
+from os import getcwd, sep
+from os.path import basename
 from typing import (Callable, Optional, Any)
 from contextlib import AbstractContextManager
 from dataclasses import dataclass
@@ -74,6 +75,14 @@ class MetaManager:
 
     filename: str
     manager: Callable[..., AbstractContextManager]
+
+    def __repr__(self) -> str:
+        filename = repr(f'...{sep}{basename(self.filename)}')
+        return f'{self.__class__.__name__}(filename={filename}, manager={repr(self.manager)})'
+
+    def __str__(self) -> str:
+        args = self.__class__.__name__, repr(self.filename), repr(self.manager)
+        return '{}(\n    filename = {},\n    manager  = {}\n)'.format(*args)
 
     def open(self, *args: Any, **kwargs: Any) -> AbstractContextManager:
         """Call and return :attr:`MetaManager.manager`."""
