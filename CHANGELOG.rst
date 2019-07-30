@@ -10,6 +10,8 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 *****
 
 * Lowered Python version requirement from >=3.7 to >=3.6.
+* Changed the ``dataCAT.Metamanager()`` class from a dataclass
+  into a subclass of ``collections.abc.Container()``
 
 
 0.1.2

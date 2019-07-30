@@ -88,7 +88,7 @@ class MetaManager(Container):
         return '{}(\n    filename = {},\n    manager  = {}\n)'.format(*args)
 
     def __contains__(self, value: Any) -> bool:
-        """Return if **value** is in :attr:`MetaManager.filename` or :attr:`MetaManager.manager`."""
+        """Return if **value** is in :code:`dir(self)`."""
         return value in dir(self)
 
     def __eq__(self, value: Any) -> bool:
