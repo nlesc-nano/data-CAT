@@ -65,6 +65,7 @@ setup(
         'pytest-cov',
         'pytest-mock',
         'pycodestyle',
+        'CAT@git+https://github.com/nlesc-nano/CAT@devel'
     ],
     extras_require={
         'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle']
