@@ -26,8 +26,8 @@ API
 from os import getcwd, sep
 from os.path import basename
 from typing import (Callable, Optional, Any)
+from collections.abc import Container
 from contextlib import AbstractContextManager
-from dataclasses import dataclass
 
 import yaml
 import pandas as pd
@@ -39,8 +39,7 @@ from .df_collection import get_df_collection
 __all__ = ['MetaManager', 'OpenYaml', 'OpenLig', 'OpenQD']
 
 
-@dataclass(frozen=True)
-class MetaManager:
+class MetaManager(Container):
     """A wrapper for context managers.
 
     Has a single important method, :meth:`MetaManager.open`,
@@ -72,17 +71,29 @@ class MetaManager:
         The first positional argument of the context manager should be the filename.
 
     """
-
-    filename: str
-    manager: Callable[..., AbstractContextManager]
+    def __init__(self, filename: str,
+                 manager: Callable[..., AbstractContextManager]) -> None:
+        """Initialize a :class:`MetaManager` instance."""
+        self.filename = filename
+        self.manager = manager
 
     def __repr__(self) -> str:
+        """Return the canonical string representation of this instance."""
         filename = repr(f'...{sep}{basename(self.filename)}')
         return f'{self.__class__.__name__}(filename={filename}, manager={repr(self.manager)})'
 
     def __str__(self) -> str:
+        """Create a new string object from this instance."""
         args = self.__class__.__name__, repr(self.filename), repr(self.manager)
         return '{}(\n    filename = {},\n    manager  = {}\n)'.format(*args)
+
+    def __contains__(self, value: Any) -> bool:
+        """Return if **value** is in :attr:`MetaManager.filename` or :attr:`MetaManager.manager`."""
+        return value in dir(self)
+
+    def __eq__(self, value: Any) -> bool:
+        """Return if this instance is equivalent to **value**."""
+        return dir(self) == dir(value)
 
     def open(self, *args: Any, **kwargs: Any) -> AbstractContextManager:
         """Call and return :attr:`MetaManager.manager`."""
