@@ -34,6 +34,7 @@ setup(
         'science',
         'chemistry',
         'python-3',
+        'python-3-6',
         'python-3-7',
         'automation'
     ],
@@ -43,9 +44,11 @@ setup(
         'Topic :: Database',
         'License :: OSI Approved :: GNU Lesser General Public License',
         'Natural Language :: English',
-        'Programming Language :: Python :: 3.7',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7'
     ],
     test_suite='tests',
+    python_requires='>=3.6',
     install_requires=[
         'numpy',
         'pandas',
@@ -60,10 +63,11 @@ setup(
     tests_require=[
         'pytest',
         'pytest-cov',
+        'pytest-mock',
         'pycodestyle',
+        'CAT@git+https://github.com/nlesc-nano/CAT@devel'
     ],
     extras_require={
-        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle'],
-        'doc': ['sphinx>=2.0', 'sphinx_rtd_theme', 'sphinx-autodoc-typehints']
+        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle']
     }
 )
