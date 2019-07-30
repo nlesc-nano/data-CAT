@@ -1,3 +1,11 @@
+.. image:: https://travis-ci.org/nlesc-nano/data-CAT.svg?branch=master
+   :target: https://travis-ci.org/nlesc-nano/data-CAT
+
+| 
+   
+.. image:: https://img.shields.io/badge/python-3.6-blue.svg
+   :target: https://www.python.org
+   
 .. image:: https://img.shields.io/badge/python-3.7-blue.svg
    :target: https://www.python.org
 
