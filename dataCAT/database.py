@@ -343,7 +343,7 @@ class Database(Container):
                 # Unpack and sanitize keys
                 key = job_recipe[item].key
                 if isinstance(key, type):
-                    key = key.__class__.__name__
+                    key = key.__name__
 
                 # Unpack and sanitize values
                 value = job_recipe[item].value
