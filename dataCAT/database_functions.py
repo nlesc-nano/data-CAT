@@ -233,9 +233,7 @@ def sanitize_yaml_settings(settings: Settings,
     # Prepare a blacklist of specific keys
     blacklist = get_template('settings_blacklist.yaml')
     if job_type not in blacklist:
-        raise KeyError(f"{repr(job_type)} not available in "
-                       "'.../CAT/data/templates/settings_blacklist.yaml'; "
-                       f"available keys: {reprlib.repr(tuple(blacklist))}")
+        return settings.copy()
 
     settings_del = blacklist['generic']
     settings_del.update(blacklist[job_type])
