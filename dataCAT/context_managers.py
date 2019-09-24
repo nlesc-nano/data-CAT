@@ -71,6 +71,7 @@ class MetaManager(Container):
         The first positional argument of the context manager should be the filename.
 
     """
+
     def __init__(self, filename: str,
                  manager: Callable[..., AbstractContextManager]) -> None:
         """Initialize a :class:`MetaManager` instance."""

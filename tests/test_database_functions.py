@@ -10,7 +10,7 @@ from rdkit import Chem
 from scm.plams import Settings
 import scm.plams.interfaces.molecule.rdkit as molkit
 
-from CAT.assertion_functions import assert_eq, assert_instance, assert_id, assert_exception
+from CAT.assertion.assertion_manager import assertion
 from dataCAT.database_functions import (
     get_nan_row, as_pdb_array, from_pdb_array, sanitize_yaml_settings, even_index
 )
@@ -29,7 +29,7 @@ def test_get_nan_row() -> None:
 
     out = get_nan_row(df)
     ref = [None, -1, np.nan, False, None]
-    assert_eq(out, ref)
+    assertion.eq(out, ref)
 
 
 def test_as_pdb_array() -> None:
@@ -68,12 +68,12 @@ def test_from_pdb_array() -> None:
 
     pdb_ar = as_pdb_array([mol])[0]
     out1 = from_pdb_array(pdb_ar)
-    assert_instance(out1, Chem.Mol)
+    assertion.isinstance(out1, Chem.Mol)
 
     out2 = from_pdb_array(pdb_ar, rdmol=False)
     for at1, at2 in zip(out2, mol):
-        assert_eq(at1.coords, at2.coords)
-        assert_eq(at1.atnum, at2.atnum)
+        assertion.eq(at1.coords, at2.coords)
+        assertion.eq(at1.atnum, at2.atnum)
 
 
 def test_even_index() -> None:
@@ -82,12 +82,12 @@ def test_even_index() -> None:
     df2 = pd.DataFrame(np.random.rand(20, 5))
 
     out1 = even_index(df1, df2)
-    assert_eq(out1.shape, df2.shape)
+    assertion.eq(out1.shape, df2.shape)
     np.testing.assert_array_equal(out1.index, df2.index)
     assert np.isnan(out1.values[10:, :]).all()
 
     out2 = even_index(df1, df1.copy())
-    assert_id(df1, out2)
+    assertion.is_(df1, out2)
 
 
 def test_sanitize_yaml_settings() -> None:
@@ -111,6 +111,4 @@ def test_sanitize_yaml_settings() -> None:
 
     out = sanitize_yaml_settings(s, 'AMSJob')
     ref = {'input': {'uff': {'library': 'uff'}}}
-    assert_eq(out, ref)
-
-    assert_exception(KeyError, sanitize_yaml_settings, s, 'bob')
+    assertion.eq(out, ref)

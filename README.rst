@@ -1,17 +1,17 @@
 .. image:: https://travis-ci.org/nlesc-nano/data-CAT.svg?branch=master
    :target: https://travis-ci.org/nlesc-nano/data-CAT
 
-| 
-   
+|
+
 .. image:: https://img.shields.io/badge/python-3.6-blue.svg
    :target: https://www.python.org
-   
+
 .. image:: https://img.shields.io/badge/python-3.7-blue.svg
    :target: https://www.python.org
 
 
 ##############
-Data-CAT 0.1.3
+Data-CAT 0.1.4
 ##############
 
 Data-CAT is a databasing framework for the Compound Attachment Tools package (CAT_).

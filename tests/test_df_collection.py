@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-from CAT.assertion_functions import assert_hasattr, assert_eq, assert_id
+from CAT.assertion.assertion_manager import assertion
 from dataCAT.df_collection import get_df_collection
 
 _DF = pd.DataFrame(np.random.rand(3, 10))
@@ -22,21 +22,21 @@ REF_PANDAS = (
 def test_init() -> None:
     """Test :meth:`.DFCollection.__init__`."""
     for key in REF_PANDAS:
-        assert_hasattr(key, DF)
+        assertion.hasattr(DF, key)
 
     for key in REF_CAT:
-        assert_hasattr(key, DF)
+        assertion.hasattr(DF, key)
 
 
 def test_getattribute() -> None:
     """Test :meth:`.DFCollection.__getattribute__`."""
     for key in REF_PANDAS:
         method = getattr(DF, key)
-        assert assert_id(method.__self__, _DF)
+        assertion.is_(method.__self__, _DF)
 
     for key in REF_CAT[:-1]:
         method = getattr(DF, key)
-        assert assert_id(method.__self__, DF)
+        assertion.is_(method.__self__, DF)
 
 
 def test_setattr() -> None:
@@ -44,18 +44,18 @@ def test_setattr() -> None:
     df1 = get_df_collection(pd.DataFrame(np.random.rand(3, 10)))
     idx = pd.RangeIndex(10, 20)
     df1.columns = idx
-    assert_id(df1.columns, idx)
+    assertion.is_(df1.columns, idx)
 
     _df = pd.DataFrame(np.ones([3, 10]))
     df2 = get_df_collection(_df)
-    assert_id(df2.df, _df)
+    assertion.is_(df2.df, _df)
 
 
 def test_repr() -> None:
     """Test :meth:`.DFCollection.__repr__`."""
     out = repr(DF)
-    assert_eq(out[:48], 'DFCollection(df=<pandas.core.frame.DataFrame at ')
-    assert_eq(out[-2:], '>)')
+    assertion.eq(out[:48], 'DFCollection(df=<pandas.core.frame.DataFrame at ')
+    assertion.eq(out[-2:], '>)')
 
 
 def test_str() -> None:
@@ -68,4 +68,4 @@ def test_str() -> None:
         '    1  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0\n'
         '    2  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0  1.0\n)'
     )
-    assert_eq(out, ref)
+    assertion.eq(out, ref)
