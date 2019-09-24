@@ -8,6 +8,7 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 0.1.4
 *****
+* Updated the handling of assertions, see ``CAT.assertions.assertion_manager``.
 
 
 0.1.3
