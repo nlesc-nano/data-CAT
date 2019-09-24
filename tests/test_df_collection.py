@@ -22,21 +22,21 @@ REF_PANDAS = (
 def test_init() -> None:
     """Test :meth:`.DFCollection.__init__`."""
     for key in REF_PANDAS:
-        assertion.hasattr(key, DF)
+        assertion.hasattr(DF, key)
 
     for key in REF_CAT:
-        assertion.hasattr(key, DF)
+        assertion.hasattr(DF, key)
 
 
 def test_getattribute() -> None:
     """Test :meth:`.DFCollection.__getattribute__`."""
     for key in REF_PANDAS:
         method = getattr(DF, key)
-        assert assertion.is_(method.__self__, _DF)
+        assertion.is_(method.__self__, _DF)
 
     for key in REF_CAT[:-1]:
         method = getattr(DF, key)
-        assert assertion.is_(method.__self__, DF)
+        assertion.is_(method.__self__, DF)
 
 
 def test_setattr() -> None:

@@ -46,7 +46,7 @@ def test_str() -> None:
     assertion.eq(str_list[-1], ')')
 
     for item in str_list[2:-2]:
-        assertion.contains('MetaManager(filename=', item)
+        assertion.contains(item, 'MetaManager(filename=')
 
 
 def test_repr() -> None:
@@ -59,7 +59,7 @@ def test_repr() -> None:
     assertion.eq(str_list[-1], ')')
 
     for item in str_list[2:-2]:
-        assertion.contains('MetaManager(filename=', item)
+        assertion.contains(item, 'MetaManager(filename=')
 
 
 def test_eq() -> None:
@@ -70,8 +70,8 @@ def test_eq() -> None:
 
 def test_contains() -> None:
     """Test :meth:`dataCAT.database.Database.__contains__`."""
-    assertion.contains('mongodb', DB)
-    assertion.contains('bob', DB, invert=True)
+    assertion.contains(DB, 'mongodb')
+    assertion.contains(DB, 'bob', invert=True)
 
 
 def test_parse_database() -> None:

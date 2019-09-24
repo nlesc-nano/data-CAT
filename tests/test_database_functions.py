@@ -112,5 +112,3 @@ def test_sanitize_yaml_settings() -> None:
     out = sanitize_yaml_settings(s, 'AMSJob')
     ref = {'input': {'uff': {'library': 'uff'}}}
     assertion.eq(out, ref)
-
-    assertion.exception(KeyError, sanitize_yaml_settings, s, 'bob')

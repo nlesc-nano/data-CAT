@@ -35,8 +35,8 @@ def test_create_csv() -> None:
         assertion.eq(df2.index.names, ['core', 'core anchor', 'ligand smiles', 'ligand anchor'])
         assertion.eq(df1.columns.names, ['index', 'sub index'])
         assertion.eq(df2.columns.names, ['index', 'sub index'])
-        assertion.contains(('-', '-'), df1.index)
-        assertion.contains(('-', '-', '-', '-'), df2.index)
+        assertion.contains(df1.index, ('-', '-'))
+        assertion.contains(df2.index, ('-', '-', '-', '-'))
 
         np.testing.assert_array_equal(
             df1.values, np.array([[-1, 'str', False, 'str']], dtype=object)
@@ -62,10 +62,10 @@ def test_create_hdf5() -> None:
         assertion.eq(filename, path)
         with h5py.File(path, 'r') as f:
             for item in ref_keys1:
-                assertion.contains(item, f.keys())
+                assertion.contains(f.keys(), item)
                 assertion.eq(f[item].ndim, 2)
             for item in ref_keys2:
-                assertion.contains(item, f.keys())
+                assertion.contains(f.keys(), item)
                 assertion.eq(f[item].ndim, 3)
     finally:
         remove(path)
