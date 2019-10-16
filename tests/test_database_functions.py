@@ -8,9 +8,9 @@ import pandas as pd
 
 from rdkit import Chem
 from scm.plams import Settings
+from assertionlib import assertion
 import scm.plams.interfaces.molecule.rdkit as molkit
 
-from CAT.assertion.assertion_manager import assertion
 from dataCAT.database_functions import (
     get_nan_row, as_pdb_array, from_pdb_array, sanitize_yaml_settings, even_index
 )

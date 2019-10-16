@@ -54,7 +54,7 @@ setup(
         'pandas',
         'pyyaml>=5.1',
         'pymongo',
-        'plams@git+https://github.com/SCM-NV/PLAMS@Minor-changes',
+        'plams@git+https://github.com/SCM-NV/PLAMS@master',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
     setup_requires=[
@@ -65,9 +65,11 @@ setup(
         'pytest-cov',
         'pytest-mock',
         'pycodestyle',
-        'CAT@git+https://github.com/nlesc-nano/CAT@devel'
+        'CAT@git+https://github.com/nlesc-nano/CAT@devel',
+        'AssertionLib@git+https://github.com/nlesc-nano/AssertionLib@master'
     ],
     extras_require={
-        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle']
+        'test': ['pytest', 'pytest-cov', 'pytest-mock', 'pycodestyle',
+                 'AssertionLib@git+https://github.com/nlesc-nano/AssertionLib@master']
     }
 )

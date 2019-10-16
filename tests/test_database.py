@@ -5,7 +5,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from CAT.assertion.assertion_manager import assertion
+from assertionlib import assertion
+
 from dataCAT.database import Database
 from dataCAT.context_managers import OpenLig, OpenQD, OpenYaml
 
@@ -82,14 +83,14 @@ def test_parse_database() -> None:
     assertion.is_(out1, DB.csv_lig)
     assertion.is_(out2, DB.csv_qd)
 
-    assertion.exception(ValueError, DB._parse_database, 'bob')
+    assertion.assert_(DB._parse_database, 'bob', exception=ValueError)
 
 
 def test_hdf5_availability() -> None:
     """Test :meth:`dataCAT.database.Database._parse_database`."""
     filename = join(PATH, 'structures.hdf5')
     with h5py.File(filename, 'r'):
-        assertion.exception(OSError, DB.hdf5_availability, 1.0, 2)
+        assertion.assert_(DB.hdf5_availability, 1.0, 2, exception=OSError)
 
 
 def test_from_hdf5() -> None:

@@ -8,7 +8,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from CAT.assertion.assertion_manager import assertion
+from assertionlib import assertion
+
 from dataCAT.create_database import (_create_csv, _create_hdf5, _create_yaml)
 
 PATH = join('tests', 'test_files')
@@ -45,7 +46,7 @@ def test_create_csv() -> None:
             df2.values, np.array([[-1, -1, False, 'str', 'str']], dtype=object)
         )
 
-        assertion.exception(ValueError, _create_csv, PATH, 'bob')
+        assertion.assert_(_create_csv, PATH, 'bob', exception=ValueError)
     finally:
         remove(path1)
         remove(path2)
