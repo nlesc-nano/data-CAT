@@ -119,7 +119,7 @@ class Database(Container):
 
         # Create the database components and return the filename
         lig_path = _create_csv(self.dirname, database='ligand')
-        qd_path = _create_csv(self.dirname, database='QD')
+        qd_path = _create_csv(self.dirname, database='qd')
         yaml_path = _create_yaml(self.dirname)
         hdf5_path = _create_hdf5(self.dirname)
 
@@ -169,10 +169,10 @@ class Database(Container):
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
             return self.csv_lig
-        elif database in ('QD', 'QD_no_opt'):
+        elif database in ('qd', 'qd_no_opt'):
             return self.csv_qd
         else:
-            raise ValueError(f"database={database}; accepted values for are 'ligand' and 'QD'")
+            raise ValueError(f"database={database}; accepted values for are 'ligand' and 'qd'")
 
     def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
@@ -198,7 +198,7 @@ class Database(Container):
         ----------
         database : |str|_ or |dict|_ [|str|_, |pd.DataFrame|_]
             The type of database.
-            Accepted values are ``"ligand"`` and ``"QD"``,
+            Accepted values are ``"ligand"`` and ``"qd"``,
             opening :attr:`Database.csv_lig` and :attr:`Database.csv_qd`, respectivelly.
             Alternativelly, a dictionary with the database name and a matching DataFrame
             can be passed directly.
@@ -225,7 +225,7 @@ class Database(Container):
                 idx_keys = ('smiles', 'anchor')
                 collection = mongo_db.ligand_database
                 manager = self.csv_lig
-            elif database == 'QD':
+            elif database == 'qd':
                 idx_keys = ('core', 'core anchor', 'ligand smiles', 'ligand anchor')
                 collection = mongo_db.qd_database
                 manager = self.csv_lig
@@ -267,7 +267,7 @@ class Database(Container):
 
         database : str
             The type of database; accepted values are ``"ligand"`` (:attr:`Database.csv_lig`)
-            and ``"QD"`` (:attr:`Database.csv_qd`).
+            and ``"qd"`` (:attr:`Database.csv_qd`).
 
         columns : |Sequence|_
             Optional: A list of column keys in **df** which
@@ -380,7 +380,7 @@ class Database(Container):
             A dataframe of new (potential) database entries.
 
         database : str
-            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
 
         overwrite : bool
             Whether or not previous entries can be overwritten or not.
@@ -501,7 +501,7 @@ class Database(Container):
             A dataframe of new (potential) database entries.
 
         database : str
-            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
 
         get_mol : bool
             Attempt to pull preexisting molecules from the database.
@@ -544,7 +544,7 @@ class Database(Container):
             A dataframe of new (potential) database entries.
 
         database : str
-            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
 
         inplace : bool
             If ``True`` perform an inplace update of the ``("mol", "")`` column in **df**.
@@ -595,7 +595,7 @@ class Database(Container):
             The indices of the to be retrieved structures.
 
         database : str
-            The type of database; accepted values are ``"ligand"`` and ``"QD"``.
+            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
 
         rdmol : bool
             If ``True``, return an RDKit molecule instead of a PLAMS molecule.
