@@ -327,6 +327,7 @@ class Database(Container):
             # Update **db.values**
             db.update(df[columns], overwrite=overwrite)
             db.update(hdf5_series, overwrite=True)
+            df.update(hdf5_series, overwrite=True)
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
