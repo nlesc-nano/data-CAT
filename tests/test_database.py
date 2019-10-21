@@ -25,7 +25,7 @@ def test_init() -> None:
     assertion.eq(DB.csv_lig.filename, join(PATH, 'ligand_database.csv'))
     assertion.is_(DB.csv_lig.manager, OpenLig)
 
-    assertion.eq(DB.csv_qd.filename, join(PATH, 'QD_database.csv'))
+    assertion.eq(DB.csv_qd.filename, join(PATH, 'qd_database.csv'))
     assertion.is_(DB.csv_qd.manager, OpenQD)
 
     assertion.eq(DB.yaml.filename, join(PATH, 'job_settings.yaml'))
@@ -78,7 +78,7 @@ def test_contains() -> None:
 def test_parse_database() -> None:
     """Test :meth:`dataCAT.database.Database._parse_database`."""
     out1 = DB._parse_database('ligand')
-    out2 = DB._parse_database('QD')
+    out2 = DB._parse_database('qd')
 
     assertion.is_(out1, DB.csv_lig)
     assertion.is_(out2, DB.csv_qd)
