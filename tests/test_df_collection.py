@@ -3,7 +3,8 @@
 import numpy as np
 import pandas as pd
 
-from CAT.assertion.assertion_manager import assertion
+from assertionlib import assertion
+
 from dataCAT.df_collection import get_df_collection
 
 _DF = pd.DataFrame(np.random.rand(3, 10))

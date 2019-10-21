@@ -42,7 +42,7 @@ __all__: List[str] = []
 
 def _create_csv(path: str,
                 database: str = 'ligand') -> str:
-    """Create a ligand or QD database (csv format) if it does not yet exist.
+    """Create a ligand or qd database (csv format) if it does not yet exist.
 
     Parameters
     ----------
@@ -55,7 +55,7 @@ def _create_csv(path: str,
     Returns
     -------
     |str|_
-        The absolute path to the ligand or QD database.
+        The absolute path to the ligand or qd database.
 
     """
     filename = join(path, database + '_database.csv')
@@ -64,7 +64,7 @@ def _create_csv(path: str,
     if not isfile(filename):
         if database == 'ligand':
             _create_csv_lig(filename)
-        elif database == 'QD':
+        elif database == 'qd':
             _create_csv_qd(filename)
         else:
             raise ValueError(f"'{database}' is not an accepated value for the 'database' argument")
@@ -97,12 +97,12 @@ def _create_csv_lig(filename: str) -> None:
 
 
 def _create_csv_qd(filename: str) -> None:
-    """Create a QD database and and return its absolute path.
+    """Create a qd database and and return its absolute path.
 
     Parameters
     ----------
     path : str
-        The path+filename of the QD database.
+        The path+filename of the qd database.
 
     """
     idx = pd.MultiIndex.from_tuples(
@@ -143,7 +143,7 @@ def _create_hdf5(path: str,
     """
     # Define arguments for 2D datasets
     path = join(path, name)
-    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'QD', 'QD_no_opt', )
+    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', )
     kwarg = {'chunks': True, 'maxshape': (None, None), 'compression': 'gzip'}
 
     # Create new 2D datasets
@@ -153,7 +153,7 @@ def _create_hdf5(path: str,
                 f.create_dataset(name=name, data=np.empty((0, 1), dtype='S80'), **kwarg)
 
     # Define arguments for 3D datasets
-    dataset_names_3d = ('job_settings_crs', 'job_settings_QD_opt', 'job_settings_BDE')
+    dataset_names_3d = ('job_settings_crs', 'job_settings_qd_opt', 'job_settings_BDE')
     kwarg_3d = {'chunks': True, 'maxshape': (None, None, None), 'compression': 'gzip'}
 
     # Create new 3D datasets

@@ -5,7 +5,8 @@ from os.path import join
 import numpy as np
 import pandas as pd
 
-from CAT.assertion.assertion_manager import assertion
+from assertionlib import assertion
+
 from dataCAT.context_managers import (MetaManager, OpenYaml, OpenLig, OpenQD)
 
 PATH = join('tests', 'test_files')
