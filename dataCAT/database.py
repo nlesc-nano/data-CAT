@@ -257,7 +257,7 @@ class Database(Container):
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
                    job_recipe: Optional[Settings] = None,
-                   opt: bool = False) -> None:
+                   status: Optional[str] = None) -> None:
         """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
         Parameters
@@ -280,8 +280,9 @@ class Database(Container):
         job_recipe : |plams.Settings|_
             Optional: A :class:`.Settings` instance with settings specific to a job.
 
-        opt : |bool|_
-            WiP.
+        status : :class:`str`, optional
+            A descriptor of the status of the moleculair structures.
+            Set to ``"optimized"`` to treat them as optimized geometries.
 
         """
         # Operate on either the ligand or quantum dot database
@@ -291,7 +292,8 @@ class Database(Container):
         if job_recipe is not None:
             job_settings = self.update_yaml(job_recipe)
             for key, value in job_settings.items():
-                df[('settings', key)] = value
+                key = ('settings', ) + key
+                df[key] = value
 
         with manager.open(write=True) as db:
             # Update **db.index**
@@ -318,12 +320,14 @@ class Database(Container):
                     db[i] = -1
 
             # Update **self.hdf5**; returns a new series of indices
-            hdf5_series = self.update_hdf5(df, database=database, overwrite=overwrite, opt=opt)
+            hdf5_series = self.update_hdf5(
+                df, database=database, overwrite=overwrite, status=status
+            )
 
             # Update **db.values**
             db.update(df[columns], overwrite=overwrite)
             db.update(hdf5_series, overwrite=True)
-            if opt:
+            if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
     def update_yaml(self, job_recipe: Settings) -> dict:
@@ -369,7 +373,7 @@ class Database(Container):
     def update_hdf5(self, df: pd.DataFrame,
                     database: str = 'ligand',
                     overwrite: bool = False,
-                    opt: bool = False):
+                    status: Optional[str] = None):
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
         Returns a series with the :attr:`Database.hdf5` indices of all new entries.
@@ -385,6 +389,10 @@ class Database(Container):
         overwrite : bool
             Whether or not previous entries can be overwritten or not.
 
+        status : :class:`str`, optional
+            A descriptor of the status of the moleculair structures.
+            Set to ``"optimized"`` to treat them as optimized geometries.
+
         Returns
         -------
         |pd.Series|_
@@ -392,12 +400,14 @@ class Database(Container):
 
         """
         # Identify new and preexisting entries
-        if opt:
+        if status == 'optimized':
             new = df[HDF5_INDEX][df[OPT] == False]  # noqa
             old = df[HDF5_INDEX][df[OPT] == True]  # noqa
+            opt = True
         else:
             new = df[HDF5_INDEX][df[HDF5_INDEX] == -1]
             old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
+            opt = False
 
         # Add new entries to the database
         self.hdf5_availability()
@@ -424,7 +434,6 @@ class Database(Container):
                 ar = as_pdb_array(df[MOL][old.index], min_size=j)
 
                 # Ensure that the hdf5 indices are sorted
-                # import pdb; pdb.set_trace()
                 idx = np.argsort(old)
                 old = old[idx]
                 f[database][old] = ar[idx]
