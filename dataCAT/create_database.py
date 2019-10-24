@@ -153,9 +153,7 @@ def _create_hdf5(path: str,
                 f.create_dataset(name=name, data=np.empty((0, 1), dtype='S80'), **kwarg)
 
     # Define arguments for 3D datasets
-    dataset_names_3d = (
-        'job_settings_crs', 'job_settings_qd_opt', 'job_settings_BDE', 'job_settings_ASA'
-    )
+    dataset_names_3d = ('job_settings_crs', 'job_settings_qd_opt', 'job_settings_BDE')
     kwarg_3d = {'chunks': True, 'maxshape': (None, None, None), 'compression': 'gzip'}
 
     # Create new 3D datasets
