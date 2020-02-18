@@ -402,11 +402,11 @@ class Database(Container):
         """
         # Identify new and preexisting entries
         if status == 'optimized':
-            new = df[HDF5_INDEX][df[OPT] == False]  # noqa
+            new = df[HDF5_INDEX][df[OPT] == False] & ~df[MOL].isnull()  # noqa
             old = df[HDF5_INDEX][df[OPT] == True]  # noqa
             opt = True
         else:
-            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1]
+            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1] & ~df[MOL].isnull()
             old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
             opt = False
 
