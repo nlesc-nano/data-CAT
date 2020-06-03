@@ -54,7 +54,7 @@ setup(
         'pandas',
         'pyyaml>=5.1',
         'pymongo',
-        'plams@git+https://github.com/SCM-NV/PLAMS@master',
+        'plams@git+https://github.com/SCM-NV/PLAMS@a5696ce62c09153a9fa67b2b03a750913e1d0924',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
     setup_requires=[
