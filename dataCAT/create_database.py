@@ -162,13 +162,16 @@ def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'],
         'job_settings_cdft'
     )
 
-    kwargs_version = ('maxshape': (None, 3), 'shape': (1, 3), 'dtype': int)
+    kwargs_version = {'maxshape': (None, 3), 'shape': (1, 3), 'dtype': int}
 
     with h5py.File(path, 'a', libver='latest') as f:
         # Store the version of CAT, nano-CAT and data-CAT
-        f.create_dataset(data=[CAT_VERSION], name='CAT.__version__', **kwargs_version)
-        f.create_dataset(data=[NANOCAT_VERSION], name='nanoCAT.__version__', **kwargs_version)
-        f.create_dataset(data=[DATACAT_VERSION], name='dataCAT.__version__', **kwargs_version)
+        if 'CAT.__version__' not in f:
+            f.create_dataset(data=[CAT_VERSION], name='CAT.__version__', **kwargs_version)
+        if 'nanoCAT.__version__' not in f:
+            f.create_dataset(data=[NANOCAT_VERSION], name='nanoCAT.__version__', **kwargs_version)
+        if 'dataCAT.__version__' not in f:
+            f.create_dataset(data=[DATACAT_VERSION], name='dataCAT.__version__', **kwargs_version)
 
         # Create new 2D datasets
         iterator_2d = (name_ for name_ in dataset_names if name_ not in f)
@@ -183,7 +186,7 @@ def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'],
 
 
 def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]'],
-                 name: AnyStr = 'structures.hdf5') -> AnyStr:
+                 name: AnyStr = 'job_settings.yaml') -> AnyStr:
     """Create a job settings database (yaml format).
 
     Parameters

@@ -139,7 +139,7 @@ def get_nan_row(df: pd.DataFrame) -> list:
         A list of none-esque objects, one for each column in **df**.
 
     """
-    return [(DTYPE_DICT[v.dtype] if v.dtype in DTYPE_DICT else None) for _, v in df.items()]
+    return [DTYPE_DICT.get(v.dtype, None) for _, v in df.items()]
 
 
 def as_pdb_array(mol_list: Collection[Molecule],
