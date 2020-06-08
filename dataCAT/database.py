@@ -13,14 +13,13 @@ API
 
 """
 
-import warnings
-from os import getcwd, PathLike
+from os import getcwd
 from os.path import abspath
 from time import sleep
 from functools import partial
 from itertools import count
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, Callable, overload
+    Optional, Sequence, List, Union, Any, Dict, overload, TYPE_CHECKING
 )
 
 import h5py
@@ -34,13 +33,16 @@ from scm.plams import Settings, Molecule
 from nanoutils import Literal
 
 from CAT.logger import logger
-from CAT.mol_utils import from_rdmol
+from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
+
+if TYPE_CHECKING:
+    from os import PathLike
 
 __all__ = ['Database']
 
@@ -173,10 +175,10 @@ class Database:
     @overload
     def _parse_database(self, database: Ligand) -> 'partial[OpenLig]':
         ...
-    @overload
+    @overload  # noqa: E302
     def _parse_database(self, database: QD) -> 'partial[OpenQD]':
         ...
-    def _parse_database(self, database):
+    def _parse_database(self, database):  # noqa: E302
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
             return self.csv_lig

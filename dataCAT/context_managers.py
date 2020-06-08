@@ -16,12 +16,11 @@ API
 
 """
 
-from os import getcwd, sep, PathLike
-from os.path import basename, abspath
+from os.path import abspath
 from abc import abstractmethod, ABCMeta
 from types import TracebackType
 from typing import (
-    Callable, Optional, Any, Generic, TypeVar, Tuple, Type, AnyStr, Dict, TYPE_CHECKING, Union
+    Optional, Any, Generic, TypeVar, Tuple, Type, AnyStr, Dict, TYPE_CHECKING, Union
 )
 
 import yaml
@@ -32,6 +31,9 @@ from nanoutils import final
 
 from .df_collection import DFProxy
 
+if TYPE_CHECKING:
+    from os import PathLike
+
 __all__ = ['OpenYaml', 'OpenLig', 'OpenQD']
 
 T = TypeVar('T')
@@ -39,6 +41,7 @@ ST = TypeVar('ST', bound='FileManagerABC')
 
 
 class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
+    """An abstract baseclass for opening and closing the various database components."""
 
     __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
     _db: T

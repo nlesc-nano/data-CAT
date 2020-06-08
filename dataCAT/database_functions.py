@@ -26,7 +26,6 @@ API
 
 """
 
-import reprlib
 from typing import Collection, Union, Sequence, Tuple, List, Generator, Dict, Any, Hashable
 
 import numpy as np
