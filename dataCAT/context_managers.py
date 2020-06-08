@@ -23,6 +23,7 @@ from typing import (
     Optional, Any, Generic, TypeVar, Tuple, Type, AnyStr, Dict, TYPE_CHECKING, Union
 )
 
+import sys
 import yaml
 import pandas as pd
 
@@ -43,7 +44,11 @@ ST = TypeVar('ST', bound='FileManagerABC')
 class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
     """An abstract baseclass for opening and closing the various database components."""
 
-    __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
+    if sys.version_info < (3, 7):
+        __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
+    else:
+        __slots__ = ('_filename', '_write', '_db', '_hash')
+
     _db: T
 
     @property
