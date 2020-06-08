@@ -16,10 +16,11 @@ API
 from os import getcwd
 from os.path import abspath
 from time import sleep
+from types import MappingProxyType
 from functools import partial
 from itertools import count
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, overload, TYPE_CHECKING
+    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping, overload, TYPE_CHECKING
 )
 
 import h5py
@@ -48,6 +49,7 @@ __all__ = ['Database']
 
 Ligand = Literal['ligand', 'ligand_no_opt']
 QD = Literal['qd', 'qd_no_opt']
+ST = TypeVar('ST', bound='Database')
 
 
 class Database:
@@ -57,26 +59,21 @@ class Database:
 
     Attributes
     ----------
-    dirname : str
+    dirname : :class:`str`
         The path+filename of the directory containing all database components.
-
-    csv_lig : |dataCAT.MetaManager|_
-        A dataclass for accesing the context manager for opening
+    csv_lig : :data:`Callable[..., ContextManager]`
+        A function for accesing the context manager for opening
         the .csv file containing all ligand related results.
-
-    csv_qd : |dataCAT.MetaManager|_
-        A dataclass for accesing the context manager for opening
+    csv_qd : :data:`Callable[..., ContextManager]`
+        A function for accesing the context manager for opening
         the .csv file containing all quantum dot related results.
-
-    yaml : |dataCAT.MetaManager|_
-        A dataclass for accesing the context manager for opening
+    yaml : :data:`Callable[..., ContextManager]`
+        A function for accesing the context manager for opening
         the .yaml file containing all job settings.
-
-    hdf5 : |dataCAT.MetaManager|_
-        A dataclass for accesing the context manager for opening
+    hdf5 : :data:`Callable[..., ContextManager]`
+        A function for accesing the context manager for opening
         the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
-
-    mongodb : dict
+    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`
         Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
         Defaults to ``None`` if a :exc:`ServerSelectionTimeoutError` is raised when failing to
         contact the host.
@@ -84,14 +81,38 @@ class Database:
 
     """  # noqa: E501
 
-    __slots__ = ('__weakref__', 'dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_yaml',
+                 '_hdf5', '_mongodb', '_hash')
 
-    dirname: str
-    csv_lig: 'partial[OpenLig]'
-    csv_qd: 'partial[OpenQD]'
-    yaml: 'partial[OpenYaml]'
-    hdf5: 'partial[h5py.File]'
-    mongodb: Optional[Dict[str, Any]]
+    @property
+    def dirname(self) -> str:
+        """Get the path+filename of the directory containing all database components."""
+        return self._dirname
+
+    @property
+    def csv_lig(self) -> 'partial[OpenLig]':
+        """Get the :attr:`Database.csv_lig` context manager."""
+        return self._csv_lig
+
+    @property
+    def csv_qd(self) -> 'partial[OpenQD]':
+        """Get the :attr:`Database.csv_qd` context manager."""
+        return self._csv_qd
+
+    @property
+    def yaml(self) -> 'partial[OpenYaml]':
+        """Get the :attr:`Database.yaml` context manager."""
+        return self._yaml
+
+    @property
+    def hdf5(self) -> 'partial[h5py.File]':
+        """Get the :attr:`Database.hdf5` context manager."""
+        return self._hdf5
+
+    @property
+    def mongodb(self) -> Optional[Mapping[str, Any]]:
+        """Get the :attr:`Database.mongodb` context manager."""
+        return self._mongodb
 
     def __init__(self, path: Union[str, 'PathLike[str]', None] = None,
                  host: str = 'localhost',
@@ -119,7 +140,7 @@ class Database:
             See :attr:`Database.mongodb`.
 
         """  # noqa: E501
-        self.dirname = abspath(path) if path is not None else getcwd()
+        self._dirname = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
         lig_path = _create_csv(self.dirname, database='ligand')
@@ -128,16 +149,16 @@ class Database:
         hdf5_path = _create_hdf5(self.dirname)
 
         # Populate attributes with MetaManager instances
-        self.csv_lig = partial(OpenLig, filename=lig_path)
-        self.csv_qd = partial(OpenQD, filename=qd_path)
-        self.yaml = partial(OpenYaml, filename=yaml_path)
-        self.hdf5 = partial(h5py.File, hdf5_path)
+        self._csv_lig = partial(OpenLig, filename=lig_path)
+        self._csv_qd = partial(OpenQD, filename=qd_path)
+        self._yaml = partial(OpenYaml, filename=yaml_path)
+        self._hdf5 = partial(h5py.File, hdf5_path)
 
         # Try to create or access the mongodb database
         try:
-            self.mongodb = _create_mongodb(host, port, **kwargs)
+            self._mongodb = MappingProxyType(_create_mongodb(host, port, **kwargs))
         except ServerSelectionTimeoutError:
-            self.mongodb = None
+            self._mongodb = None
 
     def __repr__(self) -> str:
         """Return a human string representation of this instance."""
@@ -169,6 +190,41 @@ class Database:
         for func1, func2 in iterator:
             ret &= func1.args == func2.args and func1.keywords == func2.keywords and func1.func is func2.func  # noqa: E501
         return ret
+
+    def __hash__(self) -> int:
+        """Implement :func:`hash(self)<hash>`"""
+        try:
+            return self._hash
+        except AttributeError:
+            cls, args, state = self.__reduce__()
+            if state is not None:
+                state = frozenset(state.items())
+            self._hash: int = hash((cls, args, state))
+            return self._hash
+
+    def __reduce__(self) -> Tuple[Type[ST], Tuple[str], Optional[Dict[str, Any]]]:
+        """Helper for :mod:`pickle`."""
+        cls = type(self)
+        return cls, (self.dirname,), self.mongodb
+
+    def __setstate__(self, state: Optional[Mapping[str, Any]]) -> None:
+        """Helper for :mod:`pickle`."""
+        if state is None:
+            self.mongodb = None
+            return
+
+        try:
+            self.mongodb = _create_mongodb(**state)
+        except ServerSelectionTimeoutError:
+            self.mongodb = None
+
+    def __copy__(self: ST) -> ST:
+        """Implement :func:`copy.copy(self)<copy.copy>`."""
+        return self
+
+    def __deepcopy__(self: ST, memo: Optional[Dict[int, Any]] = None) -> ST:
+        """Implement :func:`copy.deepcopy(self, memo=memo)<copy.deepcopy>`."""
+        return self
 
     """ #################################  Updating the database ############################## """
 
