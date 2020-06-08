@@ -40,11 +40,6 @@ jobs:
             - name: Conda info
               run: conda info
 
-            - name: Python info
-              run: |
-                which python
-                python --version
-
             - name: Installed packages
               run: conda list
 
