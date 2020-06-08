@@ -193,7 +193,7 @@ class Database:
         return ret
 
     def __hash__(self) -> int:
-        """Implement :func:`hash(self)<hash>`"""
+        """Implement :func:`hash(self)<hash>`."""
         try:
             return self._hash
         except AttributeError:
