@@ -10,7 +10,7 @@ import pandas as pd
 
 from assertionlib import assertion
 
-from dataCAT.create_database import (_create_csv, _create_hdf5, _create_yaml)
+from dataCAT.create_database import _create_csv, _create_hdf5, _create_yaml
 
 PATH = join('tests', 'test_files')
 

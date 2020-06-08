@@ -1,8 +1,4 @@
-"""
-dataCAT.create_database
-=======================
-
-A module for creating database files for the :class:`.Database` class.
+"""A module for creating database files for the :class:`.Database` class.
 
 Index
 -----
@@ -198,7 +194,7 @@ def _create_yaml(path: str,
 
 def _create_mongodb(host: str = 'localhost',
                     port: int = 27017,
-                    **kwargs: Dict[str, Any]) -> dict:
+                    **kwargs: Any) -> Dict[str, Any]:
     """Create the the MongoDB collections and set their index.
 
     Paramaters

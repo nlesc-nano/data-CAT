@@ -1,162 +1,137 @@
-"""
-dataCAT.df_collection
-=====================
-
-A module which holds the :class:`DFCollection` class, a mutable collection for holding DataFrames.
+"""A module which holds the :class:`DFProxy` class, a mutable collection for holding Pandas DataFrames.
 
 Index
 -----
-.. currentmodule:: dataCAT.df_collection
+.. currentmodule:: dataCAT
 .. autosummary::
-    DFCollection
-    get_df_collection
+    DFProxy
 
 API
 ---
-.. autoclass:: _DFCollection
-    :members:
-    :private-members:
-    :special-members:
-.. autofunction:: get_df_collection
+.. autoclass:: DFProxy
 
-"""
+"""  # noqa: E501
 
-from typing import (Any, Iterator)
+from itertools import chain
+from typing import NoReturn, Tuple, Dict, Any, FrozenSet, TypeVar, Type, ClassVar, cast
 from textwrap import indent
-from collections.abc import Collection
 
 import pandas as pd
+from pandas.core.generic import NDFrame
 
-__all__ = ['get_df_collection']
+from nanoutils import final
 
-_MAGIC_METHODS = (
-    '__abs__', '__add__', '__and__', '__contains__', '__div__', '__eq__', '__floordiv__', '__ge__',
-    '__getitem__', '__gt__', '__hash__', '__iadd__', '__iand__', '__ifloordiv__', '__imod__',
-    '__imul__', '__ior__', '__ipow__', '__isub__', '__iter__', '__itruediv__', '__ixor__', '__le__',
-    '__len__', '__lt__', '__matmul__', '__mod__', '__mul__', '__or__', '__pow__', '__setitem__',
-    '__sub__', '__truediv__', '__xor__', '__contains__', '__iter__', '__len__'
-)
+__all__ = ['DFProxy']
+
+TT = TypeVar('TT', bound='_DFMeta')
 
 
-def _is_magic(key: str) -> bool:
-    """Check if **key** belongs to a magic method."""
-    return key.startswith('__') and key.endswith('__')
+class _DFMeta(type):
+    MAGIC: FrozenSet[str] = frozenset({
+        '__array__', '__abs__', '__add__', '__and__', '__contains__', '__div__', '__eq__',
+        '__floordiv__', '__ge__', '__getitem__', '__gt__', '__hash__', '__iadd__', '__iand__',
+        '__ifloordiv__', '__imod__', '__imul__', '__ior__', '__ipow__', '__isub__', '__iter__',
+        '__itruediv__', '__ixor__', '__le__', '__len__', '__lt__', '__matmul__', '__mod__',
+        '__mul__', '__or__', '__pow__', '__setitem__', '__sub__', '__truediv__', '__xor__',
+        '__contains__', '__iter__', '__len__'
+    })
+
+    SETTERS: FrozenSet[str] = frozenset({
+        'index', 'columns'
+    })
+
+    # Should be implemented by the actual (non-meta) classes
+    NDTYPE: ClassVar[Type[NDFrame]] = NotImplemented
+
+    @staticmethod
+    def _construct_getter(cls_name: str, func_name: str) -> property:
+        """Helper function for :meth:`_DFMeta.__new__`; constructs a :class:`property` getter."""
+        def getter(self):
+            return getattr(self.ndframe, func_name)
+
+        getter.__doc__ = f"""Get :meth:`pandas.DataFrame.{func_name}` of :attr:`{cls_name}.ndframe`."""  # noqa: E501
+        getter.__name__ = func_name
+        getter.__qualname__ = f'{cls_name}.{func_name}'
+        getter.__module__ = __name__
+        getter.__annotations__ = {'self': cls_name, 'return': Any}
+        return property(getter)
+
+    @staticmethod
+    def _construct_setter(prop: property, cls_name: str, func_name: str) -> property:
+        """Helper function for :meth:`_DFMeta.__new__`; constructs a :class:`property` setter."""
+        def setter(self, value):
+            return setattr(self.ndframe, func_name, value)
+
+        setter.__doc__ = f"""Set :meth:`pandas.DataFrame.{func_name}` of :attr:`{cls_name}.ndframe`."""  # noqa: E501
+        setter.__name__ = func_name
+        setter.__qualname__ = f'{cls_name}.{func_name}'
+        setter.__module__ = __name__
+        setter.__annotations__ = {'self': cls_name, 'return': None}
+        return prop.setter(setter)
+
+    def __new__(mcls: Type[TT], name: str, bases: Tuple[type, ...],  # noqa: N804
+                namespace: Dict[str, Any]) -> TT:
+        """Construct a new :class:`_DFMeta` instance."""
+        cls = cast(TT, super().__new__(mcls, name, bases, namespace))
+
+        # Construct properties linking to attributes of **cls**
+        name_iterator = (i for i in dir(cls.NDTYPE) if not i.startswith('_'))
+        for func_name in chain(mcls.MAGIC, name_iterator):
+            getter = mcls._construct_getter(name, func_name)
+            setattr(cls, func_name, getter)
+
+        # Construct setters
+        for func_name in mcls.SETTERS:
+            getter = getattr(cls, func_name)
+            setter = mcls._construct_setter(getter, name, func_name)
+            setattr(cls, func_name, setter)
+        return cls
 
 
-class _DFCollection(Collection):
-    """A mutable collection for holding dataframes.
-
-    Parameters
-    ----------
-    df : |pd.DataFrame|_
-        A Pandas DataFrame (see :attr:`_DFCollection.df`).
+@final
+class DFProxy(metaclass=_DFMeta):
+    """A mutable wrapper for holding dataframes.
 
     Attributes
     ----------
-    df : |pd.DataFrame|_
+    df : :class:`pandas.DataFrame`
         A Pandas DataFrame.
-
-    Warning
-    -------
-    The :class:`._DFCollection` class should never be directly called on its own.
-    See :func:`.get_df_collection`, which returns an actually usable
-    :class:`.DFCollection` instance (a subclass).
 
     """
 
-    def __init__(self, df: pd.DataFrame) -> None:
-        """Initialize the :class:`DFCollection` instance."""
-        object.__setattr__(self, 'df', df)
+    __slots__ = ('__weakref__', 'ndframe')
 
-    def __getattribute__(self, key: str) -> Any:
-        """Call :meth:`pandas.DataFrame.__getattribute__` unless a magic method is provided."""
-        if key == 'df' or _is_magic(key):
-            return object.__getattribute__(self, key)
-        else:
-            df = object.__getattribute__(self, 'df')
-            return df.__getattribute__(key)
+    NDTYPE: ClassVar[Type[NDFrame]] = pd.DataFrame
 
-    def __setattr__(self, key: str, value: Any) -> None:
-        """Call :meth:`pandas.DataFrame.__setattr__` unless ``"df"`` is provided as **key**."""
-        if key == 'df':
-            if not isinstance(value, pd.DataFrame):
-                raise TypeError(f"The {self.__class__.__name__}.df key expects an instance of "
-                                f"'pandas.DataFrame'; observed type '{value.__class__.__name__}'")
+    def __init__(self, ndframe: pd.DataFrame) -> None:
+        """Initialize a new instance.
 
-            object.__setattr__(self, key, value)
-            for k in _MAGIC_METHODS:  # Populate this instance with **df** magic methods
-                method = getattr(value, k)
-                setattr(self.__class__, k, method)
-        else:
-            self.df.__setattr__(key, value)
+        Parameters
+        ----------
+        df : |pd.DataFrame|_
+            A Pandas DataFrame (see :attr:`DFProxy.df`).
+
+
+        :rtype: :data:`None`
+
+        """
+        self.ndframe = ndframe
 
     def __repr__(self) -> str:
-        """Return a machine readable string representation of this instance."""
-        df = self.df
-        args = self.__class__.__name__, df.__class__.__module__, df.__class__.__name__, hex(id(df))
-        return '{}(df=<{}.{} at {}>)'.format(*args)
+        """Implement :func:`repr(self)<repr>`."""
+        return f'{self.__class__.__name__}(ndframe={object.__repr__(self.ndframe)})'
 
     def __str__(self) -> str:
-        """Return a human readable string representation of this instance."""
-        df = indent(str(self.df), '    ', bool)
+        """Implement :class:`str(self)<str>`."""
+        df = indent(str(self.ndframe), 4 * ' ', predicate=bool)
         return f'{self.__class__.__name__}(\n{df}\n)'
 
-    def __contains__(self, value: Any) -> bool: pass
-    def __len__(self) -> int: pass
-    def __iter__(self) -> Iterator[pd.Series]: pass
+    def __reduce__(self) -> NoReturn:
+        """Helper function for :mod:`pickle`.
 
+        Warnings
+        --------
+        This operation will raise a :exc:`TypeError`.
 
-def get_df_collection(df: pd.DataFrame) -> 'DFCollection':
-    """Return a mutable collection for holding dataframes.
-
-    Parameters
-    ----------
-    df : |pd.DataFrame|_
-        A Pandas DataFrame.
-
-    Returns
-    -------
-    |dataCAT.DFCollection|_
-        A :class:`DFCollection` instance.
-        The class is described in more detail in the documentation of its superclass:
-        :class:`_DFCollection`.
-
-    Note
-    ----
-    As the :class:`DFCollection` class is defined within the scope of this function,
-    two instances of :class:`DFCollection` will *not* belong to the same class (see example below).
-    In more technical terms: The class bound to a particular :class:`DFCollection` instance is a
-    unique instance of :class:`type`.
-
-    .. code:: python
-
-        >>> import numpy as np
-        >>> import pandas as pd
-
-        >>> df = pd.DataFrame(np.random.rand(5, 5))
-        >>> collection1 = get_df_collection(df)
-        >>> collection2 = get_df_collection(df)
-
-        >>> print(df is collection1.df is collection2.df)
-        True
-
-        >>> print(collection1.__class__.__name__ == collection2.__class__.__name__)
-        True
-
-        >>> print(collection1.__class__ == collection2.__class__)
-        False
-
-    """
-    class DFCollection(_DFCollection):
-        pass
-
-    if not isinstance(df, pd.DataFrame):
-        raise TypeError("df expects an instance of 'pandas.DataFrame'; "
-                        f"observed type: '{df.__class__.__name__}'")
-
-    ret = DFCollection
-    ret.__doc__ = _DFCollection.__doc__.rsplit('\n', 7)[0]
-    for key in _MAGIC_METHODS:
-        method = getattr(df, key)
-        setattr(ret, key, method)
-    return ret(df)
+        """
+        raise TypeError(f"can't pickle {self.__class__.__name__} objects.")
