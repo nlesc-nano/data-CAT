@@ -48,15 +48,19 @@ setup(
         'python-3-8',
         'automation'
     ],
+    package_data={'dataCAT': ['py.typed', '*.pyi']},
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
-        'Topic :: Database',
         'License :: OSI Approved :: GNU Lesser General Public License',
         'Natural Language :: English',
+        'Operating System :: Unix',
+        'Operating System :: MacOS',
         'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
-        'Programming Language :: Python :: 3.8'
+        'Programming Language :: Python :: 3.8',
+        'Topic :: Database',
+        'Typing :: Typed'
     ],
     test_suite='tests',
     python_requires='>=3.6',
