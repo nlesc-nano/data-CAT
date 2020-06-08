@@ -24,7 +24,7 @@ API
 
 from os import PathLike
 from os.path import join, isfile
-from typing import Dict, Any, List, Union, AnyStr, TYPE_CHECKING
+from typing import Dict, Any, List, Union, AnyStr
 
 import yaml
 import h5py
