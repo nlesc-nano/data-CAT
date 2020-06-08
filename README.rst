@@ -1,17 +1,21 @@
-.. image:: https://travis-ci.org/nlesc-nano/data-CAT.svg?branch=master
-   :target: https://travis-ci.org/nlesc-nano/data-CAT
+
+.. image:: https://github.com/nlesc-nano/data-CAT/workflows/Build%20with%20Conda/badge.svg
+    :target: https://github.com/nlesc-nano/data-CAT/actions?query=workflow%3A%22Build+with+Conda%22
+.. image:: https://codecov.io/gh/nlesc-nano/data-CAT/branch/master/graph/badge.svg
+    :target: https://codecov.io/gh/nlesc-nano/data-CAT
 
 |
 
 .. image:: https://img.shields.io/badge/python-3.6-blue.svg
-   :target: https://www.python.org
-
+    :target: https://docs.python.org/3.6/
 .. image:: https://img.shields.io/badge/python-3.7-blue.svg
-   :target: https://www.python.org
+    :target: https://docs.python.org/3.7/
+.. image:: https://img.shields.io/badge/python-3.8-blue.svg
+    :target: https://docs.python.org/3.8/
 
 
 ##############
-Data-CAT 0.1.5
+Data-CAT 0.2.0
 ##############
 
 Data-CAT is a databasing framework for the Compound Attachment Tools package (CAT_).
@@ -26,13 +30,13 @@ Installation
 
 - Create a new virtual environment, for python 3.7, using the following commands:
 
-  - ``conda create --name CAT python``
+    - ``conda create --name CAT python``
 
 - The virtual environment can be enabled and disabled by, respectively, typing:
 
-  - Enable: ``conda activate CAT``
+    - Enable: ``conda activate CAT``
 
-  - Disable: ``conda deactivate``
+    - Disable: ``conda deactivate``
 
 
 Dependencies installation

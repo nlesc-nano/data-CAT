@@ -1,8 +1,4 @@
-"""
-dataCAT.database_functions
-==========================
-
-A module for holding functions related to the :class:`.Database` class.
+"""A module for holding functions related to the :class:`.Database` class.
 
 Index
 -----
@@ -31,12 +27,12 @@ API
 """
 
 import reprlib
-from typing import (Collection, Union, Sequence, Tuple, List, Generator, Dict, Any)
+from typing import Collection, Union, Sequence, Tuple, List, Generator, Dict, Any, Hashable
 
 import numpy as np
 import pandas as pd
 
-from scm.plams import (Molecule, Settings)
+from scm.plams import Molecule, Settings
 import scm.plams.interfaces.molecule.rdkit as molkit
 
 from rdkit import Chem
@@ -45,8 +41,6 @@ from rdkit.Chem import Mol
 from CAT.utils import get_template
 
 __all__ = ['df_to_mongo_dict']
-
-Immutable = Union[str, int, float, frozenset, tuple]  # Immutable objects
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -96,9 +90,9 @@ def df_to_mongo_dict(df: pd.DataFrame,
         (multi-)index in **df**.
 
     """
-    def _get_dict(idx: Sequence[Immutable],
+    def _get_dict(idx: Sequence[Hashable],
                   row: pd.Series,
-                  idx_names: Sequence[Immutable]) -> dict:
+                  idx_names: Sequence[Hashable]) -> dict:
         ret = {i: row[i].to_dict() for i in row.index.levels[0]}  # Add values
         ret.update(dict(zip(idx_names, idx)))  # Add index
         return ret

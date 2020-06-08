@@ -1,12 +1,8 @@
-"""
-dataCAT.database
-================
-
-A module which holds the :class:`.Database` class.
+"""A module which holds the :class:`.Database` class.
 
 Index
 -----
-.. currentmodule:: dataCAT.database
+.. currentmodule:: dataCAT
 .. autosummary::
     Database
 
@@ -14,72 +10,48 @@ API
 ---
 .. autoclass:: Database
     :members:
-    :private-members:
-    :special-members:
 
 """
 
-from os import getcwd
+import warnings
+from os import getcwd, PathLike
+from os.path import abspath
 from time import sleep
-from typing import (Optional, Sequence, List, Union, Any, Dict)
+from functools import partial
 from itertools import count
-from collections.abc import Container
+from typing import (
+    Optional, Sequence, List, Union, Any, Dict, Callable, overload
+)
 
 import h5py
 import numpy as np
 import pandas as pd
 from pymongo import MongoClient
-from pymongo.errors import (ServerSelectionTimeoutError, DuplicateKeyError)
+from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
-from scm.plams import (Settings, Molecule)
+from scm.plams import Settings, Molecule
+from nanoutils import Literal
 
 from CAT.logger import logger
 from CAT.mol_utils import from_rdmol
-
-from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb)
-from .context_managers import (MetaManager, OpenYaml, OpenLig, OpenQD)
+from CAT.workflows import HDF5_INDEX, OPT, MOL
+from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb
+from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
 )
 
 __all__ = ['Database']
 
-# Union of immutable objects suitable as dictionary keys
-Immutable = Union[int, float, str, frozenset, tuple]
-
-# Aliases for pd.MultiIndex columns
-HDF5_INDEX = ('hdf5 index', '')
-OPT = ('opt', '')
-MOL = ('mol', '')
+Ligand = Literal['ligand', 'ligand_no_opt']
+QD = Literal['qd', 'qd_no_opt']
 
 
-class Database(Container):
+class Database:
     """The Database class.
 
     .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
-
-    Parameters
-    ----------
-    path : str
-        The path+directory name of the directory which is to contain all database components
-        (see :attr:`Database.dirname`).
-
-    host : str
-        Hostname or IP address or Unix domain socket path of a single mongod or
-        mongos instance to connect to, or a mongodb URI, or a list of hostnames mongodb URIs.
-        If **host** is an IPv6 literal it must be enclosed in ``"["`` and ``"]"`` characters
-        following the RFC2732 URL syntax (e.g. ``"[::1]"`` for localhost).
-        Multihomed and round robin DNS addresses are not supported.
-        See :attr:`Database.mongodb`.
-
-    port : str
-        port number on which to connect.
-        See :attr:`Database.mongodb`.
-
-    **kwargs
-        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
-        See :attr:`Database.mongodb`.
 
     Attributes
     ----------
@@ -108,14 +80,44 @@ class Database(Container):
         contact the host.
         See the **host**, **port** and **kwargs** parameter.
 
-    """  # noqa
+    """  # noqa: E501
 
-    def __init__(self, path: Optional[str] = None,
+    __slots__ = ('__weakref__', 'dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+
+    dirname: str
+    csv_lig: 'partial[OpenLig]'
+    csv_qd: 'partial[OpenQD]'
+    yaml: 'partial[OpenYaml]'
+    hdf5: 'partial[h5py.File]'
+    mongodb: Optional[Dict[str, Any]]
+
+    def __init__(self, path: Union[str, 'PathLike[str]', None] = None,
                  host: str = 'localhost',
                  port: int = 27017,
                  **kwargs) -> None:
-        """Initialize :class:`Database`."""
-        self.dirname = path or getcwd()
+        """Initialize :class:`Database`.
+
+        Parameters
+        ----------
+        path : str
+            The path+directory name of the directory which is to contain all database components
+            (see :attr:`Database.dirname`).
+        host : str
+            Hostname or IP address or Unix domain socket path of a single mongod or
+            mongos instance to connect to, or a mongodb URI, or a list of hostnames mongodb URIs.
+            If **host** is an IPv6 literal it must be enclosed in ``"["`` and ``"]"`` characters
+            following the RFC2732 URL syntax (e.g. ``"[::1]"`` for localhost).
+            Multihomed and round robin DNS addresses are not supported.
+            See :attr:`Database.mongodb`.
+        port : str
+            port number on which to connect.
+            See :attr:`Database.mongodb`.
+        **kwargs
+            Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
+            See :attr:`Database.mongodb`.
+
+        """  # noqa: E501
+        self.dirname = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
         lig_path = _create_csv(self.dirname, database='ligand')
@@ -124,10 +126,10 @@ class Database(Container):
         hdf5_path = _create_hdf5(self.dirname)
 
         # Populate attributes with MetaManager instances
-        self.csv_lig = MetaManager(lig_path, OpenLig)
-        self.csv_qd = MetaManager(qd_path, OpenQD)
-        self.yaml = MetaManager(yaml_path, OpenYaml)
-        self.hdf5 = MetaManager(hdf5_path, h5py.File)
+        self.csv_lig = partial(OpenLig, filename=lig_path)
+        self.csv_qd = partial(OpenQD, filename=qd_path)
+        self.yaml = partial(OpenYaml, filename=yaml_path)
+        self.hdf5 = partial(h5py.File, hdf5_path)
 
         # Try to create or access the mongodb database
         try:
@@ -135,7 +137,7 @@ class Database(Container):
         except ServerSelectionTimeoutError:
             self.mongodb = None
 
-    def __str__(self) -> str:
+    def __repr__(self) -> str:
         """Return a human string representation of this instance."""
         def _dict_to_str(value: dict) -> str:
             iterator = sorted(value.items(), key=str)
@@ -151,28 +153,36 @@ class Database(Container):
         ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
         return f'Database(\n{ret}\n)'
 
-    def __repr__(self) -> str:
-        """Return a machine string representation of this instance."""
-        return self.__str__()
-
     def __eq__(self, value: Any) -> bool:
         """Check if this instance is equivalent to **value**."""
-        return vars(self) == vars(value)
+        if type(self) is not type(value):
+            return False
 
-    def __contains__(self, value: Any) -> bool:
-        """Check if **value** is in this instance."""
-        return value in vars(self)
+        ret = self.dirname == value.dirname and self.mongodb == value.mongodb
+        if not ret:
+            return False
+
+        partial_names = ('csv_lig', 'csv_qd', 'yaml', 'hdf5')
+        iterator = ((getattr(self, name), getattr(value, name)) for name in partial_names)
+        for func1, func2 in iterator:
+            ret &= func1.args == func2.args and func1.keywords == func2.keywords and func1.func is func2.func  # noqa: E501
+        return ret
 
     """ #################################  Updating the database ############################## """
 
-    def _parse_database(self, database: str) -> MetaManager:
+    @overload
+    def _parse_database(self, database: Ligand) -> 'partial[OpenLig]':
+        ...
+    @overload
+    def _parse_database(self, database: QD) -> 'partial[OpenQD]':
+        ...
+    def _parse_database(self, database):
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
             return self.csv_lig
         elif database in ('qd', 'qd_no_opt'):
             return self.csv_qd
-        else:
-            raise ValueError(f"database={database}; accepted values for are 'ligand' and 'qd'")
+        raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
 
     def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
@@ -231,7 +241,7 @@ class Database(Container):
                 manager = self.csv_lig
 
             # Parse the ligand or qd dataframe
-            with manager.open(write=False) as db:
+            with manager(write=False) as db:
                 dict_gen = df_to_mongo_dict(db)
 
         # Update the collection
@@ -253,7 +263,7 @@ class Database(Container):
                     collection.replace_one(filter_, item)
 
     def update_csv(self, df: pd.DataFrame,
-                   database: str = 'ligand',
+                   database: Union[Ligand, QD] = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
                    job_recipe: Optional[Settings] = None,
@@ -295,7 +305,7 @@ class Database(Container):
                 key = ('settings', ) + key
                 df[key] = value
 
-        with manager.open(write=True) as db:
+        with manager(write=True) as db:
             # Update **db.index**
             db.df = even_index(db.df, df)
 
@@ -347,7 +357,7 @@ class Database(Container):
 
         """
         ret = {}
-        with self.yaml.open() as db:
+        with self.yaml() as db:
             for item in job_recipe:
                 # Unpack and sanitize keys
                 key = job_recipe[item].key
@@ -412,7 +422,7 @@ class Database(Container):
 
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5.open('r+') as f:
+        with self.hdf5('r+') as f:
             i, j = f[database].shape
 
             if new.any():
@@ -448,7 +458,7 @@ class Database(Container):
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5.open('r+') as f:
+        with self.hdf5('r+') as f:
             i, j, k = f[column].shape
 
             # Create a 3D array of input files
@@ -498,7 +508,7 @@ class Database(Container):
     """ ########################  Pulling results from the database ########################### """
 
     def from_csv(self, df: pd.DataFrame,
-                 database: str = 'ligand',
+                 database: Union[Ligand, QD] = 'ligand',
                  get_mol: bool = True,
                  inplace: bool = True) -> Optional[pd.Series]:
         """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
@@ -532,7 +542,7 @@ class Database(Container):
         manager = self._parse_database(database)
 
         # Update the *hdf5 index* column in **df**
-        with manager.open(write=False) as db:
+        with manager(write=False) as db:
             df.update(db.df, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
 
@@ -625,7 +635,7 @@ class Database(Container):
 
         # Open the database and pull entries
         self.hdf5_availability()
-        with self.hdf5.open('r') as f:
+        with self.hdf5('r') as f:
             pdb_array = f[database][index]
 
         # Return a list of RDKit or PLAMS molecules
@@ -660,13 +670,13 @@ class Database(Container):
             Raised if **max_attempts** is exceded.
 
         """
-        err = (f"h5py.File('{self.hdf5.filename}') is currently unavailable; "
+        err = (f"h5py.File('{self.hdf5.args[0]}') is currently unavailable; "
                f"repeating attempt in {timeout:1.1f} seconds")
         i = max_attempts or np.inf
 
         while i:
             try:
-                with self.hdf5.open('r+'):
+                with self.hdf5('r+'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
                 logger.warning(err)

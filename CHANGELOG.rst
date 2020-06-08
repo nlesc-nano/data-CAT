@@ -6,6 +6,17 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.2.0
+*****
+* Moved from travis to GitHub Actions.
+* Enabled tests for Python 3.8.
+* Added tests using ``flake8`` and ``pydocstyle``.
+* Removed the unused `requirements.txt` file.
+* Cleaned up `setup.py`.
+* Cleaned up the context managers; removed the `MetaManager` class in favor of `functools.partial`.
+* Cleaned up the ``DFCollection`` class; renamed it to ``DFProxy``.
+
+
 0.1.5
 *****
 * Decapitalized all references to ``"QD"``.

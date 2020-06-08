@@ -1,132 +1,126 @@
-"""
-dataCAT.context_managers
-========================
-
-A module which holds context managers for the :class:`.Database` class.
+"""A module which holds context managers for the :class:`.Database` class.
 
 Index
 -----
 .. currentmodule:: dataCAT.context_managers
 .. autosummary::
-    MetaManager
     OpenYaml
     OpenLig
     OpenQD
 
 API
 ---
-.. autoclass:: MetaManager
-    :members:
 .. autoclass:: OpenYaml
 .. autoclass:: OpenLig
 .. autoclass:: OpenQD
 
 """
 
-from os import getcwd, sep
-from os.path import basename
-from typing import (Callable, Optional, Any)
-from collections.abc import Container
-from contextlib import AbstractContextManager
+from os import getcwd, sep, PathLike
+from os.path import basename, abspath
+from abc import abstractmethod, ABCMeta
+from types import TracebackType
+from typing import (
+    Callable, Optional, Any, Generic, TypeVar, Tuple, Type, AnyStr, Dict, TYPE_CHECKING, Union
+)
 
 import yaml
 import pandas as pd
 
 from scm.plams import Settings
+from nanoutils import final
 
-from .df_collection import get_df_collection
+from .df_collection import DFProxy
 
-__all__ = ['MetaManager', 'OpenYaml', 'OpenLig', 'OpenQD']
+__all__ = ['OpenYaml', 'OpenLig', 'OpenQD']
+
+T = TypeVar('T')
+ST = TypeVar('ST', bound='FileManagerABC')
 
 
-class MetaManager(Container):
-    """A wrapper for context managers.
+class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
 
-    Has a single important method, :meth:`MetaManager.open`,
-    which calls and returns the context manager stored in :attr:`MetaManager.manager`.
+    __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
+    _db: T
 
-    Note
-    ----
-    :attr:`MetaManager.filename` will be the first positional argument provided
-    to :attr:`MetaManager.manager`.
+    @property
+    def filename(self) -> AnyStr:
+        """:data:`~typing.AnyStr`: Get the name of the to-be opened file."""
+        return self._filename
 
-    Parameters
-    ----------
-    filename : str
-        The path+filename of a database component
-        See :attr:`MetaManager.filename`.
+    @property
+    def write(self) -> bool:
+        """:class:`bool`: Get whether or not :attr:`~FileManagerABC.filename` should be written to when closing the context manager."""  # noqa: E501
+        return self._write
 
-    manager : |type|_ [|AbstractContextManager|_]
-        A type object of a context manager.
-        TThe first positional argument of the context manager should be the filename.
-        See :attr:`MetaManager.manager`.
-
-    Attributes
-    ----------
-    filename : str
-        The path+filename of a database component.
-
-    manager : |type|_ [|AbstractContextManager|_]
-        A type object of a context manager.
-        The first positional argument of the context manager should be the filename.
-
-    """
-
-    def __init__(self, filename: str,
-                 manager: Callable[..., AbstractContextManager]) -> None:
-        """Initialize a :class:`MetaManager` instance."""
-        self.filename = filename
-        self.manager = manager
-
-    def __repr__(self) -> str:
-        """Return the canonical string representation of this instance."""
-        filename = repr(f'...{sep}{basename(self.filename)}')
-        return f'{self.__class__.__name__}(filename={filename}, manager={repr(self.manager)})'
-
-    def __str__(self) -> str:
-        """Create a new string object from this instance."""
-        args = self.__class__.__name__, repr(self.filename), repr(self.manager)
-        return '{}(\n    filename = {},\n    manager  = {}\n)'.format(*args)
-
-    def __contains__(self, value: Any) -> bool:
-        """Return if **value** is in :code:`dir(self)`."""
-        return value in dir(self)
-
-    def __eq__(self, value: Any) -> bool:
-        """Return if this instance is equivalent to **value**."""
-        return dir(self) == dir(value)
-
-    def open(self, *args: Any, **kwargs: Any) -> AbstractContextManager:
-        r"""Call and return :attr:`MetaManager.manager`.
+    @final
+    def __init__(self, filename: Union[AnyStr, 'PathLike[AnyStr]'], write: bool = True) -> None:
+        """Initialize the file context manager.
 
         Parameters
         ----------
-        *args:
-            Positional arguments for :attr:`MetaManager.manager`.
+        filename : :class:`str`, :class:`bytes` or :class:`os.PathLike`
+            A path-like object.
+        write : :class:`bool`
+            Whether or not the database file should be updated after closing this instance.
 
-        **kwargs:
-            Keyword arguments for :attr:`MetaManager.manager`.
 
-        Returns
-        ------
-        |AbstractContextManager|_
-            An instance of a context manager.
+        :rtype: :data:`None`
 
         """
-        return self.manager(self.filename, *args, **kwargs)
+        self._filename: AnyStr = abspath(filename)
+        self._write: bool = write
+
+    def __eq__(self, value: object) -> bool:
+        """Implement :meth:`self == value<object.__eq__>`."""
+        if type(self) is not type(value):
+            return False
+        return self.filename == value.filename and self.write is value.write  # type: ignore
+
+    def __repr__(self) -> str:
+        """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
+        return f'{self.__class__.__name__}(filename={self.filename!r}, write={self.write!r})'
+
+    def __reduce__(self: ST) -> Tuple[Type[ST], Tuple[AnyStr, bool]]:
+        """A helper function for :mod:`pickle`."""
+        cls = type(self)
+        return cls, (self.filename, self.write)
+
+    def __copy__(self: ST) -> ST:
+        """Implement :func:`copy.copy(self)<copy.copy>`."""
+        return self
+
+    def __deepcopy__(self: ST, memo: Optional[Dict[int, Any]] = None) -> ST:
+        """Implement :func:`copy.deepcopy(self, memo=memo)<copy.deepcopy>`."""
+        return self
+
+    def __hash__(self) -> int:
+        """Implement :func:`hash(self)<hash>`."""
+        try:
+            return self._hash
+        except AttributeError:
+            self._hash: int = hash(self.__reduce__())
+            return self._hash
+
+    @abstractmethod
+    def __enter__(self) -> T:
+        """Enter the context manager; open, store and return the database."""
+        raise NotImplementedError("Trying to call an abstract method")
+        self._db: T = ...
+        return self._db
+
+    @abstractmethod
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> None:
+        """Exit the context manager; close and, optionally, write the database."""
+        raise NotImplementedError("Trying to call an abstract method")
+        del self._db
 
 
-class OpenYaml(AbstractContextManager):
+class OpenYaml(FileManagerABC[AnyStr, Settings]):
     """Context manager for opening and closing job settings (:attr:`.Database.yaml`).
 
-    Parameters
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
     Attributes
     ----------
     filename : str
@@ -135,80 +129,30 @@ class OpenYaml(AbstractContextManager):
     write : bool
         Whether or not the database file should be updated after closing this instance.
 
-    settings : |None|_ or |plams.Settings|_
-        An attribute for (temporary) storing the opened .yaml file
-        (:attr:`OpenYaml.filename`) as :class:`.Settings` instance.
-
     """
-
-    def __init__(self, filename: Optional[str] = None,
-                 write: bool = True) -> None:
-        """Initialize the :class:`.OpenYaml` context manager."""
-        self.filename: str = filename or getcwd()
-        self.write: bool = write
-        self.settings = None
-
-    def __enter__(self) -> Settings:
+    def __enter__(self):
         """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
-        with open(self.filename, 'r') as f:
-            self.settings = Settings(yaml.load(f, Loader=yaml.FullLoader))
-        return self.settings
+        with open(self.filename, 'r', encoding='utf-8') as f:
+            self._db = Settings(yaml.load(f, Loader=yaml.FullLoader))
+        return self._db
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type, exc_value, traceback):
         """Close the :class:`.OpenYaml` context manager, exporting :attr:`.settings`."""
         if self.write:
-            yml_dict = self.settings.as_dict()
-
-            # A fix for Settings.as_dict() not functioning when containg a lists of Settings
-            for key in yml_dict:
-                for i, value in enumerate(yml_dict[key]):
-                    if isinstance(value, Settings):
-                        yml_dict[key][i] = value.as_dict()
-
-            # Write to the .yaml file
-            with open(self.filename, 'w') as f:
+            yml_dict = self._db.as_dict()
+            with open(self.filename, 'w', encoding='utf-8') as f:
                 f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
-        self.settings = None
-        assert self.settings is None
+        del self._db
 
 
-class OpenLig(AbstractContextManager):
-    """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`).
+class OpenLig(FileManagerABC[AnyStr, DFProxy]):
+    """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`)."""
 
-    Parameters
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
-    Attributes
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
-    df : |None|_ or |pd.DataFrame|_
-        An attribute for (temporary) storing the opened .csv file
-        (see :attr:`OpenLig.filename`) as a :class:`.DataFrame` instance.
-
-    """
-
-    def __init__(self, filename: Optional[str] = None,
-                 write: bool = True) -> None:
-        """Initialize the :class:`.OpenLig` context manager."""
-        self.filename: str = filename or getcwd()
-        self.write: bool = write
-        self.df: Optional['DFCollection'] = None
-
-    def __enter__(self) -> 'DFCollection':
+    def __enter__(self):
         """Open the :class:`.OpenLig` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
-        self.df = df = get_df_collection(
+        self._db = df = DFProxy(
             pd.read_csv(self.filename, index_col=[0, 1], header=[0, 1], dtype=dtype)
         )
 
@@ -217,50 +161,21 @@ class OpenLig(AbstractContextManager):
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
         return df
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type, exc_value, traceback):
         """Close the :class:`.OpenLig` context manager, exporting :attr:`.df`."""
         if self.write:
-            self.df.to_csv(self.filename)
-        self.df = None
+            self._db.to_csv(self.filename)
+        del self._db
 
 
-class OpenQD(AbstractContextManager):
-    """Context manager for opening and closing the QD database (:attr:`.Database.csv_qd`).
+class OpenQD(FileManagerABC[AnyStr, DFProxy]):
+    """Context manager for opening and closing the QD database (:attr:`.Database.csv_qd`)."""
 
-    Parameters
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
-    Attributes
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
-    df : |None|_ or |pd.DataFrame|_
-        An attribute for (temporary) storing the opened .csv file
-        (:attr:`OpenQD.filename`) as :class:`.DataFrame` instance.
-
-    """
-
-    def __init__(self, filename: Optional[str] = None,
-                 write: bool = True) -> None:
-        """Initialize the :class:`.OpenQD` context manager."""
-        self.filename: str = filename or getcwd()
-        self.write: bool = write
-        self.df: Optional['DFCollection'] = None
-
-    def __enter__(self) -> 'DFCollection':
+    def __enter__(self):
         """Open the :class:`.OpenQD` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
-        self.df = df = get_df_collection(
+        self._db = df = DFProxy(
             pd.read_csv(self.filename, index_col=[0, 1, 2, 3], header=[0, 1], dtype=dtype)
         )
 
@@ -269,8 +184,8 @@ class OpenQD(AbstractContextManager):
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
         return df
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:
+    def __exit__(self, exc_type, exc_value, traceback):
         """Close the :class:`.OpenQD` context manager, exporting :attr:`.df`."""
         if self.write:
-            self.df.to_csv(self.filename)
-        self.df = None
+            self._db.to_csv(self.filename)
+        del self._db
