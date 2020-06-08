@@ -32,12 +32,12 @@ from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule
-from nanoutils import Literal
-
+from nanoutils import PathType
 from CAT.logger import logger
 from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
-from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb
+
+from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
@@ -48,8 +48,6 @@ if TYPE_CHECKING:
 
 __all__ = ['Database']
 
-Ligand = Literal['ligand', 'ligand_no_opt']
-QD = Literal['qd', 'qd_no_opt']
 ST = TypeVar('ST', bound='Database')
 
 
@@ -141,7 +139,7 @@ class Database:
             See :attr:`Database.mongodb`.
 
         """  # noqa: E501
-        self._dirname = abspath(path) if path is not None else getcwd()
+        self._dirname: str = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
         lig_path = _create_csv(self.dirname, database='ligand')
@@ -443,7 +441,7 @@ class Database:
         return ret
 
     def update_hdf5(self, df: pd.DataFrame,
-                    database: str = 'ligand',
+                    database: Union[Ligand, QD] = 'ligand',
                     overwrite: bool = False,
                     status: Optional[str] = None):
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
@@ -540,8 +538,7 @@ class Database:
 
     @staticmethod
     def _read_inp(job_paths: Sequence[str],
-                  ax2: int = 0,
-                  ax3: int = 0) -> np.ndarray:
+                  ax2: int = 0, ax3: int = 0) -> np.ndarray:
         """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
         # Determine the minimum size of the to-be returned 3D array
         line_count = [[Database._get_line_count(j) for j in i] for i in job_paths]
@@ -557,7 +554,7 @@ class Database:
         return ret
 
     @staticmethod
-    def _get_line_count(filename: str) -> int:
+    def _get_line_count(filename: PathType) -> int:
         """Return the total number of lines in **filename**."""
         substract = 0
         with open(filename, 'r') as f:
@@ -613,7 +610,7 @@ class Database:
         return self._get_csv_mol(df, database, inplace)
 
     def _get_csv_mol(self, df: pd.DataFrame,
-                     database: str = 'ligand',
+                     database: Union[Ligand, QD] = 'ligand',
                      inplace: bool = True) -> Optional[pd.Series]:
         """A method which handles the retrieval and subsequent formatting of molecules.
 
@@ -666,7 +663,7 @@ class Database:
         return ret
 
     def from_hdf5(self, index: Sequence[int],
-                  database: str = 'ligand',
+                  database: Union[Ligand, QD] = 'ligand',
                   rdmol: bool = True) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
@@ -703,7 +700,7 @@ class Database:
         return [from_pdb_array(mol, rdmol=rdmol) for mol in pdb_array]
 
     def hdf5_availability(self, timeout: float = 5.0,
-                          max_attempts: Optional[int] = None) -> None:
+                          max_attempts: Optional[int] = 10) -> None:
         """Check if a .hdf5 file is opened by another process; return once it is not.
 
         If two processes attempt to simultaneously open a single hdf5 file then
@@ -731,17 +728,18 @@ class Database:
             Raised if **max_attempts** is exceded.
 
         """
-        err = (f"h5py.File('{self.hdf5.args[0]}') is currently unavailable; "
+        err = (f"h5py.File({self.hdf5.args[0]!r}) is currently unavailable; "
                f"repeating attempt in {timeout:1.1f} seconds")
-        i = max_attempts or np.inf
+        i = max_attempts if max_attempts is not None else np.inf
 
         while i:
             try:
                 with self.hdf5('r+'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
-                logger.warning(err)
-                exception = ex
+                warn = ResourceWarning(err)
+                warn.__cause__ = exception = ex
+                logger.warning(warn)
                 sleep(timeout)
             i -= 1
 
