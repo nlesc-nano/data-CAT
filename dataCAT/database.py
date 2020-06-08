@@ -157,7 +157,9 @@ class Database:
 
         # Try to create or access the mongodb database
         try:
-            self._mongodb = MappingProxyType(_create_mongodb(host, port, **kwargs))
+            self._mongodb: Optional[Mapping[str, Any]] = MappingProxyType(
+                _create_mongodb(host, port, **kwargs)
+            )
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
@@ -199,11 +201,11 @@ class Database:
         except AttributeError:
             cls, args, state = self.__reduce__()
             if state is not None:
-                state = frozenset(state.items())
+                state = frozenset(state.items())  # type: ignore
             self._hash: int = hash((cls, args, state))
             return self._hash
 
-    def __reduce__(self) -> Tuple[Type[ST], Tuple[str], Optional[Dict[str, Any]]]:
+    def __reduce__(self: ST) -> Tuple[Type[ST], Tuple[str], Optional[Mapping[str, Any]]]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
         return cls, (self.dirname,), self.mongodb
@@ -211,13 +213,13 @@ class Database:
     def __setstate__(self, state: Optional[Mapping[str, Any]]) -> None:
         """Helper for :mod:`pickle`."""
         if state is None:
-            self.mongodb = None
+            self._mongodb = None
             return
 
         try:
-            self.mongodb = _create_mongodb(**state)
+            self._mongodb = _create_mongodb(**state)
         except ServerSelectionTimeoutError:
-            self.mongodb = None
+            self._mongodb = None
 
     def __copy__(self: ST) -> ST:
         """Implement :func:`copy.copy(self)<copy.copy>`."""
