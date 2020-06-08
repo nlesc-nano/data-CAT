@@ -45,9 +45,9 @@ class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
     """An abstract baseclass for opening and closing the various database components."""
 
     if sys.version_info < (3, 7):
-        __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
-    else:
         __slots__ = ('_filename', '_write', '_db', '_hash')
+    else:
+        __slots__ = ('__weakref__', '_filename', '_write', '_db', '_hash')
 
     _db: T
 
