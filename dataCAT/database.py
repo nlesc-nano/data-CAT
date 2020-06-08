@@ -20,7 +20,8 @@ from types import MappingProxyType
 from functools import partial
 from itertools import count
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping, overload, TYPE_CHECKING
+    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
+    overload, TYPE_CHECKING, Tuple, Type
 )
 
 import h5py
