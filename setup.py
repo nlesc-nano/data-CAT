@@ -17,8 +17,9 @@ with open('README.rst', encoding='utf-8') as readme_file:
 tests_require=[
     'pytest>=5.4.0',
     'pytest-cov',
+    'flake8>=3.8.0'
     'pyflakes>=2.1.1',
-    'pytest-flake8>=1.0.5',
+    'pytest-flake8>=1.0.6',
     'pytest-pydocstyle>=2.1',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0'

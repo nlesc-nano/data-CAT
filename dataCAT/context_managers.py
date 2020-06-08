@@ -32,7 +32,7 @@ from nanoutils import final
 from .df_collection import DFProxy
 
 if TYPE_CHECKING:
-    from os import PathLike
+    from os import PathLike  # noqa: F401
 
 __all__ = ['OpenYaml', 'OpenLig', 'OpenQD']
 
@@ -133,6 +133,7 @@ class OpenYaml(FileManagerABC[AnyStr, Settings]):
         Whether or not the database file should be updated after closing this instance.
 
     """
+
     def __enter__(self):
         """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
         with open(self.filename, 'r', encoding='utf-8') as f:

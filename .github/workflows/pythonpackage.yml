@@ -13,7 +13,6 @@ jobs:
     build:
         name: Python ${{ matrix.version }} on ${{ matrix.os }}
         runs-on: ${{ matrix.os }}
-        continue-on-error: true
         strategy:
             matrix:
                 os: [ubuntu-latest, macos-latest]

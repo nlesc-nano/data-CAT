@@ -8,7 +8,7 @@ import pandas as pd
 
 from assertionlib import assertion
 
-from dataCAT.context_managers import OpenYaml, OpenLig, OpenQD
+from dataCAT import OpenYaml, OpenLig, OpenQD
 
 PATH = join('tests', 'test_files')
 PATH1 = join(PATH, 'qd.csv')

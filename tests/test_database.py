@@ -1,4 +1,4 @@
-"""Tests for the :class:`dataCAT.database.Database` class."""
+"""Tests for the :class:`dataCAT.Database` class."""
 
 from os.path import join, abspath
 import h5py
@@ -8,8 +8,7 @@ import pandas as pd
 from assertionlib import assertion
 
 from CAT.workflows import MOL, HDF5_INDEX, OPT
-from dataCAT.database import Database
-from dataCAT.context_managers import OpenLig, OpenQD, OpenYaml
+from dataCAT import Database, OpenLig, OpenQD, OpenYaml
 
 PATH = join('tests', 'test_files', 'database')
 DB = Database(PATH)

@@ -42,7 +42,7 @@ from .database_functions import (
 )
 
 if TYPE_CHECKING:
-    from os import PathLike
+    from os import PathLike  # noqa: F401
 
 __all__ = ['Database']
 
@@ -175,10 +175,10 @@ class Database:
     @overload
     def _parse_database(self, database: Ligand) -> 'partial[OpenLig]':
         ...
-    @overload  # noqa: E302
+    @overload  # noqa: E301
     def _parse_database(self, database: QD) -> 'partial[OpenQD]':
         ...
-    def _parse_database(self, database):  # noqa: E302
+    def _parse_database(self, database):  # noqa: E301
         """Operate on either the ligand or quantum dot database."""
         if database in ('ligand', 'ligand_no_opt'):
             return self.csv_lig
@@ -545,7 +545,7 @@ class Database:
 
         # Update the *hdf5 index* column in **df**
         with manager(write=False) as db:
-            df.update(db.df, overwrite=True)
+            df.update(db.ndframe, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
 
         # **df** has been updated and **get_mol** = *False*

@@ -69,7 +69,7 @@ class _DFMeta(type):
         setter.__annotations__ = {'self': cls_name, 'return': None}
         return prop.setter(setter)
 
-    def __new__(mcls: Type[TT], name: str, bases: Tuple[type, ...],
+    def __new__(mcls: Type[TT], name: str, bases: Tuple[type, ...],  # noqa: N804
                 namespace: Dict[str, Any]) -> TT:
         """Construct a new :class:`_DFMeta` instance."""
         cls = cast(TT, super().__new__(mcls, name, bases, namespace))
@@ -79,6 +79,8 @@ class _DFMeta(type):
         for func_name in chain(mcls.MAGIC, name_iterator):
             getter = mcls._construct_getter(name, func_name)
             setattr(cls, func_name, getter)
+
+        # Construct setters
         for func_name in mcls.SETTERS:
             getter = getattr(cls, func_name)
             setter = mcls._construct_setter(getter, name, func_name)
