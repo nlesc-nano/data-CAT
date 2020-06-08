@@ -13,7 +13,7 @@ from dataCAT.df_collection import _DFMeta
 _DF = pd.DataFrame(np.random.rand(3, 10))
 DF = DFProxy(_DF)
 
-IGNORE = frozenset({'sparse'})
+IGNORE = frozenset({'sparse', 'style'})
 
 
 def test_dfproxy() -> None:
