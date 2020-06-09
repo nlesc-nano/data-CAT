@@ -74,6 +74,13 @@ class _DFMeta(type):
         """Construct a new :class:`_DFMeta` instance."""
         cls = cast(TT, super().__new__(mcls, name, bases, namespace))
 
+        # Validation
+        try:
+            ndtype = cls.NDTYPE
+            assert isinstance(ndtype, type) and issubclass(ndtype, NDFrame)
+        except (AttributeError, AssertionError) as ex:
+            raise TypeError(f"{name}.NDTYPE expectes an NDFrame subclass") from ex
+
         # Construct properties linking to attributes of **cls**
         name_iterator = (i for i in dir(cls.NDTYPE) if not i.startswith('_'))
         for func_name in chain(mcls.MAGIC, name_iterator):
@@ -101,6 +108,7 @@ class DFProxy(metaclass=_DFMeta):
 
     __slots__ = ('__weakref__', 'ndframe')
 
+    #: The type of :class:`~pandas.core.generic.NDFrame` subclass contained within this class.
     NDTYPE: ClassVar[Type[NDFrame]] = pd.DataFrame
 
     def __init__(self, ndframe: pd.DataFrame) -> None:
