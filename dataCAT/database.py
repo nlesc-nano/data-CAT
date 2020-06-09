@@ -165,11 +165,12 @@ class Database:
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        attr = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
-        attr_max = max(len(i) for i in attr)
+        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+        attr_max = max(len(i) for i in attr_tup)
 
-        args = ',\n'.join(f'{name:attr_max} = {getattr(self, name)!r}' for name in attr[:-1])
-        args += f',\n{attr[-1]:attr_max} = {reprlib.repr(self.mongodb)!r}'
+        iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
+        args = ',\n'.join(f'{name:{attr_max}} = {attr!r}' for name, attr in iterator)
+        args += f',\n{attr_tup[-1]:{attr_max}} = {reprlib.repr(self.mongodb)!r}'
 
         indent = 4 * ' '
         return f'{self.__class__.__name__}(\n{textwrap.indent(args, indent)}\n)'
