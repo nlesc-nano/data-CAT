@@ -13,6 +13,8 @@ API
 
 """
 
+import reprlib
+import textwrap
 from os import getcwd
 from os.path import abspath
 from time import sleep
@@ -162,23 +164,18 @@ class Database:
             self._mongodb = None
 
     def __repr__(self) -> str:
-        """Return a human string representation of this instance."""
-        def _dict_to_str(value: dict) -> str:
-            iterator = sorted(value.items(), key=str)
-            return '{' + newline.join(f'{repr(k)}: {repr(v)}' for k, v in iterator) + '}'
+        """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
+        attr = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+        attr_max = max(len(i) for i in attr)
 
-        def _get_str(key: str, value: Any) -> str:
-            func = _dict_to_str if isinstance(value, dict) else repr
-            return f'    {key:{offset}} = {func(value)}'
+        args = ',\n'.join(f'{name:attr_max} = {getattr(self, name)!r}' for name in attr[:-1])
+        args += f',\n{attr[-1]:attr_max} = {reprlib.repr(self.mongodb)!r}'
 
-        offset = max(len(k) for k in vars(self))
-        newline = ',\n' + ' ' * (6 + offset)
-
-        ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
-        return f'Database(\n{ret}\n)'
+        indent = 4 * ' '
+        return f'{self.__class__.__name__}(\n{textwrap.indent(args, indent)}\n)'
 
     def __eq__(self, value: Any) -> bool:
-        """Check if this instance is equivalent to **value**."""
+        """Implement :meth:`self == value<object.__eq__>`."""
         if type(self) is not type(value):
             return False
 
@@ -209,7 +206,7 @@ class Database:
         return cls, (self.dirname,), self.mongodb
 
     def __setstate__(self, state: Optional[Mapping[str, Any]]) -> None:
-        """Helper for :mod:`pickle`."""
+        """Helper for :mod:`pickle` and :meth:`~Database.__reduce__`."""
         if state is None:
             self._mongodb = None
             return
