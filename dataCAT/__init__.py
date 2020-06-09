@@ -1,6 +1,6 @@
 """A databasing framework for the Compound Attachment Tools package (CAT)."""
 
-# noqa: F401,E402
+# flake8: noqa: F401,E402
 
 from nanoutils import VersionInfo
 

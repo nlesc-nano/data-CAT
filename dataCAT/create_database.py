@@ -24,7 +24,7 @@ API
 
 from os import PathLike
 from os.path import join, isfile
-from typing import Dict, Any, List, Union, AnyStr
+from typing import Dict, Any, List, Union, AnyStr, overload
 
 import yaml
 import h5py
@@ -34,14 +34,14 @@ from pymongo import MongoClient, ASCENDING
 
 from nanoutils import Literal, PathType, VersionInfo
 from CAT.logger import logger
-from CAT import version_info as CAT_VERSION
+from CAT import version_info as CAT_VERSION  # noqa: N812
 
 try:
-    from nanoCAT import version_info as NANOCAT_VERSION
+    from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
-from . import version_info as DATACAT_VERSION
+from . import version_info as DATACAT_VERSION  # noqa: N812
 
 __all__: List[str] = []
 
@@ -131,8 +131,13 @@ def _create_csv_qd(filename: PathType) -> None:
     df.to_csv(filename)
 
 
-def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'],
-                 name: AnyStr = 'structures.hdf5') -> AnyStr:
+@overload
+def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
+    ...
+@overload  # noqa: E302
+def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
+    ...
+def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
     """Create the .pdb structure database (hdf5 format).
 
     Parameters
@@ -185,8 +190,13 @@ def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'],
     return path
 
 
-def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]'],
-                 name: AnyStr = 'job_settings.yaml') -> AnyStr:
+@overload
+def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
+    ...
+@overload  # noqa: E302
+def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
+    ...
+def _create_yaml(path, name='job_settings.yaml'):  # noqa: E302
     """Create a job settings database (yaml format).
 
     Parameters

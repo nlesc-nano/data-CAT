@@ -90,6 +90,6 @@ def test_from_csv() -> None:
     assertion.is_(out1, None)
 
     ref_tup = ('C3H7O1', 'C2H5O1', 'C1H3O1')
-    out2 = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
+    out2: pd.Series = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
     for mol, ref in zip(out2, ref_tup):
         assertion.eq(mol.get_formula(), ref)

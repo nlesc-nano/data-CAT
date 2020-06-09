@@ -54,9 +54,28 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
     Examples
     --------
+    .. testsetup:: python
+
+        >>> import pandas as pd
+
+        >>> _columns = [('E_solv', 'Acetone'), ('E_solv', 'Acetonitrile')]
+        >>> columns = pd.MultiIndex.from_tuples(_columns, names=['index', 'sub index'])
+
+        >>> _index = [('C[O-]', 'O2'), ('CC[O-]', 'O3'), ('CCC[O-]', 'O4')]
+        >>> index = pd.MultiIndex.from_tuples(_index, names=['smiles', 'anchor'])
+
+        >>> df = pd.DataFrame([[-56.6, -57.9],
+        ...                    [-56.5, -57.6],
+        ...                    [-57.1, -58.2]], index=index, columns=columns)
+
+
     .. code:: python
 
-        >>> print(df)
+        >>> import pandas as pd
+        >>> from dataCAT import df_to_mongo_dict
+
+        >>> df = pd.DataFrame(...)  # doctest: +SKIP
+        >>> print(df)  # doctest: +SKIP
         index           E_solv
         sub index      Acetone Acetonitrile
         smiles  anchor
@@ -69,7 +88,7 @@ def df_to_mongo_dict(df: pd.DataFrame,
         <class 'generator'>
 
         >>> for item in gen:
-        >>>     print(item)
+        ...     print(item)
         {'E_solv': {'Acetone': -56.6, 'Acetonitrile': -57.9}, 'smiles': 'C[O-]', 'anchor': 'O2'}
         {'E_solv': {'Acetone': -56.5, 'Acetonitrile': -57.6}, 'smiles': 'CC[O-]', 'anchor': 'O3'}
         {'E_solv': {'Acetone': -57.1, 'Acetonitrile': -58.2}, 'smiles': 'CCC[O-]', 'anchor': 'O4'}
@@ -248,7 +267,7 @@ def del_nested(s_ref: Settings, s_ret: dict, del_item: dict) -> None:
         if key in del_item:
             value_del = del_item[key]
             if isinstance(value_del, (dict, list)):
-                del_nested(value, s_ret[key], value_del)
+                del_nested(value, s_ret[key], value_del)  # type: ignore
             else:
                 del s_ret[key]
 
@@ -256,8 +275,7 @@ def del_nested(s_ref: Settings, s_ret: dict, del_item: dict) -> None:
             del s_ret[key]
 
 
-def even_index(df1: pd.DataFrame,
-               df2: pd.DataFrame) -> pd.DataFrame:
+def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     """Ensure that ``df2.index`` is a subset of ``df1.index``.
 
     Parameters

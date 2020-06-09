@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
+from typing import Dict
 
 from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 # To update the package version number, edit data-CAT/__version__.py
-version = {}
-with open(os.path.join(here, 'dataCAT', '__version__.py'), encoding='utf-8') as f:
+version: Dict[str, str] = {}
+version_path = os.path.join(here, 'dataCAT', '__version__.py')
+with open(version_path, encoding='utf-8') as f:
     exec(f.read(), version)
 
 with open('README.rst', encoding='utf-8') as readme_file:
@@ -17,10 +19,12 @@ with open('README.rst', encoding='utf-8') as readme_file:
 tests_require=[
     'pytest>=5.4.0',
     'pytest-cov',
-    'flake8>=3.8.0'
+    'flake8>=3.8.0',
     'pyflakes>=2.1.1',
     'pytest-flake8>=1.0.6',
+    'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
+    'pytest-mypy>=0.6.1',  # .pyi stub files will require >= 0.6.2
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0'
 ]
@@ -48,7 +52,7 @@ setup(
         'python-3-8',
         'automation'
     ],
-    package_data={'dataCAT': ['py.typed', '*.pyi']},
+    package_data={'dataCAT': ['py.typed']},
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',

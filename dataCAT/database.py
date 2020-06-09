@@ -182,7 +182,7 @@ class Database:
         if type(self) is not type(value):
             return False
 
-        ret = self.dirname == value.dirname and self.mongodb == value.mongodb
+        ret: bool = self.dirname == value.dirname and self.mongodb == value.mongodb
         if not ret:
             return False
 
@@ -251,16 +251,17 @@ class Database:
         --------
         .. code:: python
 
-            >>> from CAT import Database
+            >>> from dataCAT import Database
 
-            >>> db = Database(**kwargs)
+            >>> kwargs = dict(...)  # doctest: +SKIP
+            >>> db = Database(**kwargs)  # doctest: +SKIP
 
             # Update from db.csv_lig
-            >>> db.update_mongodb('ligand')
+            >>> db.update_mongodb('ligand')  # doctest: +SKIP
 
             # Update from a lig_df, a user-provided DataFrame
-            >>> db.update_mongodb({'ligand': lig_df})
-            >>> print(type(lig_df))
+            >>> db.update_mongodb({'ligand': lig_df})  # doctest: +SKIP
+            >>> print(type(lig_df))  # doctest: +SKIP
             <class 'pandas.core.frame.DataFrame'>
 
         Parameters
@@ -369,7 +370,7 @@ class Database:
             db.df = even_index(db.df, df)
 
             # Filter columns
-            if not columns:
+            if columns is None:
                 df_columns = df.columns
             else:
                 df_columns = pd.Index(columns)
@@ -380,8 +381,8 @@ class Database:
                 if 'job_settings' in i[0]:
                     self._update_hdf5_settings(df, i[0])
                     del df[i]
-                    idx = columns.index(i)
-                    columns.pop(idx)
+                    idx = df_columns.index(i)
+                    df_columns.pop(idx)
                     continue
                 try:
                     db[i] = np.array((None), dtype=df[i].dtype)
@@ -565,10 +566,8 @@ class Database:
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self, df: pd.DataFrame,
-                 database: Union[Ligand, QD] = 'ligand',
-                 get_mol: bool = True,
-                 inplace: bool = True) -> Optional[pd.Series]:
+    def from_csv(self, df: pd.DataFrame, database: Union[Ligand, QD] = 'ligand',
+                 get_mol: bool = True, inplace: bool = True) -> Optional[pd.Series]:
         """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
 
         Performs in inplace update of **df** if **inplace** = ``True``, thus returing ``None``.
@@ -662,7 +661,7 @@ class Database:
 
         return ret
 
-    def from_hdf5(self, index: Sequence[int],
+    def from_hdf5(self, index: Union[slice, Sequence[int]],
                   database: Union[Ligand, QD] = 'ligand',
                   rdmol: bool = True) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
