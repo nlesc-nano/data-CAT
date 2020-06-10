@@ -1,14 +1,16 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import os
+from typing import Dict
 
 from setuptools import setup
 
 here = os.path.abspath(os.path.dirname(__file__))
 
 # To update the package version number, edit data-CAT/__version__.py
-version = {}
-with open(os.path.join(here, 'dataCAT', '__version__.py'), encoding='utf-8') as f:
+version: Dict[str, str] = {}
+version_path = os.path.join(here, 'dataCAT', '__version__.py')
+with open(version_path, encoding='utf-8') as f:
     exec(f.read(), version)
 
 with open('README.rst', encoding='utf-8') as readme_file:
@@ -17,10 +19,12 @@ with open('README.rst', encoding='utf-8') as readme_file:
 tests_require=[
     'pytest>=5.4.0',
     'pytest-cov',
-    'flake8>=3.8.0'
+    'flake8>=3.8.0',
     'pyflakes>=2.1.1',
     'pytest-flake8>=1.0.6',
+    'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
+    'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0'
 ]
@@ -69,7 +73,7 @@ setup(
         'pandas',
         'pyyaml>=5.1',
         'pymongo',
-        'Nano-Utils',
+        'Nano-Utils>=0.4.3',
         'plams@git+https://github.com/SCM-NV/PLAMS@a5696ce62c09153a9fa67b2b03a750913e1d0924',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],

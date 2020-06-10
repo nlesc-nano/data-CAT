@@ -41,7 +41,7 @@ class _DFMeta(type):
     })
 
     # Should be implemented by the actual (non-meta) classes
-    NDTYPE: ClassVar[Type[NDFrame]] = NotImplemented
+    NDTYPE: Type[NDFrame] = NotImplemented
 
     @staticmethod
     def _construct_getter(cls_name: str, func_name: str) -> property:
@@ -53,7 +53,6 @@ class _DFMeta(type):
         getter.__name__ = func_name
         getter.__qualname__ = f'{cls_name}.{func_name}'
         getter.__module__ = __name__
-        getter.__annotations__ = {'self': cls_name, 'return': Any}
         return property(getter)
 
     @staticmethod
@@ -66,13 +65,19 @@ class _DFMeta(type):
         setter.__name__ = func_name
         setter.__qualname__ = f'{cls_name}.{func_name}'
         setter.__module__ = __name__
-        setter.__annotations__ = {'self': cls_name, 'return': None}
         return prop.setter(setter)
 
     def __new__(mcls: Type[TT], name: str, bases: Tuple[type, ...],  # noqa: N804
                 namespace: Dict[str, Any]) -> TT:
         """Construct a new :class:`_DFMeta` instance."""
         cls = cast(TT, super().__new__(mcls, name, bases, namespace))
+
+        # Validation
+        try:
+            ndtype = cls.NDTYPE
+            assert isinstance(ndtype, type) and issubclass(ndtype, NDFrame)
+        except (AttributeError, AssertionError) as ex:
+            raise TypeError(f"{name}.NDTYPE expectes an NDFrame subclass") from ex
 
         # Construct properties linking to attributes of **cls**
         name_iterator = (i for i in dir(cls.NDTYPE) if not i.startswith('_'))
@@ -90,25 +95,22 @@ class _DFMeta(type):
 
 @final
 class DFProxy(metaclass=_DFMeta):
-    """A mutable wrapper for holding dataframes.
-
-    Attributes
-    ----------
-    df : :class:`pandas.DataFrame`
-        A Pandas DataFrame.
-
-    """
+    """A mutable wrapper for holding dataframes."""
 
     __slots__ = ('__weakref__', 'ndframe')
 
+    #: The type of :class:`~pandas.core.generic.NDFrame` subclass contained within this class.
     NDTYPE: ClassVar[Type[NDFrame]] = pd.DataFrame
+
+    #: The embedded DataFrame.
+    ndframe: pd.DataFrame
 
     def __init__(self, ndframe: pd.DataFrame) -> None:
         """Initialize a new instance.
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        ndframe : |pd.DataFrame|_
             A Pandas DataFrame (see :attr:`DFProxy.df`).
 
 

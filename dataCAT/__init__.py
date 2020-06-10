@@ -1,20 +1,20 @@
 """A databasing framework for the Compound Attachment Tools package (CAT)."""
 
-# noqa: F401
+# flake8: noqa: F401,E402
 
 from nanoutils import VersionInfo
 
 from .__version__ import __version__
 
-from .df_collection import DFProxy
+version_info = VersionInfo.from_str(__version__)
+del VersionInfo
+
+from .df_proxy import DFProxy
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import df_to_mongo_dict
 from .database import Database
 
-version_info = VersionInfo.from_str(__version__)
-del VersionInfo
-
-__author__ = 'Bas van Beek'
+__author__ = 'B. F. van Beek'
 __email__ = 'b.f.van.beek@vu.nl'
 
 __all__ = [

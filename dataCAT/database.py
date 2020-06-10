@@ -13,6 +13,8 @@ API
 
 """
 
+import reprlib
+import textwrap
 from os import getcwd
 from os.path import abspath
 from time import sleep
@@ -32,12 +34,12 @@ from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule
-from nanoutils import Literal
-
+from nanoutils import PathType, TypedDict
 from CAT.logger import logger
 from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
-from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb
+
+from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import (
     df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
@@ -48,15 +50,19 @@ if TYPE_CHECKING:
 
 __all__ = ['Database']
 
-Ligand = Literal['ligand', 'ligand_no_opt']
-QD = Literal['qd', 'qd_no_opt']
+KT = TypeVar('KT')
 ST = TypeVar('ST', bound='Database')
+
+
+class JobRecipe(TypedDict):
+    """A :class:`~typing.TypedDict` representing the input of :class:`.Database.update_yaml`."""
+
+    key: Union[str, type]
+    value: Union[str, Settings]
 
 
 class Database:
     """The Database class.
-
-    .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
 
     Attributes
     ----------
@@ -74,10 +80,10 @@ class Database:
     hdf5 : :data:`Callable[..., ContextManager]`
         A function for accesing the context manager for opening
         the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
-    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`
-        Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
-        Defaults to ``None`` if a :exc:`ServerSelectionTimeoutError` is raised when failing to
-        contact the host.
+    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`, optional
+        Optional: A dictionary with keyword arguments for :class:`pymongo.MongoClient`.
+        Defaults to :data:`None` if a :exc:`~pymongo.errors.ServerSelectionTimeoutError` is raised
+        when failing to contact the host.
         See the **host**, **port** and **kwargs** parameter.
 
     """  # noqa: E501
@@ -141,7 +147,7 @@ class Database:
             See :attr:`Database.mongodb`.
 
         """  # noqa: E501
-        self._dirname = abspath(path) if path is not None else getcwd()
+        self._dirname: str = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
         lig_path = _create_csv(self.dirname, database='ligand')
@@ -164,27 +170,23 @@ class Database:
             self._mongodb = None
 
     def __repr__(self) -> str:
-        """Return a human string representation of this instance."""
-        def _dict_to_str(value: dict) -> str:
-            iterator = sorted(value.items(), key=str)
-            return '{' + newline.join(f'{repr(k)}: {repr(v)}' for k, v in iterator) + '}'
+        """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
+        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+        attr_max = max(len(i) for i in attr_tup)
 
-        def _get_str(key: str, value: Any) -> str:
-            func = _dict_to_str if isinstance(value, dict) else repr
-            return f'    {key:{offset}} = {func(value)}'
+        iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
+        args = ',\n'.join(f'{name:{attr_max}} = {attr!r}' for name, attr in iterator)
+        args += f',\n{attr_tup[-1]:{attr_max}} = {reprlib.repr(self.mongodb)}'
 
-        offset = max(len(k) for k in vars(self))
-        newline = ',\n' + ' ' * (6 + offset)
-
-        ret = ',\n'.join(_get_str(k, v) for k, v in vars(self).items())
-        return f'Database(\n{ret}\n)'
+        indent = 4 * ' '
+        return f'{self.__class__.__name__}(\n{textwrap.indent(args, indent)}\n)'
 
     def __eq__(self, value: Any) -> bool:
-        """Check if this instance is equivalent to **value**."""
+        """Implement :meth:`self == value<object.__eq__>`."""
         if type(self) is not type(value):
             return False
 
-        ret = self.dirname == value.dirname and self.mongodb == value.mongodb
+        ret: bool = self.dirname == value.dirname and self.mongodb == value.mongodb
         if not ret:
             return False
 
@@ -211,7 +213,7 @@ class Database:
         return cls, (self.dirname,), self.mongodb
 
     def __setstate__(self, state: Optional[Mapping[str, Any]]) -> None:
-        """Helper for :mod:`pickle`."""
+        """Helper for :mod:`pickle` and :meth:`~Database.__reduce__`."""
         if state is None:
             self._mongodb = None
             return
@@ -253,16 +255,17 @@ class Database:
         --------
         .. code:: python
 
-            >>> from CAT import Database
+            >>> from dataCAT import Database
 
-            >>> db = Database(**kwargs)
+            >>> kwargs = dict(...)  # doctest: +SKIP
+            >>> db = Database(**kwargs)  # doctest: +SKIP
 
             # Update from db.csv_lig
-            >>> db.update_mongodb('ligand')
+            >>> db.update_mongodb('ligand')  # doctest: +SKIP
 
             # Update from a lig_df, a user-provided DataFrame
-            >>> db.update_mongodb({'ligand': lig_df})
-            >>> print(type(lig_df))
+            >>> db.update_mongodb({'ligand': lig_df})  # doctest: +SKIP
+            >>> print(type(lig_df))  # doctest: +SKIP
             <class 'pandas.core.frame.DataFrame'>
 
         Parameters
@@ -371,7 +374,7 @@ class Database:
             db.ndframe = even_index(db.ndframe, df)
 
             # Filter columns
-            if not columns:
+            if columns is None:
                 df_columns = df.columns
             else:
                 df_columns = pd.Index(columns)
@@ -382,8 +385,8 @@ class Database:
                 if 'job_settings' in i[0]:
                     self._update_hdf5_settings(df, i[0])
                     del df[i]
-                    idx = columns.index(i)
-                    columns.pop(idx)
+                    idx = df_columns.index(i)
+                    df_columns.pop(idx)
                     continue
                 try:
                     db[i] = np.array((None), dtype=df[i].dtype)
@@ -402,7 +405,7 @@ class Database:
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
-    def update_yaml(self, job_recipe: Settings) -> dict:
+    def update_yaml(self, job_recipe: Mapping[KT, JobRecipe]) -> Dict[KT, str]:
         """Update :attr:`Database.yaml` with (potentially) new user provided settings.
 
         Parameters
@@ -419,14 +422,14 @@ class Database:
         """
         ret = {}
         with self.yaml() as db:
-            for item in job_recipe:
+            for item, v in job_recipe.items():
                 # Unpack and sanitize keys
-                key = job_recipe[item].key
+                key = v['key']
                 if isinstance(key, type):
                     key = key.__name__
 
                 # Unpack and sanitize values
-                value = job_recipe[item].value
+                value = v['value']
                 if isinstance(value, dict):
                     value = sanitize_yaml_settings(value, key)
 
@@ -436,14 +439,14 @@ class Database:
 
                 # Check if the appropiate value is available in **self.yaml**
                 if value in db[key]:
-                    ret[item] = '{} {:d}'.format(key, db[key].index(value))
+                    ret[item] = f'{key} {db[key].index(value)}'
                 else:
                     db[key].append(value)
-                    ret[item] = '{} {:d}'.format(key, len(db[key]) - 1)
+                    ret[item] = f'{key} {len(db[key]) - 1}'
         return ret
 
     def update_hdf5(self, df: pd.DataFrame,
-                    database: str = 'ligand',
+                    database: Union[Ligand, QD] = 'ligand',
                     overwrite: bool = False,
                     status: Optional[str] = None):
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
@@ -483,7 +486,7 @@ class Database:
 
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5('r+') as f:
+        with self.hdf5('r+', libver='latest') as f:
             i, j = f[database].shape
 
             if new.any():
@@ -514,8 +517,7 @@ class Database:
 
         return ret
 
-    def _update_hdf5_settings(self, df: pd.DataFrame,
-                              column: str) -> None:
+    def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
@@ -540,8 +542,7 @@ class Database:
 
     @staticmethod
     def _read_inp(job_paths: Sequence[str],
-                  ax2: int = 0,
-                  ax3: int = 0) -> np.ndarray:
+                  ax2: int = 0, ax3: int = 0) -> np.ndarray:
         """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
         # Determine the minimum size of the to-be returned 3D array
         line_count = [[Database._get_line_count(j) for j in i] for i in job_paths]
@@ -557,7 +558,7 @@ class Database:
         return ret
 
     @staticmethod
-    def _get_line_count(filename: str) -> int:
+    def _get_line_count(filename: PathType) -> int:
         """Return the total number of lines in **filename**."""
         substract = 0
         with open(filename, 'r') as f:
@@ -568,10 +569,8 @@ class Database:
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self, df: pd.DataFrame,
-                 database: Union[Ligand, QD] = 'ligand',
-                 get_mol: bool = True,
-                 inplace: bool = True) -> Optional[pd.Series]:
+    def from_csv(self, df: pd.DataFrame, database: Union[Ligand, QD] = 'ligand',
+                 get_mol: bool = True, inplace: bool = True) -> Optional[pd.Series]:
         """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
 
         Performs in inplace update of **df** if **inplace** = ``True``, thus returing ``None``.
@@ -613,7 +612,7 @@ class Database:
         return self._get_csv_mol(df, database, inplace)
 
     def _get_csv_mol(self, df: pd.DataFrame,
-                     database: str = 'ligand',
+                     database: Union[Ligand, QD] = 'ligand',
                      inplace: bool = True) -> Optional[pd.Series]:
         """A method which handles the retrieval and subsequent formatting of molecules.
 
@@ -665,8 +664,8 @@ class Database:
 
         return ret
 
-    def from_hdf5(self, index: Sequence[int],
-                  database: str = 'ligand',
+    def from_hdf5(self, index: Union[slice, Sequence[int]],
+                  database: Union[Ligand, QD] = 'ligand',
                   rdmol: bool = True) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
@@ -703,7 +702,7 @@ class Database:
         return [from_pdb_array(mol, rdmol=rdmol) for mol in pdb_array]
 
     def hdf5_availability(self, timeout: float = 5.0,
-                          max_attempts: Optional[int] = None) -> None:
+                          max_attempts: Optional[int] = 10) -> None:
         """Check if a .hdf5 file is opened by another process; return once it is not.
 
         If two processes attempt to simultaneously open a single hdf5 file then
@@ -731,17 +730,18 @@ class Database:
             Raised if **max_attempts** is exceded.
 
         """
-        err = (f"h5py.File('{self.hdf5.args[0]}') is currently unavailable; "
+        err = (f"h5py.File({self.hdf5.args[0]!r}) is currently unavailable; "
                f"repeating attempt in {timeout:1.1f} seconds")
-        i = max_attempts or np.inf
+        i = max_attempts if max_attempts is not None else np.inf
 
         while i:
             try:
-                with self.hdf5('r+'):
+                with self.hdf5('r+', libver='latest'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
-                logger.warning(err)
-                exception = ex
+                warn = ResourceWarning(err)
+                warn.__cause__ = exception = ex
+                logger.warning(warn)
                 sleep(timeout)
             i -= 1
 

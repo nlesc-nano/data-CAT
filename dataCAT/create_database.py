@@ -22,8 +22,9 @@ API
 
 """
 
-from os.path import (join, isfile)
-from typing import (Dict, Any, List)
+from os import PathLike
+from os.path import join, isfile
+from typing import Dict, Any, List, Union, AnyStr, overload
 
 import yaml
 import h5py
@@ -31,13 +32,24 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
+from nanoutils import Literal, PathType, VersionInfo
 from CAT.logger import logger
+from CAT import version_info as CAT_VERSION  # noqa: N812
+
+try:
+    from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
+except ImportError:
+    NANOCAT_VERSION = VersionInfo(-1, -1, -1)
+
+from . import version_info as DATACAT_VERSION  # noqa: N812
 
 __all__: List[str] = []
 
+Ligand = Literal['ligand', 'ligand_no_opt']
+QD = Literal['qd', 'qd_no_opt']
 
-def _create_csv(path: str,
-                database: str = 'ligand') -> str:
+
+def _create_csv(path: Union[str, PathLike], database: Union[Ligand, QD] = 'ligand') -> str:
     """Create a ligand or qd database (csv format) if it does not yet exist.
 
     Parameters
@@ -54,7 +66,7 @@ def _create_csv(path: str,
         The absolute path to the ligand or qd database.
 
     """
-    filename = join(path, database + '_database.csv')
+    filename = join(path, f'{database}_database.csv')
 
     # Check if the database exists and has the proper keys; create it if it does not
     if not isfile(filename):
@@ -63,12 +75,12 @@ def _create_csv(path: str,
         elif database == 'qd':
             _create_csv_qd(filename)
         else:
-            raise ValueError(f"'{database}' is not an accepated value for the 'database' argument")
+            raise ValueError(f"{database!r} is not an accepated value for the 'database' argument")
         logger.info(f'{database}_database.csv not found in {path}, creating {database} database')
     return filename
 
 
-def _create_csv_lig(filename: str) -> None:
+def _create_csv_lig(filename: PathType) -> None:
     """Create a ligand database and and return its absolute path.
 
     Parameters
@@ -92,7 +104,7 @@ def _create_csv_lig(filename: str) -> None:
     df.to_csv(filename)
 
 
-def _create_csv_qd(filename: str) -> None:
+def _create_csv_qd(filename: PathType) -> None:
     """Create a qd database and and return its absolute path.
 
     Parameters
@@ -119,8 +131,13 @@ def _create_csv_qd(filename: str) -> None:
     df.to_csv(filename)
 
 
-def _create_hdf5(path: str,
-                 name: str = 'structures.hdf5') -> str:
+@overload
+def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
+    ...
+@overload  # noqa: E302
+def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
+    ...
+def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
     """Create the .pdb structure database (hdf5 format).
 
     Parameters
@@ -137,35 +154,49 @@ def _create_hdf5(path: str,
         The absolute path+filename to the pdb structure database.
 
     """
-    # Define arguments for 2D datasets
     path = join(path, name)
-    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', )
-    kwarg = {'chunks': True, 'maxshape': (None, None), 'compression': 'gzip'}
 
-    # Create new 2D datasets
-    with h5py.File(path, 'a') as f:
-        for name in dataset_names:
-            if name not in f:
-                f.create_dataset(name=name, data=np.empty((0, 1), dtype='S80'), **kwarg)
+    # Define arguments for 2D datasets
+    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', )
+    kwargs = {'chunks': True, 'maxshape': (None, None), 'compression': 'gzip'}
 
     # Define arguments for 3D datasets
-    kwarg_3d = {'chunks': True, 'maxshape': (None, None, None), 'compression': 'gzip'}
+    kwargs_3d = {'chunks': True, 'maxshape': (None, None, None), 'compression': 'gzip'}
     dataset_names_3d = (
         'job_settings_crs', 'job_settings_qd_opt', 'job_settings_BDE', 'job_settings_ASA',
         'job_settings_cdft'
     )
 
-    # Create new 3D datasets
-    with h5py.File(path, 'a') as f:
-        for name in dataset_names_3d:
-            if name not in f:
-                f.create_dataset(name=name, data=np.empty((0, 1, 1), dtype='S120'), **kwarg_3d)
+    kwargs_version = {'maxshape': (None, 3), 'shape': (1, 3), 'dtype': int}
 
+    with h5py.File(path, 'a', libver='latest') as f:
+        # Store the version of CAT, nano-CAT and data-CAT
+        if 'CAT.__version__' not in f:
+            f.create_dataset(data=[CAT_VERSION], name='CAT.__version__', **kwargs_version)
+        if 'nanoCAT.__version__' not in f:
+            f.create_dataset(data=[NANOCAT_VERSION], name='nanoCAT.__version__', **kwargs_version)
+        if 'dataCAT.__version__' not in f:
+            f.create_dataset(data=[DATACAT_VERSION], name='dataCAT.__version__', **kwargs_version)
+
+        # Create new 2D datasets
+        iterator_2d = (name_ for name_ in dataset_names if name_ not in f)
+        for name_ in iterator_2d:
+            f.create_dataset(name=name_, data=np.empty((0, 1), dtype='S80'), **kwargs)
+
+        # Create new 3D datasets
+        iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)
+        for name_ in iterator_3d:
+            f.create_dataset(name=name_, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
     return path
 
 
-def _create_yaml(path: str,
-                 name: str = 'job_settings.yaml') -> str:
+@overload
+def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
+    ...
+@overload  # noqa: E302
+def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
+    ...
+def _create_yaml(path, name='job_settings.yaml'):  # noqa: E302
     """Create a job settings database (yaml format).
 
     Parameters
@@ -192,34 +223,33 @@ def _create_yaml(path: str,
     return filename
 
 
-def _create_mongodb(host: str = 'localhost',
-                    port: int = 27017,
+def _create_mongodb(host: str = 'localhost', port: int = 27017,
                     **kwargs: Any) -> Dict[str, Any]:
     """Create the the MongoDB collections and set their index.
 
     Paramaters
     ----------
-    host : |str|_
+    host : :class:`str`
         Hostname or IP address or Unix domain socket path of a single mongod or
         mongos instance to connect to, or a mongodb URI, or a list of hostnames mongodb URIs.
         If **host** is an IPv6 literal it must be enclosed in ``"["`` and ``"]"`` characters
         following the RFC2732 URL syntax (e.g. ``"[::1]"`` for localhost).
         Multihomed and round robin DNS addresses are not supported.
 
-    port : |str|_
+    port : :class:`int`
         port number on which to connect.
 
-    kwargs : |dict|_
-        Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
+    kwargs : :data:`Any<typing.Any>`
+        Optional keyword argument for :class:`pymongo.MongoClient`.
 
     Returns
     -------
-    |dict|_
+    :class:`Dict[str, Any]<typing.Dict>`
         A dictionary with all supplied keyword arguments.
 
     Raises
     ------
-    ServerSelectionTimeoutError
+    :exc:`pymongo.ServerSelectionTimeoutError`
         Raised if no connection can be established with the host.
 
     """  # noqa
