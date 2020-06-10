@@ -62,31 +62,7 @@ class JobRecipe(TypedDict):
 
 
 class Database:
-    """The Database class.
-
-    Attributes
-    ----------
-    dirname : :class:`str`
-        The path+filename of the directory containing all database components.
-    csv_lig : :data:`Callable[..., ContextManager]`
-        A function for accesing the context manager for opening
-        the .csv file containing all ligand related results.
-    csv_qd : :data:`Callable[..., ContextManager]`
-        A function for accesing the context manager for opening
-        the .csv file containing all quantum dot related results.
-    yaml : :data:`Callable[..., ContextManager]`
-        A function for accesing the context manager for opening
-        the .yaml file containing all job settings.
-    hdf5 : :data:`Callable[..., ContextManager]`
-        A function for accesing the context manager for opening
-        the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
-    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`, optional
-        Optional: A dictionary with keyword arguments for :class:`pymongo.MongoClient`.
-        Defaults to :data:`None` if a :exc:`~pymongo.errors.ServerSelectionTimeoutError` is raised
-        when failing to contact the host.
-        See the **host**, **port** and **kwargs** parameter.
-
-    """  # noqa: E501
+    """The Database class."""
 
     __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_yaml',
                  '_hdf5', '_mongodb', '_hash')
@@ -98,27 +74,27 @@ class Database:
 
     @property
     def csv_lig(self) -> 'partial[OpenLig]':
-        """Get the :attr:`Database.csv_lig` context manager."""
+        """:data:`Callable[..., dataCAT.OpenLig]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenLig` context manager."""  # noqa: E501
         return self._csv_lig
 
     @property
     def csv_qd(self) -> 'partial[OpenQD]':
-        """Get the :attr:`Database.csv_qd` context manager."""
+        """:data:`Callable[..., dataCAT.OpenQD]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenQD` context manager."""  # noqa: E501
         return self._csv_qd
 
     @property
     def yaml(self) -> 'partial[OpenYaml]':
-        """Get the :attr:`Database.yaml` context manager."""
+        """:data:`Callable[..., dataCAT.OpenYaml]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenYaml` context manager."""  # noqa: E501
         return self._yaml
 
     @property
     def hdf5(self) -> 'partial[h5py.File]':
-        """Get the :attr:`Database.hdf5` context manager."""
+        """:data:`Callable[..., h5py.File]<typing.Callable>`: Get a function for constructing a :class:`h5py.File` context manager."""  # noqa: E501
         return self._hdf5
 
     @property
     def mongodb(self) -> Optional[Mapping[str, Any]]:
-        """Get the :attr:`Database.mongodb` context manager."""
+        """:class:`Mapping[str, Any]<typing.Mapping>`, optional: Get a mapping with keyword arguments for :class:`pymongo.MongoClient<pymongo.mongo_client.MongoClient>`."""  # noqa: E501
         return self._mongodb
 
     def __init__(self, path: Union[str, 'PathLike[str]', None] = None,
@@ -143,7 +119,7 @@ class Database:
             port number on which to connect.
             See :attr:`Database.mongodb`.
         **kwargs
-            Optional keyword argument for `pymongo.MongoClient <http://api.mongodb.com/python/current/api/pymongo/mongo_client.html>`_.
+            Optional keyword argument for :class:`pymongo.MongoClient<pymongo.mongo_client.MongoClient>`.
             See :attr:`Database.mongodb`.
 
         """  # noqa: E501
@@ -247,7 +223,7 @@ class Database:
             return self.csv_qd
         raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
 
-    def update_mongodb(self, database: Union[str, Dict[str, pd.DataFrame]] = 'ligand',
+    def update_mongodb(self, database: Union[str, Mapping[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
         """Export ligand or qd results to the MongoDB database.
 
@@ -270,15 +246,17 @@ class Database:
 
         Parameters
         ----------
-        database : |str|_ or |dict|_ [|str|_, |pd.DataFrame|_]
+        database : :class:`str` or :class:`Mapping[str, pandas.DataFrame]<typing.Mapping>`
             The type of database.
             Accepted values are ``"ligand"`` and ``"qd"``,
             opening :attr:`Database.csv_lig` and :attr:`Database.csv_qd`, respectivelly.
             Alternativelly, a dictionary with the database name and a matching DataFrame
             can be passed directly.
-
-        overwrite : bool
+        overwrite : :class:`bool`
             Whether or not previous entries can be overwritten or not.
+
+
+        :rtype: :data:`None`
 
         """
         if self.mongodb is None:
@@ -288,8 +266,8 @@ class Database:
         client = MongoClient(**self.mongodb)
         mongo_db = client.cat_database
 
-        if isinstance(database, dict):
-            database, db = next(iter(database.items()))
+        if callable(getattr(database, 'items', None)):
+            database, db = next(iter(database.items()))  # type: ignore
             dict_gen = df_to_mongo_dict(db)
             idx_keys = db.index.names
             collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
@@ -336,27 +314,25 @@ class Database:
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-
-        database : str
+        database : :class:`str`
             The type of database; accepted values are ``"ligand"`` (:attr:`Database.csv_lig`)
             and ``"qd"`` (:attr:`Database.csv_qd`).
-
-        columns : |Sequence|_
-            Optional: A list of column keys in **df** which
+        columns : :class:`~collections.abc.Sequence`, optional
+            Optional: A sequence of column keys in **df** which
             (potentially) are to be added to this instance.
-            If ``None``: Add all columns.
-
-        overwrite : |bool|_
+            If :data:`None` Add all columns.
+        overwrite : :class:`bool`
             Whether or not previous entries can be overwritten or not.
-
-        job_recipe : |plams.Settings|_
-            Optional: A :class:`.Settings` instance with settings specific to a job.
-
+        job_recipe : :class:`plams.Settings<scm.plams.core.settings.Settings>`
+            Optional: A Settings instance with settings specific to a job.
         status : :class:`str`, optional
             A descriptor of the status of the moleculair structures.
             Set to ``"optimized"`` to treat them as optimized geometries.
+
+
+        :rtype: :data:`None`
 
         """
         # Operate on either the ligand or quantum dot database
@@ -408,14 +384,29 @@ class Database:
     def update_yaml(self, job_recipe: Mapping[KT, JobRecipe]) -> Dict[KT, str]:
         """Update :attr:`Database.yaml` with (potentially) new user provided settings.
 
+        Examples
+        --------
+        .. code:: python
+
+            >>> from dataCAT import Database
+
+            >>> db = Database(...)  # doctest: +SKIP
+            >>> job_recipe = {
+            ...     'job1': {'key': 'ADFJob', 'value': ...},
+            ...     'job2': {'key': 'AMSJob', 'value': ...}
+            ... }
+
+            >>> db.update_yaml(job_recipe)  # doctest: +SKIP
+
+
         Parameters
         ----------
-        job_recipe : |plams.Settings|_
-            A settings object with one or more settings specific to a job.
+        job_recipe : :class:`~collections.abc.Mapping`
+            A mapping with the settings of one or more jobs.
 
         Returns
         -------
-        |dict|_
+        :class:`Dict[str, str]<typing.Dict>`
             A dictionary with the column names as keys and the key for :attr:`Database.yaml`
             as matching values.
 
@@ -448,29 +439,26 @@ class Database:
     def update_hdf5(self, df: pd.DataFrame,
                     database: Union[Ligand, QD] = 'ligand',
                     overwrite: bool = False,
-                    status: Optional[str] = None):
+                    status: Optional[str] = None) -> pd.Series:
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
         Returns a series with the :attr:`Database.hdf5` indices of all new entries.
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-
-        database : str
+        database : :class:`str`
             The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-
-        overwrite : bool
+        overwrite : :class:`bool`
             Whether or not previous entries can be overwritten or not.
-
         status : :class:`str`, optional
             A descriptor of the status of the moleculair structures.
             Set to ``"optimized"`` to treat them as optimized geometries.
 
         Returns
         -------
-        |pd.Series|_
+        :class:`pandas.Series`
             A series with the indices of all new molecules in :attr:`Database.hdf5`.
 
         """
@@ -573,29 +561,27 @@ class Database:
                  get_mol: bool = True, inplace: bool = True) -> Optional[pd.Series]:
         """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
 
-        Performs in inplace update of **df** if **inplace** = ``True``, thus returing ``None``.
+        Performs in inplace update of **df** if **inplace** = :data:`True`,
+        thus returing :data:`None`.
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-
-        database : str
+        database : :class:`str`
             The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-
-        get_mol : bool
+        get_mol : :class:`bool`
             Attempt to pull preexisting molecules from the database.
             See the **inplace** argument for more details.
-
-        inplace : bool
-            If ``True`` perform an inplace update of the ``"mol"`` column in **df**.
+        inplace : :class:`bool`
+            If :data:`True` perform an inplace update of the ``"mol"`` column in **df**.
             Otherwise return a new series of PLAMS molecules.
 
         Returns
         -------
-        |pd.Series|_ [|plams.Molecule|_]
-            Optional: A Series of PLAMS molecules if **get_mol** = ``True``
-            and **inplace** = ``False``.
+        :class:`pandas.Series`, optional
+            Optional: A Series of PLAMS molecules if **get_mol** = :data:`True`
+            and **inplace** = :data:`False`.
 
         """
         # Operate on either the ligand or quantum dot database
@@ -616,24 +602,22 @@ class Database:
                      inplace: bool = True) -> Optional[pd.Series]:
         """A method which handles the retrieval and subsequent formatting of molecules.
 
-        Called internally by :meth:`.Database.from_csv`.
+        Called internally by :meth:`Database.from_csv`.
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-
-        database : str
+        database : :class:`str`
             The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-
-        inplace : bool
-            If ``True`` perform an inplace update of the ``("mol", "")`` column in **df**.
+        inplace : :class:`bool`
+            If :data:`True` perform an inplace update of the ``("mol", "")`` column in **df**.
             Otherwise return a new series of PLAMS molecules.
 
         Returns
         -------
-        |pd.Series|_ [|plams.Molecule|_]
-            Optional: A Series of PLAMS molecules if **inplace** is ``False``.
+        :class:`pandas.Series`, optional
+            Optional: A Series of PLAMS molecules if **inplace** is :data:`False`.
 
         """
         # Sort and find all valid HDF5 indices
@@ -671,21 +655,16 @@ class Database:
 
         Parameters
         ----------
-        index : |list|_ [|int|_]
+        index : :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
             The indices of the to be retrieved structures.
-
-        database : str
+        database : :class:`str`
             The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-
-        rdmol : bool
-            If ``True``, return an RDKit molecule instead of a PLAMS molecule.
-
-        close : bool
-            If the database component (:attr:`Database.hdf5`) should be closed afterwards.
+        rdmol : :class:`bool`
+            If :data:`True`, return an RDKit molecule instead of a PLAMS molecule.
 
         Returns
         -------
-        |list|_ [|plams.Molecule|_ or |rdkit.Chem.Mol|_]
+        :class:`List[plams.Molecule]<typing.List>` or :class:`List[rdkit.Mol]<typing.List>`
             A list of PLAMS or RDKit molecules.
 
         """
@@ -706,27 +685,24 @@ class Database:
         """Check if a .hdf5 file is opened by another process; return once it is not.
 
         If two processes attempt to simultaneously open a single hdf5 file then
-        h5py will raise an :class:`OSError`.
+        h5py will raise an :exc:`OSError`.
 
         The purpose of this method is ensure that a .hdf5 file is actually closed,
         thus allowing the :meth:`Database.from_hdf5` method to safely access **filename** without
-        the risk of raising an :class:`OSError`.
+        the risk of raising an :exc:`OSError`.
 
         Parameters
         ----------
-        filename : str
-            The path+filename of the hdf5 file.
-
-        timeout : float
+        timeout : :class:`float`
             Time timeout, in seconds, between subsequent attempts of opening **filename**.
-
-        max_attempts : int
+        max_attempts : :class:`int`, optional
             Optional: The maximum number attempts for opening **filename**.
-            If the maximum number of attempts is exceeded, raise an ``OSError``.
+            If the maximum number of attempts is exceeded, raise an :exc:`OSError`.
+            Setting this value to :data:`None` will set the number of attempts to unlimited.
 
         Raises
         ------
-        OSError
+        :exc:`OSError`
             Raised if **max_attempts** is exceded.
 
         """
