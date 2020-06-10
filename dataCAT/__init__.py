@@ -9,7 +9,7 @@ from .__version__ import __version__
 version_info = VersionInfo.from_str(__version__)
 del VersionInfo
 
-from .df_collection import DFProxy
+from .df_proxy import DFProxy
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database_functions import df_to_mongo_dict
 from .database import Database

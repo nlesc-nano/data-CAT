@@ -97,26 +97,22 @@ class _DFMeta(type):
 
 @final
 class DFProxy(metaclass=_DFMeta):
-    """A mutable wrapper for holding dataframes.
-
-    Attributes
-    ----------
-    df : :class:`pandas.DataFrame`
-        A Pandas DataFrame.
-
-    """
+    """A mutable wrapper for holding dataframes."""
 
     __slots__ = ('__weakref__', 'ndframe')
 
     #: The type of :class:`~pandas.core.generic.NDFrame` subclass contained within this class.
     NDTYPE: ClassVar[Type[NDFrame]] = pd.DataFrame
 
+    #: The embedded DataFrame.
+    ndframe: pd.DataFrame
+
     def __init__(self, ndframe: pd.DataFrame) -> None:
         """Initialize a new instance.
 
         Parameters
         ----------
-        df : |pd.DataFrame|_
+        ndframe : |pd.DataFrame|_
             A Pandas DataFrame (see :attr:`DFProxy.df`).
 
 

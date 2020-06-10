@@ -8,7 +8,7 @@ import pandas as pd
 
 from assertionlib import assertion
 from dataCAT import DFProxy
-from dataCAT.df_collection import _DFMeta
+from dataCAT.df_proxy import _DFMeta
 
 _DF = pd.DataFrame(np.random.rand(3, 10))
 DF = DFProxy(_DF)
