@@ -1,5 +1,7 @@
 """Tests for :mod:`dataCAT.context_managers`."""
 
+import copy
+import pickle
 from os.path import join
 from functools import partial
 
@@ -11,7 +13,33 @@ from assertionlib import assertion
 from dataCAT import OpenYaml, OpenLig, OpenQD
 
 PATH = join('tests', 'test_files')
-PATH1 = join(PATH, 'qd.csv')
+
+
+def test_filemanagerabc() -> None:
+    """Test :class:`dataCAT.context_managers.FileManagerABC`."""
+    file1 = join(PATH, 'qd.csv')
+    file2 = join(PATH, 'qd.csv')
+    file3 = join(PATH, 'ligand.csv')
+    obj1 = OpenQD(file1, write=False)
+    obj2 = OpenQD(file2, write=False)
+    obj3 = OpenQD(file3, write=False)
+
+    assertion.eq(obj1, obj2)
+    assertion.eq(hash(obj1), hash(obj2))
+    assertion.ne(obj1, obj3)
+    assertion.ne(obj1, 1)
+
+    obj1_str = repr(obj1)
+    assertion.contains(obj1_str, obj1.__class__.__name__)
+    assertion.contains(obj1_str, str(obj1.write))
+    assertion.contains(obj1_str, str(obj1.filename))
+
+    assertion.is_(copy.copy(obj1), obj1)
+    assertion.is_(copy.deepcopy(obj1), obj1)
+
+    dump = pickle.dumps(obj1)
+    load = pickle.loads(dump)
+    assertion.eq(load, obj1)
 
 
 def test_openyaml() -> None:

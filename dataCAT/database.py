@@ -34,7 +34,7 @@ from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule
-from nanoutils import PathType
+from nanoutils import PathType, TypedDict
 from CAT.logger import logger
 from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
@@ -50,13 +50,19 @@ if TYPE_CHECKING:
 
 __all__ = ['Database']
 
+KT = TypeVar('KT')
 ST = TypeVar('ST', bound='Database')
+
+
+class JobRecipe(TypedDict):
+    """A :class:`~typing.TypedDict` representing the input of :class:`.Database.update_yaml`."""
+
+    key: Union[str, type]
+    value: Union[str, Settings]
 
 
 class Database:
     """The Database class.
-
-    .. _pymongo.MongoClient: http://api.mongodb.com/python/current/api/pymongo/mongo_client.html
 
     Attributes
     ----------
@@ -74,10 +80,10 @@ class Database:
     hdf5 : :data:`Callable[..., ContextManager]`
         A function for accesing the context manager for opening
         the .hdf5 file containing all structures (as partiallize de-serialized .pdb files).
-    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`
-        Optional: A dictionary with keyword arguments for pymongo.MongoClient_.
-        Defaults to ``None`` if a :exc:`ServerSelectionTimeoutError` is raised when failing to
-        contact the host.
+    mongodb : :class:`Mapping[str, Any]<typing.Mapping>`, optional
+        Optional: A dictionary with keyword arguments for :class:`pymongo.MongoClient`.
+        Defaults to :data:`None` if a :exc:`~pymongo.errors.ServerSelectionTimeoutError` is raised
+        when failing to contact the host.
         See the **host**, **port** and **kwargs** parameter.
 
     """  # noqa: E501
@@ -170,7 +176,7 @@ class Database:
 
         iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
         args = ',\n'.join(f'{name:{attr_max}} = {attr!r}' for name, attr in iterator)
-        args += f',\n{attr_tup[-1]:{attr_max}} = {reprlib.repr(self.mongodb)!r}'
+        args += f',\n{attr_tup[-1]:{attr_max}} = {reprlib.repr(self.mongodb)}'
 
         indent = 4 * ' '
         return f'{self.__class__.__name__}(\n{textwrap.indent(args, indent)}\n)'
@@ -399,7 +405,7 @@ class Database:
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
-    def update_yaml(self, job_recipe: Settings) -> dict:
+    def update_yaml(self, job_recipe: Mapping[KT, JobRecipe]) -> Dict[KT, str]:
         """Update :attr:`Database.yaml` with (potentially) new user provided settings.
 
         Parameters
@@ -416,14 +422,14 @@ class Database:
         """
         ret = {}
         with self.yaml() as db:
-            for item in job_recipe:
+            for item, v in job_recipe.items():
                 # Unpack and sanitize keys
-                key = job_recipe[item].key
+                key = v['key']
                 if isinstance(key, type):
                     key = key.__name__
 
                 # Unpack and sanitize values
-                value = job_recipe[item].value
+                value = v['value']
                 if isinstance(value, dict):
                     value = sanitize_yaml_settings(value, key)
 
@@ -433,10 +439,10 @@ class Database:
 
                 # Check if the appropiate value is available in **self.yaml**
                 if value in db[key]:
-                    ret[item] = '{} {:d}'.format(key, db[key].index(value))
+                    ret[item] = f'{key} {db[key].index(value)}'
                 else:
                     db[key].append(value)
-                    ret[item] = '{} {:d}'.format(key, len(db[key]) - 1)
+                    ret[item] = f'{key} {len(db[key]) - 1}'
         return ret
 
     def update_hdf5(self, df: pd.DataFrame,
@@ -480,7 +486,7 @@ class Database:
 
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5('r+') as f:
+        with self.hdf5('r+', libver='latest') as f:
             i, j = f[database].shape
 
             if new.any():
@@ -511,8 +517,7 @@ class Database:
 
         return ret
 
-    def _update_hdf5_settings(self, df: pd.DataFrame,
-                              column: str) -> None:
+    def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
@@ -731,7 +736,7 @@ class Database:
 
         while i:
             try:
-                with self.hdf5('r+'):
+                with self.hdf5('r+', libver='latest'):
                     return None  # the .hdf5 file can safely be opened
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
                 warn = ResourceWarning(err)

@@ -41,7 +41,7 @@ class _DFMeta(type):
     })
 
     # Should be implemented by the actual (non-meta) classes
-    NDTYPE: ClassVar[Type[NDFrame]] = NotImplemented
+    NDTYPE: Type[NDFrame] = NotImplemented
 
     @staticmethod
     def _construct_getter(cls_name: str, func_name: str) -> property:
@@ -53,7 +53,6 @@ class _DFMeta(type):
         getter.__name__ = func_name
         getter.__qualname__ = f'{cls_name}.{func_name}'
         getter.__module__ = __name__
-        getter.__annotations__ = {'self': cls_name, 'return': Any}
         return property(getter)
 
     @staticmethod
@@ -66,7 +65,6 @@ class _DFMeta(type):
         setter.__name__ = func_name
         setter.__qualname__ = f'{cls_name}.{func_name}'
         setter.__module__ = __name__
-        setter.__annotations__ = {'self': cls_name, 'return': None}
         return prop.setter(setter)
 
     def __new__(mcls: Type[TT], name: str, bases: Tuple[type, ...],  # noqa: N804
