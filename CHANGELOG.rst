@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.2.2
+*****
+* Updated the API documentation (see ...).
+
+
 0.2.1
 *****
 * Store the ``__version__`` of CAT, Nano-CAT and Data-CAT in the hdf5 file.

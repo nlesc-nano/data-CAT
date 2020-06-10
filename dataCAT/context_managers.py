@@ -58,7 +58,7 @@ class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
 
     @property
     def write(self) -> bool:
-        """:class:`bool`: Get whether or not :attr:`~FileManagerABC.filename` should be written to when closing the context manager."""  # noqa: E501
+        """:class:`bool`: Get whether or not :attr:`.filename` should be written to when closing the context manager."""  # noqa: E501
         return self._write
 
     @final
@@ -127,17 +127,7 @@ class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
 
 
 class OpenYaml(FileManagerABC[AnyStr, Settings]):
-    """Context manager for opening and closing job settings (:attr:`.Database.yaml`).
-
-    Attributes
-    ----------
-    filename : str
-        The path+filename to the database component.
-
-    write : bool
-        Whether or not the database file should be updated after closing this instance.
-
-    """
+    """Context manager for opening and closing job settings (:attr:`.Database.yaml`)."""
 
     def __enter__(self) -> Settings:
         """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
@@ -157,7 +147,7 @@ class OpenYaml(FileManagerABC[AnyStr, Settings]):
 
 
 class OpenLig(FileManagerABC[AnyStr, DFProxy]):
-    """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`)."""
+    """Context manager for opening and closing the ligand database (:attr:`Database.csv_lig`)."""
 
     def __enter__(self) -> DFProxy:
         """Open the :class:`.OpenLig` context manager, importing :attr:`.df`."""
