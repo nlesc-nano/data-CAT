@@ -10,6 +10,7 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 *****
 * Store the ``__version__`` of CAT, Nano-CAT and Data-CAT in the hdf5 file.
 * Store the content of the .csv file also in the .hdf5 file.
+* Reach a test coverage of >= 80%.
 
 
 0.2.0
