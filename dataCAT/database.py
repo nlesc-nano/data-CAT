@@ -365,7 +365,7 @@ class Database:
 
         with manager(write=True) as db:
             # Update **db.index**
-            db.df = even_index(db.df, df)
+            db.ndframe = even_index(db.ndframe, df)
 
             # Filter columns
             if columns is None:
