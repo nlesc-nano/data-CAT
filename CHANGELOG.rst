@@ -8,7 +8,7 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 0.2.2
 *****
-* Updated the API documentation (see ...).
+* Updated the documentation (see https://github.com/nlesc-nano/CAT/pull/123).
 
 
 0.2.1
