@@ -30,7 +30,7 @@ import pandas as pd
 from scm.plams import Settings
 from nanoutils import final
 
-from .df_collection import DFProxy
+from .df_proxy import DFProxy
 
 if TYPE_CHECKING:
     from os import PathLike  # noqa: F401
@@ -139,13 +139,15 @@ class OpenYaml(FileManagerABC[AnyStr, Settings]):
 
     """
 
-    def __enter__(self):
+    def __enter__(self) -> Settings:
         """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
         with open(self.filename, 'r', encoding='utf-8') as f:
             self._db = Settings(yaml.load(f, Loader=yaml.FullLoader))
         return self._db
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> None:
         """Close the :class:`.OpenYaml` context manager, exporting :attr:`.settings`."""
         if self.write:
             yml_dict = self._db.as_dict()
@@ -157,7 +159,7 @@ class OpenYaml(FileManagerABC[AnyStr, Settings]):
 class OpenLig(FileManagerABC[AnyStr, DFProxy]):
     """Context manager for opening and closing the ligand database (:attr:`.Database.csv_lig`)."""
 
-    def __enter__(self):
+    def __enter__(self) -> DFProxy:
         """Open the :class:`.OpenLig` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
@@ -170,7 +172,9 @@ class OpenLig(FileManagerABC[AnyStr, DFProxy]):
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
         return df
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> None:
         """Close the :class:`.OpenLig` context manager, exporting :attr:`.df`."""
         if self.write:
             self._db.to_csv(self.filename)
@@ -180,7 +184,7 @@ class OpenLig(FileManagerABC[AnyStr, DFProxy]):
 class OpenQD(FileManagerABC[AnyStr, DFProxy]):
     """Context manager for opening and closing the QD database (:attr:`.Database.csv_qd`)."""
 
-    def __enter__(self):
+    def __enter__(self) -> DFProxy:
         """Open the :class:`.OpenQD` context manager, importing :attr:`.df`."""
         # Open the .csv file
         dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
@@ -193,7 +197,9 @@ class OpenQD(FileManagerABC[AnyStr, DFProxy]):
         df.columns = pd.MultiIndex.from_tuples(idx_tups, names=df.columns.names)
         return df
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, exc_type: Optional[Type[BaseException]],
+                 exc_value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> None:
         """Close the :class:`.OpenQD` context manager, exporting :attr:`.df`."""
         if self.write:
             self._db.to_csv(self.filename)
