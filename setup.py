@@ -24,7 +24,7 @@ tests_require=[
     'pytest-flake8>=1.0.6',
     'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
-    'pytest-mypy>=0.6.1',  # .pyi stub files will require >= 0.6.2
+    'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0'
 ]
@@ -52,7 +52,7 @@ setup(
         'python-3-8',
         'automation'
     ],
-    package_data={'dataCAT': ['py.typed']},
+    package_data={'dataCAT': ['py.typed', '*.pyi']},
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
@@ -73,7 +73,7 @@ setup(
         'pandas',
         'pyyaml>=5.1',
         'pymongo',
-        'Nano-Utils',
+        'Nano-Utils>=0.4.3',
         'plams@git+https://github.com/SCM-NV/PLAMS@a5696ce62c09153a9fa67b2b03a750913e1d0924',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
