@@ -357,17 +357,18 @@ class Database:
 
             # Update **db.columns**
             bool_ar = df_columns.isin(db.columns)
+            drop_idx = []
             for i in df_columns[~bool_ar]:
                 if 'job_settings' in i[0]:
                     self._update_hdf5_settings(df, i[0])
                     del df[i]
-                    idx = df_columns.index(i)
-                    df_columns.pop(idx)
+                    drop_idx.append(i)
                     continue
                 try:
                     db[i] = np.array((None), dtype=df[i].dtype)
                 except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
                     db[i] = -1
+            df_columns = df_columns.drop(drop_idx)
 
             # Update **self.hdf5**; returns a new series of indices
             hdf5_series = self.update_hdf5(
@@ -375,7 +376,7 @@ class Database:
             )
 
             # Update **db.values**
-            db.update(df[columns], overwrite=overwrite)
+            db.update(df[df_columns], overwrite=overwrite)
             db.update(hdf5_series, overwrite=True)
             df.update(hdf5_series, overwrite=True)
             if status == 'optimized':
