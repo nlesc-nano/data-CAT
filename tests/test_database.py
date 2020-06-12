@@ -246,4 +246,4 @@ def test_update_mbongodb() -> None:
         warnings.warn("MongoDB server not found; skipping test", category=RuntimeWarning)
         return
 
-    db.update_mongodb('ligand')
+    DB.update_mongodb('ligand')
