@@ -3,6 +3,7 @@
 import copy
 import shutil
 import pickle
+from types import MappingProxyType
 from os.path import join, abspath
 from pathlib import Path
 
@@ -41,7 +42,7 @@ def test_init() -> None:
     assertion.eq(DB.hdf5.args[0], abspath(join(DB_PATH, 'structures.hdf5')))
     assertion.is_(DB.hdf5.func, h5py.File)
 
-    assertion.is_(DB.mongodb, None)
+    assertion.isinstance(DB.mongodb, (type(None), MappingProxyType))
 
 
 def test_eq() -> None:
