@@ -3,6 +3,8 @@
 import copy
 import shutil
 import pickle
+import warnings
+from types import MappingProxyType
 from os.path import join, abspath
 from pathlib import Path
 
@@ -41,7 +43,7 @@ def test_init() -> None:
     assertion.eq(DB.hdf5.args[0], abspath(join(DB_PATH, 'structures.hdf5')))
     assertion.is_(DB.hdf5.func, h5py.File)
 
-    assertion.is_(DB.mongodb, None)
+    assertion.isinstance(DB.mongodb, (type(None), MappingProxyType))
 
 
 def test_eq() -> None:
@@ -59,7 +61,7 @@ def test_eq() -> None:
 
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
-    for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb'):
+    for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5'):
         assertion.contains(db_str, str(getattr(DB, name)))
 
 
@@ -236,3 +238,12 @@ def test_update_hdf5_settinga() -> None:
                     assertion.eq(i, j)
             except StopIteration:
                 pass
+
+
+def test_update_mbongodb() -> None:
+    """Test :meth:`~dataCAT.Database.update_mbongodb`."""
+    if DB.mongodb is None:
+        warnings.warn("MongoDB server not found; skipping test", category=RuntimeWarning)
+        return
+
+    DB.update_mongodb('ligand')

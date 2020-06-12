@@ -20,12 +20,12 @@ docker exec -it mongodb bash
 ```
 
 ### Conect with the admin user
-```
+```bash
 mongo -u admin -p <previous password>
 ```
 
 ### Exit the mongo shell and the container
-```
+```bash
 exit
 exit
 ```

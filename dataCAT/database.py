@@ -183,19 +183,20 @@ class Database:
             self._hash: int = hash((cls, args, state))
             return self._hash
 
-    def __reduce__(self: ST) -> Tuple[Type[ST], Tuple[str], Optional[Mapping[str, Any]]]:
+    def __reduce__(self: ST) -> Tuple[Type[ST], Tuple[str], Optional[Dict[str, Any]]]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
-        return cls, (self.dirname,), self.mongodb
+        mongodb = self.mongodb if self.mongodb is None else dict(self.mongodb)
+        return cls, (self.dirname,), mongodb
 
-    def __setstate__(self, state: Optional[Mapping[str, Any]]) -> None:
+    def __setstate__(self, state: Optional[Dict[str, Any]]) -> None:
         """Helper for :mod:`pickle` and :meth:`~Database.__reduce__`."""
         if state is None:
             self._mongodb = None
             return
 
         try:
-            self._mongodb = _create_mongodb(**state)
+            self._mongodb = MappingProxyType(_create_mongodb(**state))
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
