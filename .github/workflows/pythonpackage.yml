@@ -37,6 +37,9 @@ jobs:
               env:
                 CONDA_PREFIX: /usr/share/miniconda
 
+            - name: Start MongoDB
+              uses: supercharge/mongodb-github-action@1.3.0
+
             - name: Conda info
               run: conda info
 
