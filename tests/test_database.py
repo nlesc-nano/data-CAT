@@ -3,6 +3,7 @@
 import copy
 import shutil
 import pickle
+import warnings
 from types import MappingProxyType
 from os.path import join, abspath
 from pathlib import Path
@@ -237,3 +238,12 @@ def test_update_hdf5_settinga() -> None:
                     assertion.eq(i, j)
             except StopIteration:
                 pass
+
+
+def test_update_mbongodb() -> None:
+    """Test :meth:`~dataCAT.Database.update_mbongodb`."""
+    if DB.mongodb is None:
+        warnings.warn("MongoDB server not found; skipping test", category=RuntimeWarning)
+        return
+
+    db.update_mongodb('ligand')
