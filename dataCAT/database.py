@@ -186,7 +186,7 @@ class Database:
     def __reduce__(self: ST) -> Tuple[Type[ST], Tuple[str], Optional[Dict[str, Any]]]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
-        mongodb = self.mongodb if self.mongodb is None else self.mongodb.copy()
+        mongodb = self.mongodb if self.mongodb is None else dict(self.mongodb)
         return cls, (self.dirname,), mongodb
 
     def __setstate__(self, state: Optional[Dict[str, Any]]) -> None:

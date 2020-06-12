@@ -60,7 +60,7 @@ def test_eq() -> None:
 
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
-    for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb'):
+    for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5'):
         assertion.contains(db_str, str(getattr(DB, name)))
 
 
