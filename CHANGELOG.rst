@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.3.0
+*****
+* Overhaul of the .pdb storage system.
+
+
 0.2.2
 *****
 * Updated the documentation (see https://github.com/nlesc-nano/CAT/pull/123).
