@@ -290,8 +290,8 @@ class PDBTuple(NamedTuple):
         # Construct the to-be returned (padded) arrays
         atom_array = np.rec.array(None, shape=atom_shape, dtype=_DTYPE_ATOM)
         bond_array = np.rec.array(None, shape=bond_shape, dtype=_DTYPE_BOND)
-        atom_counter = np.empty(mol_count, dtype=int)
-        bond_counter = np.empty(mol_count, dtype=int)
+        atom_counter = np.empty(mol_count, dtype='int32')
+        bond_counter = np.empty(mol_count, dtype='int32')
 
         # Fill the to-be returned arrays
         for i, mol in enumerate(mol_list_):
