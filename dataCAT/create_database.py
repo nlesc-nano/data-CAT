@@ -36,12 +36,14 @@ from nanoutils import Literal, PathType, VersionInfo
 from CAT.logger import logger
 from CAT import version_info as CAT_VERSION  # noqa: N812
 
+from . import version_info as DATACAT_VERSION  # noqa: N812
+from .pdb_array import DTYPE_ATOM
+
 try:
     from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
-from . import version_info as DATACAT_VERSION  # noqa: N812
 
 __all__: List[str] = []
 
@@ -158,7 +160,7 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
     # Define arguments for 2D datasets
     dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', )
-    kwargs = {'chunks': True, 'maxshape': (None, None), 'compression': 'gzip'}
+    kwargs = {'chunks': True, 'compression': 'gzip'}
 
     # Define arguments for 3D datasets
     kwargs_3d = {'chunks': True, 'maxshape': (None, None, None), 'compression': 'gzip'}
@@ -181,12 +183,36 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         # Create new 2D datasets
         iterator_2d = (name_ for name_ in dataset_names if name_ not in f)
         for name_ in iterator_2d:
-            f.create_dataset(name=name_, data=np.empty((0, 1), dtype='S80'), **kwargs)
+            grp = f.create_group(name_, track_order=True)
+            grp.attrs['__doc__'] = b"A set of groups and datasets representing `dataCAT.PDBTuple`."
+
+            atoms = grp.create_group('atoms', track_order=True)
+            for k, v in DTYPE_ATOM['dtype'].items():
+                if k == 'coords':
+                    atoms.create_dataset(name=k, shape=(0, 0, 3), maxshape=(None, None, 3), dtype=v, **kwargs)
+                else:
+                    atoms.create_dataset(name=k, shape=(0, 0), maxshape=(None, None), dtype=v, **kwargs)
+            atoms.attr['__doc__'] = b"A group representing `PDBTuple.atoms`."
+            atoms.attr['shape'] = (0, 0)
+
+            bonds = grp.create_group('bonds', track_order=True)
+            bonds.create_dataset(name='atoms', shape=(0, 0, 2), maxshape=(None, None, 2), dtype='int32', **kwargs)
+            bonds.create_dataset(name='order', shape=(0, 0), maxshape=(None, None), dtype='int8', **kwargs)
+            bonds.attr['__doc__'] = b"A group representing `PDBTuple.bonds`."
+            bonds.attr['shape'] = (0, 0)
+
+            grp.create_dataset(name='atom_count', shape=(0,), maxshape=(None,), dtype='int32', **kwargs)
+            grp.create_dataset(name='bond_count', shape=(0,), maxshape=(None,), dtype='int32', **kwargs)
+            grp['atom_count'].attr['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
+            grp['bond_count'].attr['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
+            grp['atom_count'].attr['shape'] = (0,)
+            grp['bond_count'].attr['shape'] = (0,)
 
         # Create new 3D datasets
         iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)
         for name_ in iterator_3d:
             f.create_dataset(name=name_, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
+
     return path
 
 
