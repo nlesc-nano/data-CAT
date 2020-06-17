@@ -192,21 +192,21 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
                     atoms.create_dataset(name=k, shape=(0, 0, 3), maxshape=(None, None, 3), dtype=v, **kwargs)
                 else:
                     atoms.create_dataset(name=k, shape=(0, 0), maxshape=(None, None), dtype=v, **kwargs)
-            atoms.attr['__doc__'] = b"A group representing `PDBTuple.atoms`."
-            atoms.attr['shape'] = (0, 0)
+            atoms.attrs['__doc__'] = b"A group representing `PDBTuple.atoms`."
+            atoms.attrs['shape'] = (0, 0)
 
             bonds = grp.create_group('bonds', track_order=True)
             bonds.create_dataset(name='atoms', shape=(0, 0, 2), maxshape=(None, None, 2), dtype='int32', **kwargs)
             bonds.create_dataset(name='order', shape=(0, 0), maxshape=(None, None), dtype='int8', **kwargs)
-            bonds.attr['__doc__'] = b"A group representing `PDBTuple.bonds`."
-            bonds.attr['shape'] = (0, 0)
+            bonds.attrs['__doc__'] = b"A group representing `PDBTuple.bonds`."
+            bonds.attrs['shape'] = (0, 0)
 
             grp.create_dataset(name='atom_count', shape=(0,), maxshape=(None,), dtype='int32', **kwargs)
             grp.create_dataset(name='bond_count', shape=(0,), maxshape=(None,), dtype='int32', **kwargs)
-            grp['atom_count'].attr['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
-            grp['bond_count'].attr['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
-            grp['atom_count'].attr['shape'] = (0,)
-            grp['bond_count'].attr['shape'] = (0,)
+            grp['atom_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
+            grp['bond_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
+            grp['atom_count'].attrs['shape'] = (0,)
+            grp['bond_count'].attrs['shape'] = (0,)
 
         # Create new 3D datasets
         iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)
