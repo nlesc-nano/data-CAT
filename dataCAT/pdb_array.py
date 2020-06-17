@@ -4,21 +4,22 @@ Index
 -----
 .. currentmodule:: dataCAT
 .. autosummary::
-    PDBTuple
-    PDBTuple.from_molecules
-    PDBTuple.to_molecules
+    PDBContainer
+    PDBContainer.from_molecules
+    PDBContainer.to_molecules
     DTYPE_ATOM
     DTYPE_BOND
 
 API
 ---
-.. autoclass:: PDBTuple
-.. automethod:: PDBTuple.from_molecules
-.. automethod:: PDBTuple.to_molecules
+.. autoclass:: PDBContainer
+.. automethod:: PDBContainer.from_molecules
+.. automethod:: PDBContainer.to_molecules
 .. data:: DTYPE_ATOM
-    :value: pandas.DataFrame(...)
+    :type: `Mapping[str, np.dtype]`
+    :value: ...
 
-    A :class:`pandas.DataFrame` representing the dtype of :attr:`PDBTuple.atoms`.
+    A mapping representing the dtype of :attr:`PDBContainer.atoms`.
 
     Most field names are based on to their, identically named, counterpart as produced by
     :func:`readpdb()<scm.plams.interfaces.molecule.rdkit.readpdb>`,
@@ -27,97 +28,157 @@ API
 
     There are four exception to this general rule:
 
-    * ``coords``: Based on :class:`Atom.coords<scm.plams.mol.atom.Atom>`.
+    * ``x``, ``y`` & ``z``: Based on :class:`Atom.coords<scm.plams.mol.atom.Atom>`.
     * ``symbol``: Based on :class:`Atom.symbol<scm.plams.mol.atom.Atom>`.
     * ``charge``: Based on :class:`Atom.properties.charge<scm.plams.mol.atom.Atom>`.
     * ``charge_float``: Based on :class:`Atom.properties.charge_float<scm.plams.mol.atom.Atom>`.
 
     .. code:: python
 
-        >>> from dataCAT import DTYPE_ATOM
-        >>> print(DTYPE_ATOM)  # doctest: +SKIP
-{dtype_atom}
+        mappingproxy({
+            'IsHeteroAtom': dtype('bool'),
+            'SerialNumber': dtype('int16'),
+            'Name': dtype('S4'),
+            'ResidueName': dtype('S3'),
+            'ChainId': dtype('S1'),
+            'ResidueNumber': dtype('int16'),
+            'x': dtype('float32'),
+            'y': dtype('float32'),
+            'z': dtype('float32'),
+            'Occupancy': dtype('float32'),
+            'TempFactor': dtype('float32'),
+            'symbol': dtype('S4'),
+            'charge': dtype('int8'),
+            'charge_float': dtype('float64')
+        })
 
 
 .. data:: DTYPE_BOND
-    :value: pandas.DataFrame(...)
+    :type: `Mapping[str, np.dtype]`
+    :value: ...
 
-    A :class:`pandas.DataFrame` representing the dtype of :attr:`PDBTuple.bonds`.
+    A mapping representing the dtype of :attr:`PDBContainer.bonds`.
+
+    Field names are based on to their, identically named,
+    counterpart in :class:`~scm.plams.mol.bond.Bond`.
 
     .. code:: python
 
-        >>> from dataCAT import DTYPE_BOND
-        >>> print(DTYPE_BOND)
-{dtype_bond}
+        mappingproxy({
+            'atom1': dtype('int32'),
+            'atom2': dtype('int32'),
+            'order': dtype('int8')
+        })
 
 """
 
 import textwrap
+from types import MappingProxyType
 from collections import abc
 from itertools import repeat
 from typing import (
-    List, Collection, NamedTuple, Iterable, Union, Type, TypeVar, Optional, overload, Sequence
+    List, Collection, Iterable, Union, Type, TypeVar, Optional,
+    overload, Sequence, Mapping, Tuple, Generator
 )
 
 import numpy as np
-import pandas as pd
 from scm.plams import Molecule, Atom, Bond
-from nanoutils import SupportsIndex
+from nanoutils import SupportsIndex, TypedDict
 
-__all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBTuple']
+__all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
 
-ST = TypeVar('ST', bound='PDBTuple')
+ST = TypeVar('ST', bound='PDBContainer')
 
-DTYPE_ATOM = pd.Series({
+DTYPE_ATOM: Mapping[str, np.dtype] = {
     'IsHeteroAtom': bool,
     'SerialNumber': 'int16',
     'Name': 'S4',
     'ResidueName': 'S3',
     'ChainId': 'S1',
     'ResidueNumber': 'int16',
-    'coords': 'float32',
+    'x': 'float32',
+    'y': 'float32',
+    'z': 'float32',
     'Occupancy': 'float32',
     'TempFactor': 'float32',
     'symbol': 'S4',
     'charge': 'int8',
     'charge_float': float
-}, name='dtype', dtype=object).to_frame()
-DTYPE_ATOM.index.name = 'name'
-DTYPE_ATOM['dtype'] = [np.dtype(i) for i in DTYPE_ATOM['dtype']]
-DTYPE_ATOM['shape'] = 0
-DTYPE_ATOM.at['coords', 'shape'] = 3
+}
+DTYPE_ATOM = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_ATOM.items()})
 
-#: A list representing the dtype of :attr:`PDBTuple.atoms`.
-_DTYPE_ATOM = [(i, dtype, shape or ()) for i, (dtype, shape) in DTYPE_ATOM.iterrows()]
+#: A list representing the dtype of :attr:`PDBContainer.atoms`.
+_DTYPE_ATOM = list(DTYPE_ATOM.items())
 
-DTYPE_BOND = pd.Series({
-    'atoms': 'int32',
+DTYPE_BOND: Mapping[str, np.dtype] = {
+    'atom1': 'int32',
+    'atom2': 'int32',
     'order': 'int8'
-}, name='dtype', dtype=object).to_frame()
-DTYPE_BOND.index.name = 'name'
-DTYPE_BOND['dtype'] = [np.dtype(i) for i in DTYPE_BOND['dtype']]
-DTYPE_BOND['shape'] = 0
-DTYPE_BOND.at['atoms', 'shape'] = 2
+}
+DTYPE_BOND = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_BOND.items()})
 
-#: A list representing the dtype of :attr:`PDBTuple.bonds`.
-_DTYPE_BOND = [(i, dtype, shape or ()) for i, (dtype, shape) in DTYPE_BOND.iterrows()]
+#: A list representing the dtype of :attr:`PDBContainer.bonds`.
+_DTYPE_BOND = list(DTYPE_BOND.items())
+
+_AtomTuple = Tuple[
+    bool,  # IsHeteroAtom
+    int,  # SerialNumber
+    str,  # Name
+    str,  # ResidueName
+    str,  # ChainId
+    int,  # ResidueNumber
+    float,  # x
+    float,  # y
+    float,  # z
+    float,  # Occupancy
+    float,  # TempFactor
+    str,  # symbol
+    int,  # charge
+    float  # charge_float
+]
+
+_BondTuple = Tuple[
+    int,  # atom1
+    int,  # atom2
+    int,  # order
+]
+
+PDBTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray]
+Coords = Tuple[float, float, float]
 
 
-def _get_atom_info(at: Atom, i: int):
-    """Helper function for :meth:`PDBTuple.from_molecules`: create a tuple representing a single :attr:`PDBTuple.atoms` row."""  # noqa: E501
+class _PDBInfo(TypedDict):
+    IsHeteroAtom: bool
+    SerialNumber: int
+    Name: str
+    ResidueName: str
+    ChainId: str
+    ResidueNumber: int
+    Occupancy: float
+    TempFactor: float
+
+
+class _Properties(TypedDict):
+    charge: int
+    charge_float: float
+    pdb_info: _PDBInfo
+
+
+def _get_atom_info(at: Atom, i: int) -> _AtomTuple:
+    """Helper function for :meth:`PDBContainer.from_molecules`: create a tuple representing a single :attr:`PDBContainer.atoms` row."""  # noqa: E501
     prop = at.properties
     symbol = at.symbol
     charge = prop.get('charge', 0)
 
     pdb = prop.get('pdb_info', {})
     return (
-        pdb.get('IsHeteroAtom', False),
+        pdb.get('IsHeteroAtom', False),  # type: ignore
         pdb.get('SerialNumber', i),
         pdb.get('Name', symbol),
         pdb.get('ResidueName', 'LIG'),
         pdb.get('ChainId', 'A'),
         pdb.get('ResidueNumber', 1),
-        at.coords,
+        *at.coords,
         pdb.get('Occupancy', 1.0),
         pdb.get('TempFactor', 0.0),
         symbol,
@@ -126,17 +187,17 @@ def _get_atom_info(at: Atom, i: int):
     )
 
 
-def _get_bond_info(mol: Molecule):
-    """Helper function for :meth:`PDBTuple.from_molecules`: create a tuple representing a single :attr:`PDBTuple.bonds` row."""  # noqa: E501
+def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
+    """Helper function for :meth:`PDBContainer.from_molecules`: create a tuple representing a single :attr:`PDBContainer.bonds` row."""  # noqa: E501
     mol.set_atoms_id(start=1)
-    ret = [((b.atom1.id, b.atom2.id), b.order) for b in mol.bonds]
+    ret = [(b.atom1.id, b.atom2.id, b.order) for b in mol.bonds]
     mol.unset_atoms_id()
     return ret
 
 
-def _iter_rec(atom_array: np.recarray):
+def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, Coords, str], None, None]:
     """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
-    for IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, coords, Occupancy, TempFactor, symbol, charge, charge_float in atom_array:  # noqa: E501
+    for IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float in atom_array:  # noqa: E501
         _pdb_info = {
             'IsHeteroAtom': IsHeteroAtom,
             'SerialNumber': SerialNumber,
@@ -153,14 +214,14 @@ def _iter_rec(atom_array: np.recarray):
             'charge_float': charge_float,
             'pdb_info': _pdb_info
         }
-        yield properties, tuple(coords), symbol.decode()
+        yield properties, (x, y, z), symbol.decode()  # type: ignore
 
 
 def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
                 atom_len: Optional[int] = None,
                 bond_len: Optional[int] = None,
                 mol: Optional[Molecule] = None) -> Molecule:
-    """Helper function for :meth:`PDBTuple.from_molecules`: update/create a single molecule from the passed **atom_array** and **bond_array**."""  # noqa: E501
+    """Helper function for :meth:`PDBContainer.from_molecules`: update/create a single molecule from the passed **atom_array** and **bond_array**."""  # noqa: E501
     if mol is None:
         ret = Molecule()
         for _ in range(len(atom_array[:atom_len])):
@@ -176,39 +237,59 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 
     if ret.bonds:
         ret.delete_all_bonds()
-    for (i, j), order in bond_array[:bond_len]:
+    for i, j, order in bond_array[:bond_len]:
         bond = Bond(atom1=ret[i], atom2=ret[j], order=order, mol=ret)
         ret.add_bond(bond)
     return ret
 
 
-class PDBTuple(NamedTuple):
-    """A :func:`~collections.namedtuple` for holding an array-like represention of a set of .pdb files."""  # noqa: E501
+class PDBContainer:
+    """A class for holding an array-like represention of a set of .pdb files."""  # noqa: E501
 
-    #: :class:`numpy.recarray`, shape :math:`(n, m)` : Get a padded
-    #: recarray for keeping track of all atom-related information.
-    #: See :data:`dataCAT.DTYPE_ATOM` for a comprehensive overview of
-    #: all field names, dtypes and shapes.
-    atoms: np.recarray
+    __slots__ = ('__weakref__', '_atoms', '_bonds', '_atom_count', '_bond_count')
 
-    #: :class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded
-    #: recarray for keeping track of all bond-related information.
-    #: See :data:`dataCAT.DTYPE_BOND` for a comprehensive overview of
-    #: all field names, dtypes and shapes.
-    bonds: np.recarray
+    @property
+    def atoms(self) -> np.recarray:
+        """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a padded recarray for keeping track of all atom-related information.
 
-    #: :class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray
-    #: for keeping track of the number of atoms in each molecule in :attr:`~PDBTuple.atoms`.
-    atom_count: np.ndarray
+        See :data:`dataCAT.DTYPE_ATOM` for a comprehensive overview of
+        all field names, dtypes and shapes.
 
-    #: :class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray
-    #: for keeping track of the number of atoms in each molecule in :attr:`~PDBTuple.bonds`.
-    bond_count: np.ndarray
+        """  # noqa: E501
+        return self._atoms
+
+    @property
+    def bonds(self) -> np.recarray:
+        """class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded recarray for keeping track of all bond-related information.
+
+        See :data:`dataCAT.DTYPE_BOND` for a comprehensive overview of
+        all field names, dtypes and shapes.
+
+        """  # noqa: E501
+        return self._bonds
+
+    @property
+    def atom_count(self) -> np.ndarray:
+        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
+        return self._atom_count
+
+    @property
+    def bond_count(self) -> np.ndarray:
+        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
+        return self._bond_count
+
+    def __init__(self, atoms: np.recarray, bonds: np.recarray,
+                 atom_count: np.ndarray, bond_count: np.ndarray) -> None:
+        """Initialize an instance."""
+        self._atoms = atoms
+        self._bonds = bonds
+        self._atom_count = atom_count
+        self._bond_count = bond_count
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
         try:
-            wdith = max(len(k) for k in self._fields)
+            wdith = max(len(k) for k, _ in self.items())
         except ValueError:
             return f'{self.__class__.__name__}()'
 
@@ -220,15 +301,68 @@ class PDBTuple(NamedTuple):
             return (f'{k:{wdith}} = {v.__class__.__module__}.{v.__class__.__name__}'
                     f'(..., shape={v.shape}, dtype={dtype})')
 
-        ret = ',\n'.join(_str(k, v) for k, v in zip(self._fields, self))
+        ret = ',\n'.join(_str(k, v) for k, v in self.items())
         indent = 4 * ' '
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
+
+    def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
+        """Helper for :mod:`pickle`."""
+        cls = type(self)
+        return cls, tuple(self.items())  # type: ignore
+
+    def __getitem__(self: ST, key: Union[int, Sequence[int], slice, np.ndarray]) -> ST:
+        """Implement :func:`self[key]<object.__getitem__>`.
+
+        Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
+        Follows the standard NumPy broadcasting rules;
+        whether or not the to-be returned value is a deep or shallow thus depends on **key**
+
+        """
+        cls = type(self)
+        return cls(*self.items())
+
+    def items(self) -> Generator[Tuple[str, Union[np.ndarray, np.recarray]], None, None]:
+        """Iterator over this intances attribute name/value pairs.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+            >>> from dataCAT import PDBContainer
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
+            >>> pdb_container = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
+            >>> for name, value in pdb_container.items():
+            ...     print(name, '=', object.__repr__(value))  # doctest: +ELLIPSIS
+            atoms = <numpy.recarray object at ...>
+            bonds = <numpy.recarray object at ...>
+            atom_count = <numpy.ndarray object at ...>
+            bond_count = <numpy.ndarray object at ...>
+
+        Yields
+        ------
+        :class:`str` and :class:`numpy.ndarray` / :class:`numpy.recarray`
+            Attribute names and values.
+
+        """
+        cls = type(self)
+        return ((name.strip('_'), getattr(self, name)) for name in cls.__slots__[1:])
 
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
                        min_atom: int = 0,
                        min_bond: int = 0) -> ST:
-        """Convert an iterable or sequence of molecules into a new :class:`PDBTuple` instance.
+        """Convert an iterable or sequence of molecules into a new :class:`PDBContainer` instance.
 
         Examples
         --------
@@ -244,16 +378,16 @@ class PDBTuple(NamedTuple):
         .. code:: python
 
             >>> from typing import List
-            >>> from dataCAT import PDBTuple
+            >>> from dataCAT import PDBContainer
             >>> from scm.plams import readpdb, Molecule
 
             >>> mol_list: List[Molecule] = [readpdb(...), ...]  # doctest: +SKIP
-            >>> PDBTuple.from_molecules(mol_list)
-            PDBTuple(
+            >>> PDBContainer.from_molecules(mol_list)
+            PDBContainer(
                 atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
-                atom_count = numpy.ndarray(..., shape=(23,), dtype=int64),
-                bond_count = numpy.ndarray(..., shape=(23,), dtype=int64)
+                atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
             )
 
         Parameters
@@ -261,13 +395,13 @@ class PDBTuple(NamedTuple):
         mol_list : :class:`Iterable[Molecule]<typing.Iterable>`
             An iterable consisting of PLAMS molecules.
         min_atom : :class:`int`
-            The minimum number of atoms which :attr:`PDBTuple.atoms` should accomodate.
+            The minimum number of atoms which :attr:`PDBContainer.atoms` should accomodate.
         min_bond : :class:`int`
-            The minimum number of atoms which :attr:`PDBTuple.bonds` should accomodate.
+            The minimum number of atoms which :attr:`PDBContainer.bonds` should accomodate.
 
         Returns
         -------
-        :class:`PDBTuple`
+        :class:`PDBContainer`
             A new namedtuple.
 
         """
@@ -323,30 +457,30 @@ class PDBTuple(NamedTuple):
             >>> import os
             >>> from pathlib import Path
             >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBTuple
+            >>> from dataCAT import PDBContainer
 
             >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
 
             >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
             >>> mol1 = mol_list[2]
             >>> mol_list1 = mol_list[:3]
-            >>> pdb_tup = PDBTuple.from_molecules(mol_list)
+            >>> pdb_container = PDBContainer.from_molecules(mol_list)
 
         An example where one or more new molecules are created.
 
         .. code:: python
 
-            >>> from dataCAT import PDBTuple
+            >>> from dataCAT import PDBContainer
             >>> from scm.plams import Molecule
 
-            >>> pdb_tup = PDBTuple(...)  # doctest: +SKIP
+            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
 
-            # Create a single new molecule from `pdb_tup`
-            >>> pdb_tup.to_molecules(idx=0)  # doctest: +ELLIPSIS
+            # Create a single new molecule from `pdb_container`
+            >>> pdb_container.to_molecules(idx=0)  # doctest: +ELLIPSIS
             <scm.plams.mol.molecule.Molecule object at ...>
 
-            # Create three new molecules from `pdb_tup`
-            >>> pdb_tup.to_molecules(idx=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
+            # Create three new molecules from `pdb_container`
+            >>> pdb_container.to_molecules(idx=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
             [<scm.plams.mol.molecule.Molecule object at ...>,
              <scm.plams.mol.molecule.Molecule object at ...>]
 
@@ -354,15 +488,15 @@ class PDBTuple(NamedTuple):
 
         .. code:: python
 
-            # Update `mol` with the info from `pdb_tup`
+            # Update `mol` with the info from `pdb_container`
             >>> mol1 = Molecule(...)  # doctest: +SKIP
-            >>> mol2 = pdb_tup.to_molecules(idx=2, mol=mol1)
+            >>> mol2 = pdb_container.to_molecules(idx=2, mol=mol1)
             >>> mol1 is mol2
             True
 
-            # Update all molecules in `mol_list` with info from `pdb_tup`
+            # Update all molecules in `mol_list` with info from `pdb_container`
             >>> mol_list1 = [Molecule(...), Molecule(...), Molecule(...)]  # doctest: +SKIP
-            >>> mol_list2 = pdb_tup.to_molecules(idx=range(3), mol=mol_list)
+            >>> mol_list2 = pdb_container.to_molecules(idx=range(3), mol=mol_list)
             >>> for m1, m2 in zip(mol_list1, mol_list2):
             ...     print(m1 is m2)
             True
@@ -417,9 +551,3 @@ class PDBTuple(NamedTuple):
 
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
         return [_rec_to_mol(*args) for args in iterator]
-
-
-__doc__ = __doc__.format(
-    dtype_atom=textwrap.indent(repr(DTYPE_ATOM), 8 * ' '),
-    dtype_bond=textwrap.indent(repr(DTYPE_BOND), 8 * ' ')
-)
