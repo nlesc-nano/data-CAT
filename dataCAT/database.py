@@ -500,35 +500,28 @@ class Database:
         return ret
 
     @staticmethod
-    def _update_hdf5_shape(group: h5py.Group, pdb_tup: PDBTuple) -> None:
-        for name, ar in zip(pdb_tup._fields, pdb_tup):
+    def _update_hdf5_shape(group: h5py.Group, pdb: PDBContainer,
+                           mol_count: Optional[int] = None) -> None:
+        for name, ar in pdb.items():
             # This is actually a dataset (not a group) for atom_count and bond_count
             sub_group = group[name]
-            try:
-                i, j = ar.shape
-                ndim2 = True
-            except ValueError:  # For the 1D arrays
-                i = len(ar)
-                ndim2 = False
 
             # Identify the new shape of all datasets
             shape: np.ndarray = sub_group.attrs['shape']
-            shape[0] += i
-            if ndim2:
-                shape[1] = max(shape[1], j)
+            shape[0] += len(ar) if mol_count is None else mol_count
+            if ar.ndim == 2:
+                shape[1] = max(shape[1], ar.shape[1])
             sub_group.attrs['shape'] = shape
-            shape_tup = tuple(shape)
 
             # Construct an appropiate iterable yielding dataset names and the datasets itself
             if name in {'atoms', 'bomds'}:
-                iterable = sub_group.items()
+                dataset_iter = sub_group.values()
             else:
-                iterable = [(slice(None), sub_group)]
+                dataset_iter = [sub_group]
 
             # Update the dataset shape
-            k = len(shape)
-            for field_name, dataset in iterable:
-                dataset.shape = shape_tup + dataset.shape[k:]
+            for dataset in dataset_iter:
+                dataset.shape = shape
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
