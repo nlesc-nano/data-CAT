@@ -183,6 +183,9 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         # Create new 2D datasets
         iterator_2d = (name_ for name_ in dataset_names if name_ not in f)
         for name_ in iterator_2d:
+            if name_ in f:
+                continue
+
             grp = f.create_group(name_, track_order=True)
             grp.attrs['__doc__'] = b"A set of groups and datasets representing `dataCAT.PDBTuple`."
 
@@ -198,10 +201,8 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             bonds.attrs['__doc__'] = b"A group representing `PDBTuple.bonds`."
             bonds.attrs['shape'] = (0, 0)
 
-            grp.create_dataset(name='atom_count', shape=(0,), maxshape=(None,),
-                               dtype='int32', **kwargs)
-            grp.create_dataset(name='bond_count', shape=(0,), maxshape=(None,),
-                               dtype='int32', **kwargs)
+            grp.create_dataset(name='atom_count', shape=(0,), maxshape=(None,), dtype='int32')
+            grp.create_dataset(name='bond_count', shape=(0,), maxshape=(None,), dtype='int32')
             grp['atom_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
             grp['bond_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
             grp['atom_count'].attrs['shape'] = (0,)
@@ -210,6 +211,8 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         # Create new 3D datasets
         iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)
         for name_ in iterator_3d:
+            if name_ in f:
+                continue
             f.create_dataset(name=name_, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
 
     return path

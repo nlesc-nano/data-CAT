@@ -78,12 +78,19 @@ from collections import abc
 from itertools import repeat
 from typing import (
     List, Collection, Iterable, Union, Type, TypeVar, Optional,
-    overload, Sequence, Mapping, Tuple, Generator
+    overload, Sequence, Mapping, Tuple, Generator, TYPE_CHECKING
 )
 
 import numpy as np
 from scm.plams import Molecule, Atom, Bond
-from nanoutils import SupportsIndex, TypedDict
+from nanoutils import SupportsIndex, TypedDict, Literal
+
+from .functions import update_pdb_shape, update_pdb_values, append_pdb_values
+
+if TYPE_CHECKING:
+    from h5py import Group
+else:
+    Group = 'h5py.Group'
 
 __all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
 
@@ -243,6 +250,10 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
     return ret
 
 
+Hdf5Mode = Literal['append', 'update']
+IndexLike = Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]
+
+
 class PDBContainer:
     """A class for holding an array-like represention of a set of .pdb files."""  # noqa: E501
 
@@ -253,7 +264,7 @@ class PDBContainer:
         """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a padded recarray for keeping track of all atom-related information.
 
         See :data:`dataCAT.DTYPE_ATOM` for a comprehensive overview of
-        all field names, dtypes and shapes.
+        all field names and dtypes.
 
         """  # noqa: E501
         return self._atoms
@@ -263,7 +274,7 @@ class PDBContainer:
         """class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded recarray for keeping track of all bond-related information.
 
         See :data:`dataCAT.DTYPE_BOND` for a comprehensive overview of
-        all field names, dtypes and shapes.
+        all field names and dtypes.
 
         """  # noqa: E501
         return self._bonds
@@ -319,7 +330,8 @@ class PDBContainer:
 
         """
         cls = type(self)
-        return cls(*self.items())
+        iterator = (ar[key] for _, ar in self.items())
+        return cls(*iterator)
 
     def items(self) -> Generator[Tuple[str, Union[np.ndarray, np.recarray]], None, None]:
         """Iterator over this intances attribute name/value pairs.
@@ -551,3 +563,54 @@ class PDBContainer:
 
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
         return [_rec_to_mol(*args) for args in iterator]
+
+    def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append', idx: IndexLike = None) -> None:
+        """Export **self** to the specified hdf5 **group**.
+
+        Parameters
+        ----------
+        group : :class:`h5py.Group`
+            The to-be updated/appended h5py group.
+        mode : :class:`str`
+            Whether to append or update the passed **group**.
+            Accepted values are ``"append"`` and ``"update"``.
+        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+            An object for slicing all datasets in **self** and **group**.
+            Note that, contrary to numpy, if a sequence of integers is provided
+            then they'll have to ordered.
+
+        """
+        index = slice(None) if idx is None else idx
+        pdb = self[index]
+
+        if mode == 'append':
+            update_pdb_shape(group, pdb)
+            append_pdb_values(group, pdb)
+        elif mode == 'update':
+            update_pdb_values(group, pdb, index)
+        else:
+            raise ValueError(repr(mode))
+
+    @classmethod
+    def from_hdf5(cls: Type[ST], group: Group, idx: IndexLike = None) -> ST:
+        """Construct a new PDBContainer from the passed hdf5 **group**.
+
+        Parameters
+        ----------
+        group : :class:`h5py.Group`
+            The to-be read h5py group.
+        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+            An object for slicing all datasets in **group**.
+
+        Returns
+        -------
+        :class:`dataCAT.PDBContainer`
+            A new PDBContainer constructed from **group**.
+
+        """
+        index = slice(None) if idx is None else idx
+        atom_count = group['atom_count'][index]
+        bond_count = group['bond_count'][index]
+        atoms = ...
+        bonds = ...
+        return cls(atoms=atoms, bonds=bonds, atom_count=atom_count, bond_count=bond_count)

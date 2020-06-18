@@ -15,7 +15,7 @@ API
 
 import reprlib
 import textwrap
-from os import getcwd
+from os import getcwd, PathLike
 from os.path import abspath
 from time import sleep
 from types import MappingProxyType
@@ -23,7 +23,7 @@ from functools import partial
 from itertools import count
 from typing import (
     Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, TYPE_CHECKING, Tuple, Type
+    overload, Tuple, Type
 )
 
 import h5py
@@ -41,15 +41,8 @@ from CAT.workflows import HDF5_INDEX, OPT, MOL
 
 from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
 from .context_managers import OpenYaml, OpenLig, OpenQD
-from .database_functions import (
-    df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings, as_pdb_array
-)
-
-if TYPE_CHECKING:
-    from os import PathLike  # noqa: F401
-    from .pdb_array import PDBContainer
-else:
-    PDBContainer = 'dataCAT.PDBContainer'
+from .functions import df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings
+from .pdb_array import PDBContainer
 
 __all__ = ['Database']
 
@@ -480,17 +473,15 @@ class Database:
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+', libver='latest') as f:
-            i, j = f[database].shape
 
             if new.any():
-                pdb_array = as_pdb_array(df[MOL][new.index], min_size=j)
+                pdb_new = PDBContainer.from_molecules(df[MOL][new.index])
+                pdb_new.to_hdf5(f[database], mode='append')
 
-                # Reshape and update **self.hdf5**
-                k = i + pdb_array.shape[0]
-                f[database].shape = k, pdb_array.shape[1]
-                f[database][i:k] = pdb_array
+                i = len(f[database]['atoms'])
+                j = i + len(pdb_new.atoms)
+                ret = pd.Series(np.arange(i, j), index=new.index, name=HDF5_INDEX)
 
-                ret = pd.Series(np.arange(i, k), index=new.index, name=HDF5_INDEX)
                 df.update(ret, overwrite=True)
                 if opt:
                     df.loc[new.index, OPT] = True
@@ -499,40 +490,14 @@ class Database:
 
             # If **overwrite** is *True*
             if overwrite and old.any():
-                ar = as_pdb_array(df[MOL][old.index], min_size=j)
+                idx = np.argsort(old)
+                pdb_old = PDBContainer.from_molecules(df[MOL][old.index[idx]])
 
                 # Ensure that the hdf5 indices are sorted
-                idx = np.argsort(old)
-                old = old[idx]
-                f[database][old] = ar[idx]
+                pdb_old.to_hdf5(f[database], mode='update', idx=old[idx])
                 if opt:
                     df.loc[idx.index, OPT] = True
-
         return ret
-
-    @staticmethod
-    def _update_hdf5_shape(group: h5py.Group, pdb: PDBContainer,
-                           mol_count: Optional[int] = None) -> None:
-        for name, ar in pdb.items():
-            # This is actually a dataset (not a group) for atom_count and bond_count
-            sub_group = group[name]
-
-            # Identify the new shape of all datasets
-            shape: np.ndarray = sub_group.attrs['shape']
-            shape[0] += len(ar) if mol_count is None else mol_count
-            if ar.ndim == 2:
-                shape[1] = max(shape[1], ar.shape[1])
-            sub_group.attrs['shape'] = shape
-
-            # Construct an appropiate iterable yielding dataset names and the datasets itself
-            if name in {'atoms', 'bomds'}:
-                dataset_iter = sub_group.values()
-            else:
-                dataset_iter = [sub_group]
-
-            # Update the dataset shape
-            for dataset in dataset_iter:
-                dataset.shape = shape
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""

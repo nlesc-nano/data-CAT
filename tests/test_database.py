@@ -17,7 +17,7 @@ from nanoutils import delete_finally
 from assertionlib import assertion
 from CAT.workflows import MOL, HDF5_INDEX, OPT, V_BULK, JOB_SETTINGS_CDFT
 
-from dataCAT.database_functions import as_pdb_array
+from dataCAT.functions import as_pdb_array
 from dataCAT import Database, OpenLig, OpenQD, OpenYaml
 
 PATH = Path('tests') / 'test_files'
