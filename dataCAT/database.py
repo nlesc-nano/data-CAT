@@ -499,30 +499,6 @@ class Database:
                     df.loc[old.index, OPT] = True
         return ret
 
-    @staticmethod
-    def _update_hdf5_shape(group: h5py.Group, pdb: PDBContainer,
-                           mol_count: Optional[int] = None) -> None:
-        for name, ar in pdb.items():
-            # This is actually a dataset (not a group) for atom_count and bond_count
-            sub_group = group[name]
-
-            # Identify the new shape of all datasets
-            shape: np.ndarray = sub_group.attrs['shape']
-            shape[0] += len(ar) if mol_count is None else mol_count
-            if ar.ndim == 2:
-                shape[1] = max(shape[1], ar.shape[1])
-            sub_group.attrs['shape'] = shape
-
-            # Construct an appropiate iterable yielding dataset names and the datasets itself
-            if name in {'atoms', 'bomds'}:
-                dataset_iter = sub_group.values()
-            else:
-                dataset_iter = [sub_group]
-
-            # Update the dataset shape
-            for dataset in dataset_iter:
-                dataset.shape = shape
-
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
