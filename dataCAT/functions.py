@@ -2,7 +2,7 @@
 
 Index
 -----
-.. currentmodule:: dataCAT.database_functions
+.. currentmodule:: dataCAT.functions
 .. autosummary::
     mol_to_file
     _get_unflattend
@@ -12,6 +12,9 @@ Index
     from_pdb_array
     sanitize_yaml_settings
     even_index
+    update_pdb_shape
+    update_pdb_values
+    append_pdb_value
 
 API
 ---
@@ -23,11 +26,15 @@ API
 .. autofunction:: from_pdb_array
 .. autofunction:: sanitize_yaml_settings
 .. autofunction:: even_index
+.. autofunction:: update_pdb_shape
+.. autofunction:: update_pdb_values
+.. autofunction:: append_pdb_value
 
 """
 
+from types import MappingProxyType
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Dict, Any, Hashable
+    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, Hashable, TYPE_CHECKING
 )
 
 import numpy as np
@@ -35,11 +42,18 @@ import pandas as pd
 
 from scm.plams import Molecule, Settings
 import scm.plams.interfaces.molecule.rdkit as molkit
-
 from rdkit import Chem
 from rdkit.Chem import Mol
 
+from nanoutils import SupportsIndex
 from CAT.utils import get_template
+
+if TYPE_CHECKING:
+    from h5py import Group
+    from .pdb_array import PDBContainer
+else:
+    Group = 'h5py.Group'
+    PDBContainer = 'dataCAT.PDBContainer'
 
 __all__ = ['df_to_mongo_dict']
 
@@ -128,12 +142,12 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
 
 #: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
-DTYPE_DICT: Dict[np.dtype, Any] = {
+DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
     np.dtype('int'): -1,
     np.dtype('float'): np.nan,
     np.dtype('O'): None,
     np.dtype('bool'): False
-}
+})
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
@@ -303,3 +317,98 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     idx = df2.index[~bool_ar]
     df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
     return df1.append(df_tmp, sort=True)
+
+
+PDB_2D = frozenset({'atoms', 'bomds'})
+
+
+def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
+    """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be reshape h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for updating **group**.
+
+    """
+    for name, ar in pdb.items():
+        # This is actually a dataset (not a group) for 'atom_count' and 'bond_count'
+        sub_group = group[name]
+
+        # Identify the new shape of all datasets
+        shape: np.ndarray = sub_group.attrs['shape']
+        shape[0] += len(ar)
+        if name in PDB_2D:
+            shape[1] = max(shape[1], ar.shape[1])
+        sub_group.attrs['shape'] = shape
+
+        # Construct an appropiate iterable yielding dataset names and the datasets itself
+        if name in PDB_2D:
+            dataset_iter = sub_group.values()
+        else:
+            dataset_iter = [sub_group]
+
+        # Update the dataset shape
+        for dataset in dataset_iter:
+            dataset.shape = shape
+
+
+def update_pdb_values(group: Group, pdb: PDBContainer,
+                      idx: Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]) -> None:
+    """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
+
+    Follows the standard broadcasting rules as employed by h5py.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be updated h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for updating **group**.
+    idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+        An object for slicing all datasets in **group**.
+        Note that, contrary to numpy, if a sequence of integers is provided
+        then they'll have to ordered.
+
+    """
+    index = slice(None) if idx is None else idx
+
+    for name, ar in pdb.items():
+        sub_group = group[name]
+
+        if name in PDB_2D:
+            sub_group[index] = ar  # This is actually a dataset
+            continue
+
+        _, j = ar.shape
+        iterator = ((k, sub_group[k], ar[k]) for k in ar.fields)
+        for k, dataset, sub_ar in iterator:
+            dataset[index, :j] = sub_ar
+
+
+def append_pdb_values(group: Group, pdb: PDBContainer) -> None:
+    """Append all datasets in **group** positioned with its counterpart from **pdb**.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be appended h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for appending **group**.
+
+    """
+    update_pdb_shape(group, pdb)
+    for name, ar in pdb.items():
+        sub_group = group[name]
+
+        if name in PDB_2D:
+            i = len(ar)
+            sub_group[-i:] = ar  # This is actually a dataset
+            continue
+
+        i, j = ar.shape
+        iterator = ((k, sub_group[k], ar[k]) for k in ar.fields)
+        for k, dataset, sub_ar in iterator:
+            dataset[-i:, :j] = sub_ar
