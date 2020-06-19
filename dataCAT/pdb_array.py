@@ -257,11 +257,11 @@ IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
 class PDBContainer:
     """A class for holding an array-like represention of a set of .pdb files."""  # noqa: E501
 
-    __slots__ = ('__weakref__', '_atoms', '_bonds', '_atom_count', '_bond_count')
+    __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
 
     @property
     def atoms(self) -> np.recarray:
-        """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a padded recarray for keeping track of all atom-related information.
+        """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a read-only padded recarray for keeping track of all atom-related information.
 
         See :data:`dataCAT.DTYPE_ATOM` for a comprehensive overview of
         all field names and dtypes.
@@ -271,7 +271,7 @@ class PDBContainer:
 
     @property
     def bonds(self) -> np.recarray:
-        """:class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded recarray for keeping track of all bond-related information.
+        """:class:`numpy.recarray`, shape :math:`(n, k)` : Get a read-only padded recarray for keeping track of all bond-related information.
 
         Note that all atomic indices are 1-based.
 
@@ -283,12 +283,12 @@ class PDBContainer:
 
     @property
     def atom_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
+        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
         return self._atom_count
 
     @property
     def bond_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get an ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
+        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
         return self._bond_count
 
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
@@ -298,13 +298,12 @@ class PDBContainer:
         self._bonds = bonds
         self._atom_count = atom_count
         self._bond_count = bond_count
+        for _, ar in self.items():
+            ar.setflags(write=False)
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        try:
-            wdith = max(len(k) for k, _ in self.items())
-        except ValueError:
-            return f'{self.__class__.__name__}()'
+        wdith = max(len(k) for k, _ in self.items())
 
         def _str(k, v):
             if isinstance(v, np.recarray):
@@ -319,21 +318,169 @@ class PDBContainer:
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
 
     def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
-        """Helper for :mod:`pickle`."""
+        """Helper for :mod:`pickle`.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> import pickle
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+
+            >>> pdb_bytes = pickle.dumps(pdb)
+            >>> pdb_copy = pickle.loads(pdb_bytes)
+            >>> pdb == pdb_copy
+            True
+
+        """
         cls = type(self)
-        return cls, tuple(self.items())  # type: ignore
+        return cls, tuple(ar for _, ar in self.items())  # type: ignore
 
     def __len__(self) -> int:
         """Implement :func:`len(self)<len>`."""
         # Note that all four arrays in PDBContainer are of the same length
         return len(self.atom_count)
 
+    def __eq__(self, value: object) -> bool:
+        """Implement :meth:`self == value<object.__eq__>`.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb == pdb[:]
+            True
+
+        """
+        if type(self) is not type(value):
+            return False
+        elif hash(self) != hash(value):
+            return False
+
+        iterator = ((v, getattr(value, k)) for k, v in self.items())
+        return all([np.all(ar1 == ar2) for ar1, ar2 in iterator])
+
+    def __hash__(self) -> int:
+        """Implement :func:`hash(self)<hash>`.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> hash(pdb) == hash(pdb[:])
+            True
+
+        """
+        try:
+            return self._hash
+        except AttributeError:
+            args = []
+
+            # The hash of each individual array consists of its shape appended
+            # with the array's first and last element along axis 0
+            for _, ar in self.items():
+                i = len(ar) - 1
+                first_and_last = ar[0:i] if ar.ndim == 1 else ar[0:i, 0]
+                args.append(ar.shape + tuple(first_and_last))
+
+            cls = type(self)
+            self._hash: int = hash((cls, tuple(args)))
+            return self._hash
+
     def __getitem__(self: ST, key: IndexLike) -> ST:
         """Implement :func:`self[key]<object.__getitem__>`.
 
         Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
-        Follows the standard NumPy broadcasting rules;
-        whether or not the to-be returned value is a deep or shallow thus depends on **key**
+        Follows the standard NumPy broadcasting rules:
+        if an integer or slice is passed then a view is returned;
+        otherwise a copy will be created.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> print(pdb)
+            PDBContainer(
+                atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
+                bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
+                atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
+            )
+
+            >>> pdb[0]
+            PDBContainer(
+                atoms      = numpy.recarray(..., shape=(1, 76), dtype=...),
+                bonds      = numpy.recarray(..., shape=(1, 75), dtype=...),
+                atom_count = numpy.ndarray(..., shape=(1,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(1,), dtype=int32)
+            )
+
+            >>> pdb[:10]
+            PDBContainer(
+                atoms      = numpy.recarray(..., shape=(10, 76), dtype=...),
+                bonds      = numpy.recarray(..., shape=(10, 75), dtype=...),
+                atom_count = numpy.ndarray(..., shape=(10,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(10,), dtype=int32)
+            )
+
+            >>> pdb[[0, 5, 7, 9, 10]]
+            PDBContainer(
+                atoms      = numpy.recarray(..., shape=(5, 76), dtype=...),
+                bonds      = numpy.recarray(..., shape=(5, 75), dtype=...),
+                atom_count = numpy.ndarray(..., shape=(5,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(5,), dtype=int32)
+            )
 
         """
         cls = type(self)
@@ -381,7 +528,7 @@ class PDBContainer:
 
         """
         cls = type(self)
-        return ((name.strip('_'), getattr(self, name)) for name in cls.__slots__[1:])
+        return ((name.strip('_'), getattr(self, name)) for name in cls.__slots__[2:])
 
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
