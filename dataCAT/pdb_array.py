@@ -11,7 +11,7 @@ Index
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, from_molecules, to_molecules, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, items, from_molecules, to_molecules, from_hdf5, to_hdf5
 
 .. data:: DTYPE_ATOM
     :type: Mapping[str, np.dtype]
@@ -362,7 +362,10 @@ class PDBContainer:
             # with the array's first and last element along axis 0
             for _, ar in self.items():
                 i = len(ar) - 1
-                first_and_last = ar[0:i] if ar.ndim == 1 else ar[0:i, 0]
+                try:
+                    first_and_last = ar[0::i] if ar.ndim == 1 else ar[0::i, 0]
+                except IndexError:
+                    first_and_last = ()
                 args.append(ar.shape + tuple(first_and_last))
 
             cls = type(self)
