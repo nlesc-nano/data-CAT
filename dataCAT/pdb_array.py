@@ -317,33 +317,7 @@ class PDBContainer:
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
 
     def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
-        """Helper for :mod:`pickle`.
-
-        Examples
-        --------
-        .. testsetup:: python
-
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
-
-        .. code:: python
-
-            >>> import pickle
-            >>> from dataCAT import PDBContainer
-
-            >>> pdb = PDBContainer(...)  # doctest: +SKIP
-
-            >>> pdb_bytes = pickle.dumps(pdb)
-            >>> pdb_copy = pickle.loads(pdb_bytes)
-            >>> pdb == pdb_copy
-            True
-
-        """
+        """Helper for :mod:`pickle`."""
         cls = type(self)
         return cls, tuple(ar for _, ar in self.items())  # type: ignore
 
@@ -368,29 +342,7 @@ class PDBContainer:
         return len(self.atom_count)
 
     def __eq__(self, value: object) -> bool:
-        """Implement :meth:`self == value<object.__eq__>`.
-
-        Examples
-        --------
-        .. testsetup:: python
-
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
-
-        .. code:: python
-
-            >>> from dataCAT import PDBContainer
-
-            >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> pdb == pdb[:]
-            True
-
-        """
+        """Implement :meth:`self == value<object.__eq__>`."""
         if type(self) is not type(value):
             return False
         elif hash(self) != hash(value):
@@ -400,29 +352,7 @@ class PDBContainer:
         return all([np.all(ar1 == ar2) for ar1, ar2 in iterator])
 
     def __hash__(self) -> int:
-        """Implement :func:`hash(self)<hash>`.
-
-        Examples
-        --------
-        .. testsetup:: python
-
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
-
-        .. code:: python
-
-            >>> from dataCAT import PDBContainer
-
-            >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> hash(pdb) == hash(pdb[:])
-            True
-
-        """
+        """Implement :func:`hash(self)<hash>`."""
         try:
             return self._hash
         except AttributeError:
