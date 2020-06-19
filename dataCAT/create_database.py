@@ -22,7 +22,6 @@ API
 
 """
 
-import warnings
 from os import PathLike
 from os.path import join, isfile
 from typing import Dict, Any, List, Union, AnyStr, overload
