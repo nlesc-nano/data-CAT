@@ -23,3 +23,16 @@ def test_pickle() -> None:
     for name, ar1 in pdb_copy.items():
         ar2 = getattr(PDB, name)
         np.testing.assert_array_equal(ar1, ar2, err_msg=name)
+    assert PDB == pdb_copy
+
+
+def test_eq() -> None:
+    """Test pickle."""
+    pdb2 = PDB[:]
+
+    assert type(PDB) is type(pdb2)
+    assert hash(PDB) == hash(pdb2)
+    for name, ar1 in pdb2.items():
+        ar2 = getattr(PDB, name)
+        np.testing.assert_array_equal(ar1, ar2, err_msg=name)
+    assert PDB == pdb2
