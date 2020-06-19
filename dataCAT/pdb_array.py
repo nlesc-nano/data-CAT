@@ -5,16 +5,14 @@ Index
 .. currentmodule:: dataCAT
 .. autosummary::
     PDBContainer
-    PDBContainer.from_molecules
-    PDBContainer.to_molecules
     DTYPE_ATOM
     DTYPE_BOND
 
 API
 ---
 .. autoclass:: PDBContainer
-.. automethod:: PDBContainer.from_molecules
-.. automethod:: PDBContainer.to_molecules
+    :members: __getitem__, __len__, from_molecules, to_molecules, from_hdf5, to_hdf5
+
 .. data:: DTYPE_ATOM
     :type: `Mapping[str, np.dtype]`
     :value: ...
@@ -78,7 +76,7 @@ from types import MappingProxyType
 from collections import abc
 from itertools import repeat
 from typing import (
-    List, Collection, Iterable, Union, Type, TypeVar, Optional,
+    List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, TYPE_CHECKING
 )
 
@@ -255,7 +253,7 @@ IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
 
 
 class PDBContainer:
-    """A class for holding an array-like represention of a set of .pdb files."""  # noqa: E501
+    """An immutable class for holding array-like representions of a set of .pdb files."""
 
     __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
 
@@ -298,6 +296,7 @@ class PDBContainer:
         self._bonds = bonds
         self._atom_count = atom_count
         self._bond_count = bond_count
+
         for _, ar in self.items():
             ar.setflags(write=False)
 
@@ -348,9 +347,24 @@ class PDBContainer:
         cls = type(self)
         return cls, tuple(ar for _, ar in self.items())  # type: ignore
 
+    def __copy__(self: ST) -> ST:
+        """Implement :func:`copy.copy(self)<copy.copy>`."""
+        return self  # self is immutable
+
+    def __deepcopy__(self: ST, memo: Optional[Dict[int, Any]] = None) -> ST:
+        """Implement :func:`copy.deepcopy(self, memo=memo)<copy.deepcopy>`."""
+        return self  # self is immutable
+
     def __len__(self) -> int:
-        """Implement :func:`len(self)<len>`."""
-        # Note that all four arrays in PDBContainer are of the same length
+        """Implement :func:`len(self)<len>`.
+
+        Returns
+        -------
+        :class:`int`
+            Returns the length of the arrays embedded within this instance
+            (which are all of the same length).
+
+        """
         return len(self.atom_count)
 
     def __eq__(self, value: object) -> bool:
@@ -430,8 +444,8 @@ class PDBContainer:
 
         Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
         Follows the standard NumPy broadcasting rules:
-        if an integer or slice is passed then a view is returned;
-        otherwise a copy will be created.
+        if an integer or slice is passed then a shallow copy is returned;
+        otherwise a deep copy will be created.
 
         Examples
         --------
@@ -481,6 +495,16 @@ class PDBContainer:
                 atom_count = numpy.ndarray(..., shape=(5,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(5,), dtype=int32)
             )
+
+        Parameters
+        ----------
+        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence> or :class:`slice`
+            An object for slicing arrays along :code:`axis=0`.
+
+        Returns
+        -------
+        :class:`dataCAT.PDBContainer`
+            A shallow or deep copy of a slice of this instance.
 
         """
         cls = type(self)

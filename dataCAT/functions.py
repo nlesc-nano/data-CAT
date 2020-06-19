@@ -4,12 +4,8 @@ Index
 -----
 .. currentmodule:: dataCAT.functions
 .. autosummary::
-    mol_to_file
-    _get_unflattend
     df_to_mongo_dict
     get_nan_row
-    as_pdb_array
-    from_pdb_array
     sanitize_yaml_settings
     even_index
     update_pdb_shape
@@ -18,12 +14,8 @@ Index
 
 API
 ---
-.. autofunction:: mol_to_file
-.. autofunction:: _get_unflattend
 .. autofunction:: df_to_mongo_dict
 .. autofunction:: get_nan_row
-.. autofunction:: as_pdb_array
-.. autofunction:: from_pdb_array
 .. autofunction:: sanitize_yaml_settings
 .. autofunction:: even_index
 .. autofunction:: update_pdb_shape
@@ -32,6 +24,7 @@ API
 
 """
 
+import warnings
 from types import MappingProxyType
 from typing import (
     Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, Hashable, TYPE_CHECKING
@@ -194,6 +187,9 @@ def as_pdb_array(mol_list: Collection[Molecule],
         An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
 
     """
+    msg = DeprecationWarning("'as_pdb_array()' is deprecated")
+    warnings.warn(msg, stacklevel=2)
+
     def _get_value(mol: Molecule) -> Tuple[List[str], int]:
         """Return a partially deserialized .pdb file and the length of aforementioned file."""
         ret = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
@@ -228,6 +224,9 @@ def from_pdb_array(array: np.ndarray,
         A PLAMS or RDKit molecule build from **array**.
 
     """
+    msg = DeprecationWarning("'from_pdb_array()' is deprecated")
+    warnings.warn(msg, stacklevel=2)
+
     pdb_str = ''.join([item.decode() + '\n' for item in array if item])
     ret = Chem.MolFromPDBBlock(pdb_str, removeHs=False, proximityBonding=False)
     if not rdmol:

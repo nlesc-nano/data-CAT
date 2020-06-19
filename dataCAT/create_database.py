@@ -22,6 +22,7 @@ API
 
 """
 
+import warnings
 from os import PathLike
 from os.path import join, isfile
 from typing import Dict, Any, List, Union, AnyStr, overload
@@ -37,7 +38,8 @@ from CAT.logger import logger
 from CAT import version_info as CAT_VERSION  # noqa: N812
 
 from . import version_info as DATACAT_VERSION  # noqa: N812
-from .pdb_array import DTYPE_ATOM, DTYPE_BOND
+from .pdb_array import DTYPE_ATOM, DTYPE_BOND, PDBContainer
+from .functions import from_pdb_array
 
 try:
     from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
@@ -173,19 +175,27 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
     with h5py.File(path, 'a', libver='latest') as f:
         # Store the version of CAT, nano-CAT and data-CAT
         if 'CAT.__version__' not in f:
-            f.create_dataset(data=[CAT_VERSION], name='CAT.__version__', **kwargs_version)
+            f.create_dataset('CAT.__version__', data=[CAT_VERSION], **kwargs_version)
         if 'nanoCAT.__version__' not in f:
-            f.create_dataset(data=[NANOCAT_VERSION], name='nanoCAT.__version__', **kwargs_version)
+            f.create_dataset('nanoCAT.__version__', data=[NANOCAT_VERSION], **kwargs_version)
         if 'dataCAT.__version__' not in f:
-            f.create_dataset(data=[DATACAT_VERSION], name='dataCAT.__version__', **kwargs_version)
+            f.create_dataset('dataCAT.__version__', data=[DATACAT_VERSION], **kwargs_version)
 
         # Create new 2D datasets
-        iterator_2d = (name_ for name_ in dataset_names if name_ not in f)
-        for name_ in iterator_2d:
-            if name_ in f:
+        for grp_name in dataset_names:
+            if isinstance(f.get(grp_name), h5py.Dataset):
+                logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {grp_name!r}')
+                with warnings.catch_warnings():
+                    warnings.simplefilter('ignore', DeprecationWarning)
+                    iterator = (from_pdb_array(pdb, rdmol=False) for pdb in f[grp_name])
+                    pdb = PDBContainer.from_molecules(iterator)
+                del f[grp_name]
+            elif grp_name in f:
                 continue
+            else:
+                pdb = None
 
-            grp = f.create_group(name_, track_order=True)
+            grp = f.create_group(grp_name, track_order=True)
             grp.attrs['__doc__'] = b"A set of datasets representing `dataCAT.PDBTuple`."
 
             dtype1 = list(DTYPE_ATOM.items())
@@ -196,17 +206,18 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             grp.create_dataset('atom_count', shape=(0,), maxshape=(None,), dtype='int32')
             grp.create_dataset('bond_count', shape=(0,), maxshape=(None,), dtype='int32')
 
-            grp['atoms'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atoms`."
+            grp['atoms'].attrs['__doc__'] = b"A dataset representing `dataCATPDBTuple.atoms`."
             grp['bonds'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bonds`."
             grp['atom_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
             grp['bond_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
 
+            if pdb is not None:
+                pdb.to_hdf5(grp, mode='append')
+
         # Create new 3D datasets
-        iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)
-        for name_ in iterator_3d:
-            if name_ in f:
-                continue
-            f.create_dataset(name=name_, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
+        iterator_3d = (grp_name for grp_name in dataset_names_3d if grp_name not in f)
+        for grp_name in iterator_3d:
+            f.create_dataset(grp_name, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
 
     return path
 
