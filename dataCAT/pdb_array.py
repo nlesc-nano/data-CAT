@@ -320,33 +320,7 @@ class PDBContainer:
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
 
     def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
-        """Helper for :mod:`pickle`.
-
-        Examples
-        --------
-        .. testsetup:: python
-
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
-
-        .. code:: python
-
-            >>> import pickle
-            >>> from dataCAT import PDBContainer
-
-            >>> pdb = PDBContainer(...)  # doctest: +SKIP
-
-            >>> pdb_bytes = pickle.dumps(pdb)
-            >>> pdb_copy = pickle.loads(pdb_bytes)
-            >>> pdb == pdb_copy
-            True
-
-        """
+        """Helper for :mod:`pickle`."""
         cls = type(self)
         return cls, tuple(ar for _, ar in self.items())  # type: ignore
 
