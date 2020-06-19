@@ -14,6 +14,7 @@ API
 """
 
 import reprlib
+import warnings
 import textwrap
 from os import getcwd, PathLike
 from os.path import abspath
@@ -35,13 +36,12 @@ from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule
 from nanoutils import PathType, TypedDict
-from CAT.logger import logger
 from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
 from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
 from .context_managers import OpenYaml, OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, from_pdb_array, sanitize_yaml_settings
+from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings
 from .pdb_array import PDBContainer
 
 __all__ = ['Database']
@@ -473,13 +473,13 @@ class Database:
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+', libver='latest') as f:
-
             if new.any():
-                pdb_new = PDBContainer.from_molecules(df[MOL][new.index])
+                mol_series = df.loc[new.index, MOL]
+                pdb_new = PDBContainer.from_molecules(mol_series)
                 pdb_new.to_hdf5(f[database], mode='append')
 
-                i = len(f[database]['atoms'])
-                j = i + len(pdb_new.atoms)
+                j = len(f[database]['atoms'])
+                i = j - len(mol_series)
                 ret = pd.Series(np.arange(i, j), index=new.index, name=HDF5_INDEX)
 
                 df.update(ret, overwrite=True)
@@ -490,20 +490,20 @@ class Database:
 
             # If **overwrite** is *True*
             if overwrite and old.any():
-                idx = np.argsort(old)
-                pdb_old = PDBContainer.from_molecules(df[MOL][old.index[idx]])
+                old.sort_values(inplace=True)
+                mol_series = df.loc[old.index, MOL]
 
-                # Ensure that the hdf5 indices are sorted
-                pdb_old.to_hdf5(f[database], mode='update', idx=old[idx])
+                pdb_old = PDBContainer.from_molecules(mol_series)
+                pdb_old.to_hdf5(f[database], mode='update', idx=old.values)
                 if opt:
-                    df.loc[idx.index, OPT] = True
+                    df.loc[old.index, OPT] = True
         return ret
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5('r+') as f:
+        with self.hdf5('r+', libver='latest') as f:
             i, j, k = f[column].shape
 
             # Create a 3D array of input files
@@ -662,17 +662,15 @@ class Database:
             A list of PLAMS or RDKit molecules.
 
         """
-        # Convert **index** to an array if it is a series or dataframe
-        if hasattr(index, '__array__'):
-            index = np.asarray(index).tolist()
-
         # Open the database and pull entries
         self.hdf5_availability()
-        with self.hdf5('r') as f:
-            pdb_array = f[database][index]
+        with self.hdf5('r', libver='latest') as f:
+            pdb = PDBContainer.from_hdf5(f[database], index)
+            mol_list = pdb.to_molecules()
 
-        # Return a list of RDKit or PLAMS molecules
-        return [from_pdb_array(mol, rdmol=rdmol) for mol in pdb_array]
+        if rdmol:
+            return [from_rdmol(mol) for mol in mol_list]
+        return mol_list
 
     def hdf5_availability(self, timeout: float = 5.0,
                           max_attempts: Optional[int] = 10) -> None:
@@ -702,7 +700,10 @@ class Database:
         """
         err = (f"h5py.File({self.hdf5.args[0]!r}) is currently unavailable; "
                f"repeating attempt in {timeout:1.1f} seconds")
+
         i = max_attempts if max_attempts is not None else np.inf
+        if i <= 0:
+            raise ValueError(f"'max_attempts' must be larger than 0; observed value: {i!r}")
 
         while i:
             try:
@@ -711,7 +712,7 @@ class Database:
             except OSError as ex:  # the .hdf5 file cannot be safely opened yet
                 warn = ResourceWarning(err)
                 warn.__cause__ = exception = ex
-                logger.warning(warn)
+                warnings.warn(warn)
                 sleep(timeout)
             i -= 1
 

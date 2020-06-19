@@ -44,7 +44,6 @@ try:
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
-
 __all__: List[str] = []
 
 Ligand = Literal['ligand', 'ligand_no_opt']
@@ -187,26 +186,20 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
                 continue
 
             grp = f.create_group(name_, track_order=True)
-            grp.attrs['__doc__'] = b"A set of groups and datasets representing `dataCAT.PDBTuple`."
+            grp.attrs['__doc__'] = b"A set of datasets representing `dataCAT.PDBTuple`."
 
-            atoms = grp.create_group('atoms', track_order=True)
-            for k, v in DTYPE_ATOM.items():
-                atoms.create_dataset(name=k, shape=(0, 0), maxshape=(None, None), dtype=v, **kwargs)
-            atoms.attrs['__doc__'] = b"A group representing `PDBTuple.atoms`."
-            atoms.attrs['shape'] = (0, 0)
+            dtype1 = list(DTYPE_ATOM.items())
+            dtype2 = list(DTYPE_BOND.items())
 
-            bonds = grp.create_group('bonds', track_order=True)
-            for k, v in DTYPE_BOND.items():
-                bonds.create_dataset(name=k, shape=(0, 0), maxshape=(None, None), dtype=v, **kwargs)
-            bonds.attrs['__doc__'] = b"A group representing `PDBTuple.bonds`."
-            bonds.attrs['shape'] = (0, 0)
+            grp.create_dataset('atoms', shape=(0, 0), maxshape=(None, None), dtype=dtype1, **kwargs)
+            grp.create_dataset('bonds', shape=(0, 0), maxshape=(None, None), dtype=dtype2, **kwargs)
+            grp.create_dataset('atom_count', shape=(0,), maxshape=(None,), dtype='int32')
+            grp.create_dataset('bond_count', shape=(0,), maxshape=(None,), dtype='int32')
 
-            grp.create_dataset(name='atom_count', shape=(0,), maxshape=(None,), dtype='int32')
-            grp.create_dataset(name='bond_count', shape=(0,), maxshape=(None,), dtype='int32')
+            grp['atoms'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atoms`."
+            grp['bonds'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bonds`."
             grp['atom_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
             grp['bond_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
-            grp['atom_count'].attrs['shape'] = (0,)
-            grp['bond_count'].attrs['shape'] = (0,)
 
         # Create new 3D datasets
         iterator_3d = (name_ for name_ in dataset_names_3d if name_ not in f)

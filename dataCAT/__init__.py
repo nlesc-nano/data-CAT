@@ -9,7 +9,7 @@ from .__version__ import __version__
 version_info = VersionInfo.from_str(__version__)
 del VersionInfo
 
-from .functions import df_to_mongo_dict
+from .functions import df_to_mongo_dict, int_to_slice
 from .df_proxy import DFProxy
 from .pdb_array import DTYPE_ATOM, DTYPE_BOND, PDBContainer
 from .context_managers import OpenYaml, OpenLig, OpenQD
@@ -19,7 +19,7 @@ __author__ = 'B. F. van Beek'
 __email__ = 'b.f.van.beek@vu.nl'
 
 __all__ = [
-    'df_to_mongo_dict',
+    'df_to_mongo_dict', 'int_to_slice',
     'DFProxy',
     'DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer',
     'OpenYaml', 'OpenLig', 'OpenQD',

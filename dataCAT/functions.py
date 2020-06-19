@@ -55,7 +55,7 @@ else:
     Group = 'h5py.Group'
     PDBContainer = 'dataCAT.PDBContainer'
 
-__all__ = ['df_to_mongo_dict']
+__all__ = ['df_to_mongo_dict', 'int_to_slice']
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -319,9 +319,6 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     return df1.append(df_tmp, sort=True)
 
 
-PDB_2D = frozenset({'atoms', 'bomds'})
-
-
 def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
     """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
 
@@ -334,25 +331,16 @@ def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
 
     """
     for name, ar in pdb.items():
-        # This is actually a dataset (not a group) for 'atom_count' and 'bond_count'
-        sub_group = group[name]
+        dataset = group[name]
 
         # Identify the new shape of all datasets
-        shape: np.ndarray = sub_group.attrs['shape']
+        shape = np.fromiter(dataset.shape, dtype=int)
         shape[0] += len(ar)
-        if name in PDB_2D:
+        if ar.ndim == 2:
             shape[1] = max(shape[1], ar.shape[1])
-        sub_group.attrs['shape'] = shape
 
-        # Construct an appropiate iterable yielding dataset names and the datasets itself
-        if name in PDB_2D:
-            dataset_iter = sub_group.values()
-        else:
-            dataset_iter = [sub_group]
-
-        # Update the dataset shape
-        for dataset in dataset_iter:
-            dataset.shape = shape
+        # Set the new shape
+        dataset.shape = shape
 
 
 def update_pdb_values(group: Group, pdb: PDBContainer,
@@ -376,16 +364,13 @@ def update_pdb_values(group: Group, pdb: PDBContainer,
     index = slice(None) if idx is None else idx
 
     for name, ar in pdb.items():
-        sub_group = group[name]
+        dataset = group[name]
 
-        if name in PDB_2D:
-            sub_group[index] = ar  # This is actually a dataset
-            continue
-
-        _, j = ar.shape
-        iterator = ((k, sub_group[k], ar[k]) for k in ar.fields)
-        for k, dataset, sub_ar in iterator:
-            dataset[index, :j] = sub_ar
+        if ar.ndim == 1:
+            dataset[index] = ar  # This is actually a dataset
+        else:
+            _, j = ar.shape
+            dataset[index, :j] = ar
 
 
 def append_pdb_values(group: Group, pdb: PDBContainer) -> None:
@@ -401,14 +386,61 @@ def append_pdb_values(group: Group, pdb: PDBContainer) -> None:
     """
     update_pdb_shape(group, pdb)
     for name, ar in pdb.items():
-        sub_group = group[name]
+        dataset = group[name]
 
-        if name in PDB_2D:
+        if ar.ndim == 1:
             i = len(ar)
-            sub_group[-i:] = ar  # This is actually a dataset
-            continue
+            dataset[-i:] = ar
+        else:
+            i, j = ar.shape
+            dataset[-i:, :j] = ar
 
-        i, j = ar.shape
-        iterator = ((k, sub_group[k], ar[k]) for k in ar.fields)
-        for k, dataset, sub_ar in iterator:
-            dataset[-i:, :j] = sub_ar
+
+def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
+    """Take an integer-like object and convert it into a :class:`slice`.
+
+    The slice is constructed in such a manner that using it for slicing will
+    return the same value as when passing **int_like**,
+    expect that the objects dimensionanlity is larger by 1.
+
+    Examples
+    --------
+    .. code:: python
+
+        >>> import numpy as np
+        >>> from dataCAT import int_to_slice
+
+        >>> array = np.ones(10)
+        >>> array[0]
+        1.0
+
+        >>> idx = int_to_slice(0, len(array))
+        >>> array[idx]
+        array([1.])
+
+
+    Parameters
+    ----------
+    int_like : :class:`int`
+        An int-like object.
+    seq_len : :class:`int`
+        The length of a to-be sliced sequence.
+
+    Returns
+    -------
+    :class:`slice`
+        An object for slicing the sequence associated with **seq_len**.
+
+    """
+    integer = int_like.__index__()
+    if integer > 0:
+        if integer != seq_len:
+            return slice(None, integer + 1)
+        else:
+            return slice(integer - 1, None)
+
+    else:
+        if integer == -1:
+            return slice(integer, None)
+        else:
+            return slice(integer, integer + 1)

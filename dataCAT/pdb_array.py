@@ -26,9 +26,10 @@ API
     the data in question being stored in the
     :class:`Atom.properties.pdb_info<scm.plams.mol.atom.Atom>` block.
 
-    There are four exception to this general rule:
+    There are six exception to this general rule:
 
-    * ``x``, ``y`` & ``z``: Based on :class:`Atom.coords<scm.plams.mol.atom.Atom>`.
+    * ``x``, ``y`` & ``z``: Based on :class:`Atom.x<scm.plams.mol.atom.Atom>`,
+      :class:`Atom.y<scm.plams.mol.atom.Atom>` and :class:`Atom.z<scm.plams.mol.atom.Atom>`.
     * ``symbol``: Based on :class:`Atom.symbol<scm.plams.mol.atom.Atom>`.
     * ``charge``: Based on :class:`Atom.properties.charge<scm.plams.mol.atom.Atom>`.
     * ``charge_float``: Based on :class:`Atom.properties.charge_float<scm.plams.mol.atom.Atom>`.
@@ -36,20 +37,20 @@ API
     .. code:: python
 
         mappingproxy({
-            'IsHeteroAtom': dtype('bool'),
-            'SerialNumber': dtype('int16'),
-            'Name': dtype('S4'),
-            'ResidueName': dtype('S3'),
-            'ChainId': dtype('S1'),
+            'IsHeteroAtom':  dtype('bool'),
+            'SerialNumber':  dtype('int16'),
+            'Name':          dtype('S4'),
+            'ResidueName':   dtype('S3'),
+            'ChainId':       dtype('S1'),
             'ResidueNumber': dtype('int16'),
-            'x': dtype('float32'),
-            'y': dtype('float32'),
-            'z': dtype('float32'),
-            'Occupancy': dtype('float32'),
-            'TempFactor': dtype('float32'),
-            'symbol': dtype('S4'),
-            'charge': dtype('int8'),
-            'charge_float': dtype('float64')
+            'x':             dtype('float32'),
+            'y':             dtype('float32'),
+            'z':             dtype('float32'),
+            'Occupancy':     dtype('float32'),
+            'TempFactor':    dtype('float32'),
+            'symbol':        dtype('S4'),
+            'charge':        dtype('int8'),
+            'charge_float':  dtype('float64')
         })
 
 
@@ -85,7 +86,7 @@ import numpy as np
 from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
 
-from .functions import update_pdb_shape, update_pdb_values, append_pdb_values
+from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
     from h5py import Group
@@ -113,9 +114,7 @@ DTYPE_ATOM: Mapping[str, np.dtype] = {
     'charge_float': float
 }
 DTYPE_ATOM = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_ATOM.items()})
-
-#: A list representing the dtype of :attr:`PDBContainer.atoms`.
-_DTYPE_ATOM = list(DTYPE_ATOM.items())
+_DTYPE_ATOM = np.dtype(list(DTYPE_ATOM.items()))
 
 DTYPE_BOND: Mapping[str, np.dtype] = {
     'atom1': 'int32',
@@ -123,9 +122,7 @@ DTYPE_BOND: Mapping[str, np.dtype] = {
     'order': 'int8'
 }
 DTYPE_BOND = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_BOND.items()})
-
-#: A list representing the dtype of :attr:`PDBContainer.bonds`.
-_DTYPE_BOND = list(DTYPE_BOND.items())
+_DTYPE_BOND = np.dtype(list(DTYPE_BOND.items()))
 
 _AtomTuple = Tuple[
     bool,  # IsHeteroAtom
@@ -195,7 +192,10 @@ def _get_atom_info(at: Atom, i: int) -> _AtomTuple:
 
 
 def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
-    """Helper function for :meth:`PDBContainer.from_molecules`: create a tuple representing a single :attr:`PDBContainer.bonds` row."""  # noqa: E501
+    """Helper function for :meth:`PDBContainer.from_molecules`: create a tuple representing a single :attr:`PDBContainer.bonds` row.
+
+    Note that the atomic indices are 1-based.
+    """  # noqa: E501
     mol.set_atoms_id(start=1)
     ret = [(b.atom1.id, b.atom2.id, b.order) for b in mol.bonds]
     mol.unset_atoms_id()
@@ -251,7 +251,7 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 
 
 Hdf5Mode = Literal['append', 'update']
-IndexLike = Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]
+IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
 
 
 class PDBContainer:
@@ -271,7 +271,9 @@ class PDBContainer:
 
     @property
     def bonds(self) -> np.recarray:
-        """class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded recarray for keeping track of all bond-related information.
+        """:class:`numpy.recarray`, shape :math:`(n, k)` : Get a padded recarray for keeping track of all bond-related information.
+
+        Note that all atomic indices are 1-based.
 
         See :data:`dataCAT.DTYPE_BOND` for a comprehensive overview of
         all field names and dtypes.
@@ -321,7 +323,12 @@ class PDBContainer:
         cls = type(self)
         return cls, tuple(self.items())  # type: ignore
 
-    def __getitem__(self: ST, key: Union[int, Sequence[int], slice, np.ndarray]) -> ST:
+    def __len__(self) -> int:
+        """Implement :func:`len(self)<len>`."""
+        # Note that all four arrays in PDBContainer are of the same length
+        return len(self.atom_count)
+
+    def __getitem__(self: ST, key: IndexLike) -> ST:
         """Implement :func:`self[key]<object.__getitem__>`.
 
         Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
@@ -330,7 +337,13 @@ class PDBContainer:
 
         """
         cls = type(self)
-        iterator = (ar[key] for _, ar in self.items())
+        try:
+            index = int_to_slice(key, len(self))  # type: ignore
+        except (AttributeError, TypeError):
+            index = np.asarray(key) if not isinstance(key, slice) else key
+            assert getattr(index, 'ndim', 1) == 1
+
+        iterator = (ar[index] for _, ar in self.items())
         return cls(*iterator)
 
     def items(self) -> Generator[Tuple[str, Union[np.ndarray, np.recarray]], None, None]:
@@ -424,12 +437,18 @@ class PDBContainer:
         mol_count = len(mol_list_)
 
         # Gather the shape of the to-be created atom (pdb-file) array
-        _atom_count = max(len(mol.atoms) for mol in mol_list_)
+        try:
+            _atom_count = max(len(mol.atoms) for mol in mol_list_)
+        except ValueError:  # if mol_list is empty
+            _atom_count = 0
         atom_count = max(_atom_count, min_atom)
         atom_shape = mol_count, atom_count
 
         # Gather the shape of the to-be created bond array
-        _bond_count = max(len(mol.bonds) for mol in mol_list_)
+        try:
+            _bond_count = max(len(mol.bonds) for mol in mol_list_)
+        except ValueError:  # if mol_list is empty
+            _bond_count = 0
         bond_count = max(_bond_count, min_bond)
         bond_shape = mol_count, bond_count
 
@@ -564,7 +583,8 @@ class PDBContainer:
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
         return [_rec_to_mol(*args) for args in iterator]
 
-    def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append', idx: IndexLike = None) -> None:
+    def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append',
+                idx: Optional[IndexLike] = None) -> None:
         """Export **self** to the specified hdf5 **group**.
 
         Parameters
@@ -575,24 +595,32 @@ class PDBContainer:
             Whether to append or update the passed **group**.
             Accepted values are ``"append"`` and ``"update"``.
         idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
-            An object for slicing all datasets in **self** and **group**.
+            An object for slicing all datasets in **group**.
             Note that, contrary to numpy, if a sequence of integers is provided
-            then they'll have to ordered.
+            then they *will* have to be ordered.
+
+
+        :rtype: :data:`None`
 
         """
-        index = slice(None) if idx is None else idx
-        pdb = self[index]
+        if idx is None:
+            index: Union[slice, np.ndarray] = slice(None)
+        else:
+            try:
+                index = int_to_slice(idx, len(self))  # type: ignore
+            except (AttributeError, TypeError):
+                index = np.asarray(idx) if not isinstance(idx, slice) else idx
+                assert getattr(index, 'ndim', 1) == 1
 
         if mode == 'append':
-            update_pdb_shape(group, pdb)
-            append_pdb_values(group, pdb)
+            append_pdb_values(group, self)
         elif mode == 'update':
-            update_pdb_values(group, pdb, index)
+            update_pdb_values(group, self, index)
         else:
             raise ValueError(repr(mode))
 
     @classmethod
-    def from_hdf5(cls: Type[ST], group: Group, idx: IndexLike = None) -> ST:
+    def from_hdf5(cls: Type[ST], group: Group, idx: Optional[IndexLike] = None) -> ST:
         """Construct a new PDBContainer from the passed hdf5 **group**.
 
         Parameters
@@ -608,9 +636,18 @@ class PDBContainer:
             A new PDBContainer constructed from **group**.
 
         """
-        index = slice(None) if idx is None else idx
-        atom_count = group['atom_count'][index]
-        bond_count = group['bond_count'][index]
-        atoms = ...
-        bonds = ...
-        return cls(atoms=atoms, bonds=bonds, atom_count=atom_count, bond_count=bond_count)
+        if idx is None:
+            index: Union[slice, np.ndarray] = slice(None)
+        else:
+            try:
+                index = int_to_slice(idx, len(group['atom_count']))  # type: ignore
+            except (AttributeError, TypeError):
+                index = np.asarray(idx) if not isinstance(idx, slice) else idx
+                assert getattr(index, 'ndim', 1) == 1
+
+        return cls(
+            atoms=group['atoms'][index].view(np.recarray),
+            bonds=group['bonds'][index].view(np.recarray),
+            atom_count=group['atom_count'][index],
+            bond_count=group['bond_count'][index]
+        )
