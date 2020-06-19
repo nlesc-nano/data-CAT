@@ -11,10 +11,10 @@ Index
 API
 ---
 .. autoclass:: PDBContainer
-    :members: __getitem__, __len__, from_molecules, to_molecules, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, from_molecules, to_molecules, from_hdf5, to_hdf5
 
 .. data:: DTYPE_ATOM
-    :type: `Mapping[str, np.dtype]`
+    :type: Mapping[str, np.dtype]
     :value: ...
 
     A mapping representing the dtype of :attr:`PDBContainer.atoms`.
@@ -53,7 +53,7 @@ API
 
 
 .. data:: DTYPE_BOND
-    :type: `Mapping[str, np.dtype]`
+    :type: Mapping[str, np.dtype]
     :value: ...
 
     A mapping representing the dtype of :attr:`PDBContainer.bonds`.
@@ -69,7 +69,7 @@ API
             'order': dtype('int8')
         })
 
-"""
+"""  # noqa: E501
 
 import textwrap
 from types import MappingProxyType
@@ -440,7 +440,7 @@ class PDBContainer:
             return self._hash
 
     def __getitem__(self: ST, key: IndexLike) -> ST:
-        """Implement :func:`self[key]<object.__getitem__>`.
+        """Implement :meth:`self[key]<object.__getitem__>`.
 
         Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
         Follows the standard NumPy broadcasting rules:
@@ -498,7 +498,7 @@ class PDBContainer:
 
         Parameters
         ----------
-        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence> or :class:`slice`
+        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
             An object for slicing arrays along :code:`axis=0`.
 
         Returns
@@ -597,8 +597,8 @@ class PDBContainer:
 
         Returns
         -------
-        :class:`PDBContainer`
-            A new namedtuple.
+        :class:`dataCAT.PDBContainer`
+            A pdb container.
 
         """
         if isinstance(mol_list, abc.Iterator):
@@ -756,7 +756,7 @@ class PDBContainer:
 
     def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append',
                 idx: Optional[IndexLike] = None) -> None:
-        """Export **self** to the specified hdf5 **group**.
+        """Export this instance to the specified hdf5 **group**.
 
         Parameters
         ----------
