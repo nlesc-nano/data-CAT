@@ -296,6 +296,7 @@ class PDBContainer:
         self._bonds = bonds
         self._atom_count = atom_count
         self._bond_count = bond_count
+
         for _, ar in self.items():
             ar.setflags(write=False)
 
