@@ -36,7 +36,7 @@ def test_as_pdb_array() -> None:
     """Test :func:`dataCAT.functions.as_pdb_array`."""
     mol_list = [molkit.readpdb(join(PATH, 'Methanol.pdb'))]
 
-    out1 = as_pdb_array(mol_list)
+    out1 = as_pdb_array(mol_list, warn=False)
     ref1 = np.array(
         [['HETATM    1  C1  UNL     1       0.345  -0.116   0.000  1.00  0.00           C  ',
           'HETATM    2  O1  UNL     1      -1.082  -0.219   0.000  1.00  0.00           O  ',
@@ -48,7 +48,7 @@ def test_as_pdb_array() -> None:
     )
     np.testing.assert_array_equal(out1, ref1)
 
-    out2 = as_pdb_array(mol_list, min_size=20)
+    out2 = as_pdb_array(mol_list, min_size=20, warn=False)
     ref2 = np.array(
         [['HETATM    1  C1  UNL     1       0.345  -0.116   0.000  1.00  0.00           C  ',
           'HETATM    2  O1  UNL     1      -1.082  -0.219   0.000  1.00  0.00           O  ',
@@ -66,11 +66,11 @@ def test_from_pdb_array() -> None:
     """Test :func:`dataCAT.functions.as_pdb_array`."""
     mol = molkit.readpdb(join(PATH, 'Methanol.pdb'))
 
-    pdb_ar = as_pdb_array([mol])[0]
-    out1 = from_pdb_array(pdb_ar)
+    pdb_ar = as_pdb_array([mol], warn=False)[0]
+    out1 = from_pdb_array(pdb_ar, warn=False)
     assertion.isinstance(out1, Chem.Mol)
 
-    out2 = from_pdb_array(pdb_ar, rdmol=False)
+    out2 = from_pdb_array(pdb_ar, rdmol=False, warn=False)
     for at1, at2 in zip(out2, mol):
         assertion.eq(at1.coords, at2.coords)
         assertion.eq(at1.atnum, at2.atnum)

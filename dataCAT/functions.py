@@ -168,8 +168,8 @@ def get_nan_row(df: pd.DataFrame) -> list:
     return [DTYPE_DICT.get(v.dtype, None) for _, v in df.items()]
 
 
-def as_pdb_array(mol_list: Collection[Molecule],
-                 min_size: int = 0) -> np.ndarray:
+def as_pdb_array(mol_list: Collection[Molecule], min_size: int = 0,
+                 warn: bool = True) -> np.ndarray:
     """Convert a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
 
     Parameters
@@ -187,8 +187,9 @@ def as_pdb_array(mol_list: Collection[Molecule],
         An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
 
     """
-    msg = DeprecationWarning("'as_pdb_array()' is deprecated")
-    warnings.warn(msg, stacklevel=2)
+    if warn:
+        msg = DeprecationWarning("'as_pdb_array()' is deprecated")
+        warnings.warn(msg, stacklevel=2)
 
     def _get_value(mol: Molecule) -> Tuple[List[str], int]:
         """Return a partially deserialized .pdb file and the length of aforementioned file."""
@@ -206,8 +207,8 @@ def as_pdb_array(mol_list: Collection[Molecule],
     return ret
 
 
-def from_pdb_array(array: np.ndarray,
-                   rdmol: bool = True) -> Union[Molecule, Mol]:
+def from_pdb_array(array: np.ndarray, rdmol: bool = True,
+                   warn: bool = True) -> Union[Molecule, Mol]:
     """Convert an array with a (partially) de-serialized .pdb file into a molecule.
 
     Parameters
@@ -224,8 +225,9 @@ def from_pdb_array(array: np.ndarray,
         A PLAMS or RDKit molecule build from **array**.
 
     """
-    msg = DeprecationWarning("'from_pdb_array()' is deprecated")
-    warnings.warn(msg, stacklevel=2)
+    if warn:
+        msg = DeprecationWarning("'from_pdb_array()' is deprecated")
+        warnings.warn(msg, stacklevel=2)
 
     pdb_str = ''.join([item.decode() + '\n' for item in array if item])
     ret = Chem.MolFromPDBBlock(pdb_str, removeHs=False, proximityBonding=False)

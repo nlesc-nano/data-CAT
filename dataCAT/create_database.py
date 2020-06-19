@@ -22,7 +22,6 @@ API
 
 """
 
-import warnings
 from os import PathLike
 from os.path import join, isfile
 from typing import Dict, Any, List, Union, AnyStr, overload
@@ -185,10 +184,8 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         for grp_name in dataset_names:
             if isinstance(f.get(grp_name), h5py.Dataset):
                 logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {grp_name!r}')
-                with warnings.catch_warnings():
-                    warnings.simplefilter('ignore', DeprecationWarning)
-                    iterator = (from_pdb_array(pdb, rdmol=False) for pdb in f[grp_name])
-                    pdb = PDBContainer.from_molecules(iterator)
+                iterator = (from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name])
+                pdb = PDBContainer.from_molecules(iterator)
                 del f[grp_name]
             elif grp_name in f:
                 continue
