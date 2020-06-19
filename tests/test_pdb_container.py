@@ -24,9 +24,15 @@ def test_eq() -> None:
     """Test :meth:`dataCAT.PDBContainer.__eq__`."""
     pdb1 = PDB[:]
     pdb2 = PDB[0]
+
     assertion.eq(pdb1, PDB)
     assertion.ne(pdb2, PDB)
     assertion.ne(1, PDB)
+
+    # We're gona cheat here by manually specifying the object's hash
+    pdb3 = pdb2[:]
+    pdb3._hash = PDB._hash
+    assertion.ne(pdb3, PDB)
 
 
 def test_hash() -> None:
