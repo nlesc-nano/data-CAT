@@ -361,12 +361,16 @@ class PDBContainer:
             # The hash of each individual array consists of its shape appended
             # with the array's first and last element along axis 0
             for _, ar in self.items():
-                i = len(ar) - 1
-                try:
-                    first_and_last = ar[0::i] if ar.ndim == 1 else ar[0::i, 0]
-                except IndexError:
-                    first_and_last = ()
-                args.append(ar.shape + tuple(first_and_last))
+                if not len(ar):
+                    first_and_last: Tuple[Any, ...] = ()
+                elif len(ar) == 1:
+                    _first_and_last = ar[0] if ar.ndim == 1 else ar[0, 0]
+                    first_and_last = (_first_and_last, _first_and_last)
+                else:
+                    i = len(ar) - 1
+                    _first_and_last = ar[0::i] if ar.ndim == 1 else ar[0::i, 0]
+                    first_and_last = tuple(_first_and_last)
+                args.append(ar.shape + first_and_last)
 
             cls = type(self)
             self._hash: int = hash((cls, tuple(args)))
