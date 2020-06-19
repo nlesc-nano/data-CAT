@@ -24,6 +24,7 @@ def test_eq() -> None:
     """Test :meth:`dataCAT.PDBContainer.__eq__`."""
     pdb1 = PDB[:]
     pdb2 = PDB[0]
+
     assertion.eq(pdb1, PDB)
     assertion.ne(pdb2, PDB)
     assertion.ne(1, PDB)
