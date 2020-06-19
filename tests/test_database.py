@@ -17,7 +17,6 @@ from nanoutils import delete_finally
 from assertionlib import assertion
 from CAT.workflows import MOL, HDF5_INDEX, OPT, V_BULK, JOB_SETTINGS_CDFT
 
-from dataCAT.database_functions import as_pdb_array
 from dataCAT import Database, OpenLig, OpenQD, OpenYaml
 
 PATH = Path('tests') / 'test_files'
@@ -62,7 +61,7 @@ def test_eq() -> None:
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
     for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5'):
-        assertion.contains(db_str, str(getattr(DB, name)))
+        assertion.contains(db_str, str(getattr(DB, name)), message=name)
 
 
 def test_parse_database() -> None:
@@ -85,7 +84,7 @@ def test_hdf5_availability() -> None:
 
 def test_from_hdf5() -> None:
     """Test :meth:`dataCAT.Database.from_hdf5`."""
-    ref_tup = ('C3H7O1', 'C2H5O1', 'C1H3O1')
+    ref_tup = ('C1H3O1', 'C2H5O1', 'C3H7O1')
 
     idx1 = slice(0, None)
     mol_list1 = DB.from_hdf5(idx1, 'ligand', rdmol=False)
@@ -115,7 +114,7 @@ def test_from_csv() -> None:
     out1 = DB.from_csv(df, 'ligand', get_mol=False)
     assertion.is_(out1, None)
 
-    ref_tup = ('C3H7O1', 'C2H5O1', 'C1H3O1')
+    ref_tup = ('C1H3O1', 'C2H5O1', 'C3H7O1')
     out2: pd.Series = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
     for mol, ref in zip(out2, ref_tup):
         assertion.eq(mol.get_formula(), ref)
@@ -135,25 +134,17 @@ def test_update_hdf5() -> None:
     df[HDF5_INDEX] = -1
     df[OPT] = False
 
-    db.update_hdf5(df, database='ligand')
+    series1 = db.update_hdf5(df, database='ligand')
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
+    assertion.eq(series1, [3, 4], post_process=np.all)
 
-    ar1 = as_pdb_array(df[MOL].values)
-    with db.hdf5('r') as f:
-        ar2 = f['ligand'][df[HDF5_INDEX]]
-    np.testing.assert_array_equal(ar1, ar2[..., :-1])
-
-    xyz = np.array(df.at[('CC(=O)[O-]', 'O4'), MOL])
-    xyz *= 10
-    df.at[('CC(=O)[O-]', 'O4'), MOL].from_array(xyz)
-
-    db.update_hdf5(df, database='ligand', overwrite=True)
+    series2 = db.update_hdf5(df, database='ligand')
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
+    assertion.eq(series2, [], post_process=np.all)
 
-    ar3 = as_pdb_array(df[MOL].values)
-    with db.hdf5('r') as f:
-        ar4 = f['ligand'][df[HDF5_INDEX]]
-    np.testing.assert_array_equal(ar3, ar4[..., :-1])
+    series3 = db.update_hdf5(df, database='ligand', overwrite=True)
+    assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
+    assertion.eq(series3, [], post_process=np.all)
 
 
 @delete_finally(DB_PATH_UPDATE)

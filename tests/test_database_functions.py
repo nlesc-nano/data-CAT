@@ -1,4 +1,4 @@
-"""Tests for :mod:`dataCAT.database_functions`."""
+"""Tests for :mod:`dataCAT.functions`."""
 
 from os.path import join
 
@@ -11,7 +11,7 @@ from scm.plams import Settings
 from assertionlib import assertion
 import scm.plams.interfaces.molecule.rdkit as molkit
 
-from dataCAT.database_functions import (
+from dataCAT.functions import (
     get_nan_row, as_pdb_array, from_pdb_array, sanitize_yaml_settings, even_index
 )
 
@@ -19,7 +19,7 @@ PATH = join('tests', 'test_files')
 
 
 def test_get_nan_row() -> None:
-    """Test :func:`dataCAT.database_functions.get_nan_row`."""
+    """Test :func:`dataCAT.functions.get_nan_row`."""
     df = pd.DataFrame(index=pd.RangeIndex(0, 10))
     df[0] = None
     df[1] = 0
@@ -33,10 +33,10 @@ def test_get_nan_row() -> None:
 
 
 def test_as_pdb_array() -> None:
-    """Test :func:`dataCAT.database_functions.as_pdb_array`."""
+    """Test :func:`dataCAT.functions.as_pdb_array`."""
     mol_list = [molkit.readpdb(join(PATH, 'Methanol.pdb'))]
 
-    out1 = as_pdb_array(mol_list)
+    out1 = as_pdb_array(mol_list, warn=False)
     ref1 = np.array(
         [['HETATM    1  C1  UNL     1       0.345  -0.116   0.000  1.00  0.00           C  ',
           'HETATM    2  O1  UNL     1      -1.082  -0.219   0.000  1.00  0.00           O  ',
@@ -48,7 +48,7 @@ def test_as_pdb_array() -> None:
     )
     np.testing.assert_array_equal(out1, ref1)
 
-    out2 = as_pdb_array(mol_list, min_size=20)
+    out2 = as_pdb_array(mol_list, min_size=20, warn=False)
     ref2 = np.array(
         [['HETATM    1  C1  UNL     1       0.345  -0.116   0.000  1.00  0.00           C  ',
           'HETATM    2  O1  UNL     1      -1.082  -0.219   0.000  1.00  0.00           O  ',
@@ -63,21 +63,21 @@ def test_as_pdb_array() -> None:
 
 
 def test_from_pdb_array() -> None:
-    """Test :func:`dataCAT.database_functions.as_pdb_array`."""
+    """Test :func:`dataCAT.functions.as_pdb_array`."""
     mol = molkit.readpdb(join(PATH, 'Methanol.pdb'))
 
-    pdb_ar = as_pdb_array([mol])[0]
-    out1 = from_pdb_array(pdb_ar)
+    pdb_ar = as_pdb_array([mol], warn=False)[0]
+    out1 = from_pdb_array(pdb_ar, warn=False)
     assertion.isinstance(out1, Chem.Mol)
 
-    out2 = from_pdb_array(pdb_ar, rdmol=False)
+    out2 = from_pdb_array(pdb_ar, rdmol=False, warn=False)
     for at1, at2 in zip(out2, mol):
         assertion.eq(at1.coords, at2.coords)
         assertion.eq(at1.atnum, at2.atnum)
 
 
 def test_even_index() -> None:
-    """Test :func:`dataCAT.database_functions.even_index`."""
+    """Test :func:`dataCAT.functions.even_index`."""
     df1 = pd.DataFrame(np.random.rand(10, 5))
     df2 = pd.DataFrame(np.random.rand(20, 5))
 
@@ -91,7 +91,7 @@ def test_even_index() -> None:
 
 
 def test_sanitize_yaml_settings() -> None:
-    """Test :func:`dataCAT.database_functions.sanitize_yaml_settings`."""
+    """Test :func:`dataCAT.functions.sanitize_yaml_settings`."""
     s = Settings(yaml.load(
         """
         description: test

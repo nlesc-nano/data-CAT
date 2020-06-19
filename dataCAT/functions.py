@@ -2,32 +2,32 @@
 
 Index
 -----
-.. currentmodule:: dataCAT.database_functions
+.. currentmodule:: dataCAT.functions
 .. autosummary::
-    mol_to_file
-    _get_unflattend
     df_to_mongo_dict
     get_nan_row
-    as_pdb_array
-    from_pdb_array
     sanitize_yaml_settings
     even_index
+    update_pdb_shape
+    update_pdb_values
+    append_pdb_value
 
 API
 ---
-.. autofunction:: mol_to_file
-.. autofunction:: _get_unflattend
 .. autofunction:: df_to_mongo_dict
 .. autofunction:: get_nan_row
-.. autofunction:: as_pdb_array
-.. autofunction:: from_pdb_array
 .. autofunction:: sanitize_yaml_settings
 .. autofunction:: even_index
+.. autofunction:: update_pdb_shape
+.. autofunction:: update_pdb_values
+.. autofunction:: append_pdb_value
 
 """
 
+import warnings
+from types import MappingProxyType
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Dict, Any, Hashable
+    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, Hashable, TYPE_CHECKING
 )
 
 import numpy as np
@@ -35,13 +35,20 @@ import pandas as pd
 
 from scm.plams import Molecule, Settings
 import scm.plams.interfaces.molecule.rdkit as molkit
-
 from rdkit import Chem
 from rdkit.Chem import Mol
 
+from nanoutils import SupportsIndex
 from CAT.utils import get_template
 
-__all__ = ['df_to_mongo_dict']
+if TYPE_CHECKING:
+    from h5py import Group
+    from .pdb_array import PDBContainer
+else:
+    Group = 'h5py.Group'
+    PDBContainer = 'dataCAT.PDBContainer'
+
+__all__ = ['df_to_mongo_dict', 'int_to_slice']
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -128,12 +135,12 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
 
 #: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
-DTYPE_DICT: Dict[np.dtype, Any] = {
+DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
     np.dtype('int'): -1,
     np.dtype('float'): np.nan,
     np.dtype('O'): None,
     np.dtype('bool'): False
-}
+})
 
 
 def get_nan_row(df: pd.DataFrame) -> list:
@@ -161,8 +168,8 @@ def get_nan_row(df: pd.DataFrame) -> list:
     return [DTYPE_DICT.get(v.dtype, None) for _, v in df.items()]
 
 
-def as_pdb_array(mol_list: Collection[Molecule],
-                 min_size: int = 0) -> np.ndarray:
+def as_pdb_array(mol_list: Collection[Molecule], min_size: int = 0,
+                 warn: bool = True) -> np.ndarray:
     """Convert a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
 
     Parameters
@@ -180,6 +187,10 @@ def as_pdb_array(mol_list: Collection[Molecule],
         An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
 
     """
+    if warn:
+        msg = DeprecationWarning("'as_pdb_array()' is deprecated")
+        warnings.warn(msg, stacklevel=2)
+
     def _get_value(mol: Molecule) -> Tuple[List[str], int]:
         """Return a partially deserialized .pdb file and the length of aforementioned file."""
         ret = Chem.MolToPDBBlock(molkit.to_rdmol(mol)).splitlines()
@@ -196,8 +207,8 @@ def as_pdb_array(mol_list: Collection[Molecule],
     return ret
 
 
-def from_pdb_array(array: np.ndarray,
-                   rdmol: bool = True) -> Union[Molecule, Mol]:
+def from_pdb_array(array: np.ndarray, rdmol: bool = True,
+                   warn: bool = True) -> Union[Molecule, Mol]:
     """Convert an array with a (partially) de-serialized .pdb file into a molecule.
 
     Parameters
@@ -214,6 +225,10 @@ def from_pdb_array(array: np.ndarray,
         A PLAMS or RDKit molecule build from **array**.
 
     """
+    if warn:
+        msg = DeprecationWarning("'from_pdb_array()' is deprecated")
+        warnings.warn(msg, stacklevel=2)
+
     pdb_str = ''.join([item.decode() + '\n' for item in array if item])
     ret = Chem.MolFromPDBBlock(pdb_str, removeHs=False, proximityBonding=False)
     if not rdmol:
@@ -303,3 +318,130 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     idx = df2.index[~bool_ar]
     df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
     return df1.append(df_tmp, sort=True)
+
+
+def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
+    """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be reshape h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for updating **group**.
+
+    """
+    for name, ar in pdb.items():
+        dataset = group[name]
+
+        # Identify the new shape of all datasets
+        shape = np.fromiter(dataset.shape, dtype=int)
+        shape[0] += len(ar)
+        if ar.ndim == 2:
+            shape[1] = max(shape[1], ar.shape[1])
+
+        # Set the new shape
+        dataset.shape = shape
+
+
+def update_pdb_values(group: Group, pdb: PDBContainer,
+                      idx: Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]) -> None:
+    """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
+
+    Follows the standard broadcasting rules as employed by h5py.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be updated h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for updating **group**.
+    idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+        An object for slicing all datasets in **group**.
+        Note that, contrary to numpy, if a sequence of integers is provided
+        then they'll have to ordered.
+
+    """
+    index = slice(None) if idx is None else idx
+
+    for name, ar in pdb.items():
+        dataset = group[name]
+
+        if ar.ndim == 1:
+            dataset[index] = ar  # This is actually a dataset
+        else:
+            _, j = ar.shape
+            dataset[index, :j] = ar
+
+
+def append_pdb_values(group: Group, pdb: PDBContainer) -> None:
+    """Append all datasets in **group** positioned with its counterpart from **pdb**.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be appended h5py group.
+    pdb : :class:`dataCAT.PDBContainer`
+        The pdb container for appending **group**.
+
+    """
+    update_pdb_shape(group, pdb)
+    for name, ar in pdb.items():
+        dataset = group[name]
+
+        if ar.ndim == 1:
+            i = len(ar)
+            dataset[-i:] = ar
+        else:
+            i, j = ar.shape
+            dataset[-i:, :j] = ar
+
+
+def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
+    """Take an integer-like object and convert it into a :class:`slice`.
+
+    The slice is constructed in such a manner that using it for slicing will
+    return the same value as when passing **int_like**,
+    expect that the objects dimensionanlity is larger by 1.
+
+    Examples
+    --------
+    .. code:: python
+
+        >>> import numpy as np
+        >>> from dataCAT import int_to_slice
+
+        >>> array = np.ones(10)
+        >>> array[0]
+        1.0
+
+        >>> idx = int_to_slice(0, len(array))
+        >>> array[idx]
+        array([1.])
+
+
+    Parameters
+    ----------
+    int_like : :class:`int`
+        An int-like object.
+    seq_len : :class:`int`
+        The length of a to-be sliced sequence.
+
+    Returns
+    -------
+    :class:`slice`
+        An object for slicing the sequence associated with **seq_len**.
+
+    """
+    integer = int_like.__index__()
+    if integer > 0:
+        if integer != seq_len:
+            return slice(None, integer + 1)
+        else:
+            return slice(integer - 1, None)
+
+    else:
+        if integer == -1:
+            return slice(integer, None)
+        else:
+            return slice(integer, integer + 1)
