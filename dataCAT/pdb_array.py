@@ -303,12 +303,12 @@ class PDBContainer:
 
     @property
     def atom_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
+        """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
         return self._atom_count
 
     @property
     def bond_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
+        """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
         return self._bond_count
 
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
