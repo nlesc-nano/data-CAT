@@ -37,7 +37,7 @@ from CAT.logger import logger
 from CAT import version_info as CAT_VERSION  # noqa: N812
 
 from . import version_info as DATACAT_VERSION  # noqa: N812
-from .pdb_array import DTYPE_ATOM, DTYPE_BOND, PDBContainer
+from .pdb_array import PDBContainer
 from .functions import from_pdb_array
 
 try:
@@ -192,24 +192,9 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             else:
                 pdb = None
 
-            grp = f.create_group(grp_name, track_order=True)
-            grp.attrs['__doc__'] = b"A set of datasets representing `dataCAT.PDBTuple`."
-
-            dtype1 = list(DTYPE_ATOM.items())
-            dtype2 = list(DTYPE_BOND.items())
-
-            grp.create_dataset('atoms', shape=(0, 0), maxshape=(None, None), dtype=dtype1, **kwargs)
-            grp.create_dataset('bonds', shape=(0, 0), maxshape=(None, None), dtype=dtype2, **kwargs)
-            grp.create_dataset('atom_count', shape=(0,), maxshape=(None,), dtype='int32')
-            grp.create_dataset('bond_count', shape=(0,), maxshape=(None,), dtype='int32')
-
-            grp['atoms'].attrs['__doc__'] = b"A dataset representing `dataCATPDBTuple.atoms`."
-            grp['bonds'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bonds`."
-            grp['atom_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.atom_count`."
-            grp['bond_count'].attrs['__doc__'] = b"A dataset representing `PDBTuple.bond_count`."
-
+            group = PDBContainer.create_hdf5_group(f, grp_name, **kwargs)
             if pdb is not None:
-                pdb.to_hdf5(grp, mode='append')
+                pdb.to_hdf5(group, mode='append')
 
         # Create new 3D datasets
         iterator_3d = (grp_name for grp_name in dataset_names_3d if grp_name not in f)
