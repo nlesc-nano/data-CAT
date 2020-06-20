@@ -508,7 +508,7 @@ class PDBContainer:
 
         """
         cls = type(self)
-        return ((name.strip('_'), getattr(self, name)) for name in cls.__slots__[2:])  # type: ignore
+        return ((n.strip('_'), getattr(self, n)) for n in cls.__slots__[2:])  # type: ignore
 
     @classmethod
     def keys(cls) -> Generator[AttrName, None, None]:
