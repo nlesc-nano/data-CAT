@@ -22,7 +22,6 @@ def repr_Database(self, obj: 'dataCAT.Database', level: int) -> str:
     return repr(obj)
 
 
-
 def pytest_configure(config: Any) -> None:
     """Flake8 is very verbose by default. Silence it.
 
