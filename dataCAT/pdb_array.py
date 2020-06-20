@@ -11,7 +11,7 @@ Index
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, items, from_molecules, to_molecules, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
 
 .. data:: DTYPE_ATOM
     :type: Mapping[str, np.dtype]
@@ -77,7 +77,7 @@ from collections import abc
 from itertools import repeat
 from typing import (
     List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
-    overload, Sequence, Mapping, Tuple, Generator, TYPE_CHECKING
+    overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
 )
 
 import numpy as np
@@ -87,16 +87,17 @@ from nanoutils import SupportsIndex, TypedDict, Literal
 from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
-    from h5py import Group
+    from h5py import File, Group
 else:
     Group = 'h5py.Group'
+    File = 'h5py.File'
 
 __all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
 
 ST = TypeVar('ST', bound='PDBContainer')
 
-DTYPE_ATOM: Mapping[str, np.dtype] = {
-    'IsHeteroAtom': bool,
+_DTYPE_ATOM = {
+    'IsHeteroAtom': 'bool',
     'SerialNumber': 'int16',
     'Name': 'S4',
     'ResidueName': 'S3',
@@ -109,18 +110,22 @@ DTYPE_ATOM: Mapping[str, np.dtype] = {
     'TempFactor': 'float32',
     'symbol': 'S4',
     'charge': 'int8',
-    'charge_float': float
+    'charge_float': 'float64'
 }
-DTYPE_ATOM = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_ATOM.items()})
-_DTYPE_ATOM = np.dtype(list(DTYPE_ATOM.items()))
+DTYPE_ATOM: Mapping[str, np.dtype] = MappingProxyType(
+    {k: np.dtype(v) for k, v in _DTYPE_ATOM.items()}
+)
+del _DTYPE_ATOM
 
-DTYPE_BOND: Mapping[str, np.dtype] = {
+_DTYPE_BOND = {
     'atom1': 'int32',
     'atom2': 'int32',
     'order': 'int8'
 }
-DTYPE_BOND = MappingProxyType({k: np.dtype(v) for k, v in DTYPE_BOND.items()})
-_DTYPE_BOND = np.dtype(list(DTYPE_BOND.items()))
+DTYPE_BOND: Mapping[str, np.dtype] = MappingProxyType({
+    k: np.dtype(v) for k, v in _DTYPE_BOND.items()
+})
+del _DTYPE_BOND
 
 _AtomTuple = Tuple[
     bool,  # IsHeteroAtom
@@ -250,12 +255,29 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 
 Hdf5Mode = Literal['append', 'update']
 IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
+AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
 
 
 class PDBContainer:
     """An immutable class for holding array-like representions of a set of .pdb files."""
 
     __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
+
+    #: A mapping holding the dimensionality of each array embedded within this class.
+    NDIM: ClassVar[Mapping[AttrName, int]] = MappingProxyType({
+        'atoms': 2,
+        'bonds': 2,
+        'atom_count': 1,
+        'bond_count': 1,
+    })
+
+    #: A mapping holding the dtype of each array embedded within this class.
+    DTYPE: ClassVar[Mapping[AttrName, np.dtype]] = MappingProxyType({
+        'atoms': np.dtype(list(DTYPE_ATOM.items())),
+        'bonds': np.dtype(list(DTYPE_BOND.items())),
+        'atom_count': np.dtype('int32'),
+        'bond_count': np.dtype('int32'),
+    })
 
     @property
     def atoms(self) -> np.recarray:
@@ -281,12 +303,12 @@ class PDBContainer:
 
     @property
     def atom_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
+        """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.atoms`."""  # noqa: E501
         return self._atom_count
 
     @property
     def bond_count(self) -> np.ndarray:
-        """:class:`numpy.ndarray[int]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
+        """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
         return self._bond_count
 
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
@@ -297,12 +319,12 @@ class PDBContainer:
         self._atom_count = atom_count
         self._bond_count = bond_count
 
-        for _, ar in self.items():
+        for ar in self.values():
             ar.setflags(write=False)
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        wdith = max(len(k) for k, _ in self.items())
+        wdith = max(len(k) for k in self.keys())
 
         def _str(k, v):
             if isinstance(v, np.recarray):
@@ -319,7 +341,7 @@ class PDBContainer:
     def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
-        return cls, tuple(ar for _, ar in self.items())  # type: ignore
+        return cls, tuple(ar for ar in self.values())  # type: ignore
 
     def __copy__(self: ST) -> ST:
         """Implement :func:`copy.copy(self)<copy.copy>`."""
@@ -360,16 +382,13 @@ class PDBContainer:
 
             # The hash of each individual array consists of its shape appended
             # with the array's first and last element along axis 0
-            for _, ar in self.items():
+            for ar in self.values():
                 if not len(ar):
                     first_and_last: Tuple[Any, ...] = ()
-                elif len(ar) == 1:
-                    _first_and_last = ar[0] if ar.ndim == 1 else ar[0, 0]
-                    first_and_last = (_first_and_last, _first_and_last)
                 else:
-                    i = len(ar) - 1
-                    _first_and_last = ar[0::i] if ar.ndim == 1 else ar[0::i, 0]
-                    first_and_last = tuple(_first_and_last)
+                    first = ar[0] if ar.ndim == 1 else ar[0, 0]
+                    last = ar[-1] if ar.ndim == 1 else ar[-1, 0]
+                    first_and_last = (first, last)
                 args.append(ar.shape + first_and_last)
 
             cls = type(self)
@@ -451,11 +470,11 @@ class PDBContainer:
             index = np.asarray(key) if not isinstance(key, slice) else key
             assert getattr(index, 'ndim', 1) == 1
 
-        iterator = (ar[index] for _, ar in self.items())
+        iterator = (ar[index] for ar in self.values())
         return cls(*iterator)
 
-    def items(self) -> Generator[Tuple[str, Union[np.ndarray, np.recarray]], None, None]:
-        """Iterator over this intances attribute name/value pairs.
+    def items(self) -> Generator[Tuple[AttrName, Union[np.ndarray, np.recarray]], None, None]:
+        """Iterate over the (public) attribute name/value pairs in this instance.
 
         Examples
         --------
@@ -467,7 +486,7 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
             >>> pdb_container = PDBContainer.from_molecules(mol_list)
 
         .. code:: python
@@ -485,11 +504,73 @@ class PDBContainer:
         Yields
         ------
         :class:`str` and :class:`numpy.ndarray` / :class:`numpy.recarray`
-            Attribute names and values.
+            The names and values of all attributes in this instance.
 
         """
         cls = type(self)
-        return ((name.strip('_'), getattr(self, name)) for name in cls.__slots__[2:])
+        return ((n.strip('_'), getattr(self, n)) for n in cls.__slots__[2:])  # type: ignore
+
+    @classmethod
+    def keys(cls) -> Generator[AttrName, None, None]:
+        """Iterate over the (public) attribute names in this class.
+
+        Examples
+        --------
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> for name in PDBContainer.keys():
+            ...     print(name)  # doctest: +ELLIPSIS
+            atoms
+            bonds
+            atom_count
+            bond_count
+
+        Yields
+        ------
+        :class:`str`
+            The names of all attributes in this class.
+
+        """
+        return (name.strip('_') for name in cls.__slots__[2:])  # type: ignore
+
+    def values(self) -> Generator[Union[np.ndarray, np.recarray], None, None]:
+        """Iterate over the (public) attributes in this instance.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+            >>> from dataCAT import PDBContainer
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
+            >>> pdb_container = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
+            >>> for value in pdb_container.values():
+            ...     print(object.__repr__(value))  # doctest: +ELLIPSIS
+            <numpy.recarray object at ...>
+            <numpy.recarray object at ...>
+            <numpy.ndarray object at ...>
+            <numpy.ndarray object at ...>
+
+        Yields
+        ------
+        :class:`str`
+            The values of all attributes in this instance.
+
+        """
+        cls = type(self)
+        return (getattr(self, name) for name in cls.__slots__[2:])
 
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
@@ -561,10 +642,11 @@ class PDBContainer:
         bond_shape = mol_count, bond_count
 
         # Construct the to-be returned (padded) arrays
-        atom_array = np.rec.array(None, shape=atom_shape, dtype=_DTYPE_ATOM)
-        bond_array = np.rec.array(None, shape=bond_shape, dtype=_DTYPE_BOND)
-        atom_counter = np.empty(mol_count, dtype='int32')
-        bond_counter = np.empty(mol_count, dtype='int32')
+        DTYPE = cls.DTYPE
+        atom_array = np.rec.array(None, shape=atom_shape, dtype=DTYPE['atoms'])
+        bond_array = np.rec.array(None, shape=bond_shape, dtype=DTYPE['bonds'])
+        atom_counter = np.empty(mol_count, dtype=DTYPE['atom_count'])
+        bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
 
         # Fill the to-be returned arrays
         for i, mol in enumerate(mol_list_):
@@ -690,6 +772,43 @@ class PDBContainer:
 
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
         return [_rec_to_mol(*args) for args in iterator]
+
+    @classmethod
+    def create_hdf5_group(cls, file: Union[File, Group], name: str, **kwargs: Any) -> Group:
+        r"""Create a h5py Group for storing :class:`dataCAT.PDBContainer` instances.
+
+        Parameters
+        ----------
+        file : :class:`h5py.File` or :class:`h5py.Group`
+            The h5py File or Group where the new Group will be created.
+        name : :class:`str`
+            The name of the to-be created Group.
+        \**kwargs : :data:`~typing.Any`
+            Further keyword arguments for the creation of each dataset.
+            The arguments already specified by default are:
+            ``name``, ``shape``, ``maxshape`` and ``dtype``.
+
+        Returns
+        -------
+        :class:`h5py.Group`
+            The newly created Group.
+
+        """
+        cls_name = cls.__name__
+
+        grp = file.create_group(name, track_order=True)
+        grp.attrs['__doc__'] = f"A group of datasets representing `{cls_name}`.".encode()
+
+        NDIM = cls.NDIM
+        DTYPE = cls.DTYPE
+        for key in cls.keys():
+            maxshape = NDIM[key] * (None,)
+            shape = NDIM[key] * (0,)
+            dtype = DTYPE[key]
+
+            dset = grp.create_dataset(key, shape=shape, maxshape=maxshape, dtype=dtype, **kwargs)
+            dset.attrs['__doc__'] = f"A dataset representing `{cls_name}.atoms`.".encode()
+        return grp
 
     def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append',
                 idx: Optional[IndexLike] = None) -> None:

@@ -6,9 +6,18 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.3.1
+*****
+* Fixed bug with the `PDBContainer` hashing system.
+* Moved part of the hdf5 database creation process to `PDBContainer.create_hdf5_group()`.
+* Added `PDBContainer.keys()` and `PDBContainer.values()`.
+
+
 0.3.0
 *****
-* Overhaul of the .pdb storage system.
+* Overhauled the .pdb storage system.
+* Introduced the `PDBContainer` class.
+* Renamed `dataCAT.database_functions` to `dataCAT.functions`.
 
 
 0.2.2
