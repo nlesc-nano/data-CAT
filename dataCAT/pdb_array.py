@@ -265,8 +265,9 @@ class PDBContainer:
     """An (immutable) class for holding array-like representions of a set of .pdb files.
 
     The :class:`PDBContainer` class serves as an (intermediate) container
-    for storing .pdb files, facilitating the storage and interconversion
-    between PLAMS molecules and the :mod:`h5py` interface to the dhf5 format.
+    for storing .pdb files in the hdf5 format,
+    thus facilitating the storage and interconversion
+    between PLAMS molecules and the :mod:`h5py` interface.
 
     The methods implemented in this class can roughly be divided into three categories:
 
