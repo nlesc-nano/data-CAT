@@ -509,7 +509,7 @@ class PDBContainer:
             return False
 
         iterator = ((v, getattr(value, k)) for k, v in self.items())
-        return all([np.all(ar1 == ar2) for ar1, ar2 in iterator])
+        return all(np.all(ar1 == ar2) for ar1, ar2 in iterator)
 
     def __hash__(self) -> int:
         """Implement :func:`hash(self)<hash>`."""
