@@ -748,7 +748,7 @@ class PDBContainer:
         min_atom : :class:`int`
             The minimum number of atoms which :attr:`PDBContainer.atoms` should accomodate.
         min_bond : :class:`int`
-            The minimum number of atoms which :attr:`PDBContainer.bonds` should accomodate.
+            The minimum number of bonds which :attr:`PDBContainer.bonds` should accomodate.
 
         Returns
         -------
