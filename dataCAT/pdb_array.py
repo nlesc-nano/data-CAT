@@ -430,8 +430,13 @@ class PDBContainer:
         if validate:
             cls = type(self)
             rec_set = {'atoms', 'bonds'}
+            items = [
+                ('atoms', atoms),
+                ('bonds', bonds),
+                ('atom_count', atom_count),
+                ('bond_count', bond_count)
+            ]
 
-            items = ((name, locals()[name]) for name in cls.keys())
             for name, _array in items:
                 ndmin = cls.NDIM[name]
                 dtype = cls.DTYPE[name]
