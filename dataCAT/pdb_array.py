@@ -388,12 +388,12 @@ class PDBContainer:
                  atom_count: np.ndarray, bond_count: np.ndarray,
                  validate: Literal[False]) -> None:
         ...
-    @overload  # nqoa: E301
+    @overload  # noqa: E301
     def __init__(self, atoms: ArrayLike, bonds: ArrayLike,
                  atom_count: ArrayLike, bond_count: ArrayLike,
                  validate: Literal[True] = ..., copy: bool = ...) -> None:
         ...
-    def __init__(self, atoms, bonds, atom_count, bond_count, validate=True, copy=True):  # nqoa: E501,E301
+    def __init__(self, atoms, bonds, atom_count, bond_count, validate=True, copy=True):  # noqa: E501,E301
         """Initialize an instance.
 
         Parameters
