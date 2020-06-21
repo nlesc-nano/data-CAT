@@ -1,25 +1,36 @@
 """A pytest ``conftest.py`` file."""
 
 import logging
-from typing import Any, TYPE_CHECKING
+from itertools import chain
+from typing import Any
 
 from scm.plams import add_to_instance
 from assertionlib import assertion
 
-if TYPE_CHECKING:
-    import dataCAT
+MAX_N: int = 8
 
 
 @add_to_instance(assertion)
-def repr_PDBContainer(self, obj: 'dataCAT.PDBContainer', level: int) -> str:
+def repr_instance(self, obj: Any, level: int) -> str:
     """Return a string-representation of **obj**."""
-    return repr(obj)
+    if level <= 0:
+        return f'{obj.__class__.__name__}(...)'
 
+    ret = repr(obj)
+    if ret.count('\n') < MAX_N:
+        return ret
 
-@add_to_instance(assertion)
-def repr_Database(self, obj: 'dataCAT.Database', level: int) -> str:
-    """Return a string-representation of **obj**."""
-    return repr(obj)
+    # Split the to-be returned string in a top and bottom half
+    i = MAX_N // 2
+    ret_list = ret.split('\n')
+    top, bottom = ret_list[:i], ret_list[-i:]
+
+    # Determine the indentation of the ellipsis
+    _top = top[-1]
+    indent = len(_top) - len(_top.lstrip(' '))
+    mid = indent * " " + '...'
+
+    return '\n'.join(i for i in chain(top, mid, bottom))
 
 
 def pytest_configure(config: Any) -> None:

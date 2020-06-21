@@ -88,9 +88,12 @@ from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
     from h5py import File, Group
+    from numpy.typing import ArrayLike
+
 else:
     Group = 'h5py.Group'
     File = 'h5py.File'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
 
@@ -150,7 +153,7 @@ _BondTuple = Tuple[
     int,  # order
 ]
 
-PDBTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray]
+ReduceTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray, Literal[False]]
 Coords = Tuple[float, float, float]
 
 
@@ -259,7 +262,77 @@ AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
 
 
 class PDBContainer:
-    """An immutable class for holding array-like representions of a set of .pdb files."""
+    """An (immutable) class for holding array-like representions of a set of .pdb files.
+
+    The :class:`PDBContainer` class serves as an (intermediate) container
+    for storing .pdb files in the hdf5 format,
+    thus facilitating the storage and interconversion
+    between PLAMS molecules and the :mod:`h5py` interface.
+
+    The methods implemented in this class can roughly be divided into three categories:
+
+    * Molecule-interconversion: :meth:`~PDBContainer.to_molecules` &
+      :meth:`~PDBContainer.from_molecules`.
+    * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
+      :meth:`~PDBContainer.to_hdf5` &  :meth:`~PDBContainer.from_hdf5`.
+    * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
+      :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
+      :meth:`~PDBContainer.__len__`.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> import os
+        >>> from pathlib import Path
+        >>> from scm.plams import readpdb
+        >>> from dataCAT import PDBContainer
+
+        >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+        >>> hdf5_file = Path('tests') / 'test_files' / 'tmp_file.hdf5'
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+        >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
+        >>> mol = mol_list[0]
+        >>> pdb = PDBContainer.from_molecules(mol_list)
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from scm.plams import readpdb
+        >>> from dataCAT import PDBContainer
+
+        >>> mol_list [readpdb(...), ...]  # doctest: +SKIP
+        >>> pdb = PDBContainer.from_molecules(mol_list)
+        >>> print(pdb)
+        PDBContainer(
+            atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
+            bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
+            atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+            bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
+        )
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+        >>> with h5py.File(hdf5_file, 'a') as f:
+        ...     group = pdb.create_hdf5_group(f, name='ligand')
+        ...     pdb.to_hdf5(group, mode='append')
+        ...
+        ...     print('group', '=', group)
+        ...     for name, dset in group.items():
+        ...         print(f'group[{name!r}]', '=', dset)
+        group = <HDF5 group "/ligand" (4 members)>
+        group['atoms'] = <HDF5 dataset "atoms": shape (23, 76), type "|V46">
+        group['bonds'] = <HDF5 dataset "bonds": shape (23, 75), type "|V9">
+        group['atom_count'] = <HDF5 dataset "atom_count": shape (23,), type "<i4">
+        group['bond_count'] = <HDF5 dataset "bond_count": shape (23,), type "<i4">
+
+    .. testcleanup:: python
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+    """
 
     __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
 
@@ -311,13 +384,78 @@ class PDBContainer:
         """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
         return self._bond_count
 
+    @overload
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
-                 atom_count: np.ndarray, bond_count: np.ndarray) -> None:
-        """Initialize an instance."""
-        self._atoms = atoms
-        self._bonds = bonds
-        self._atom_count = atom_count
-        self._bond_count = bond_count
+                 atom_count: np.ndarray, bond_count: np.ndarray,
+                 validate: Literal[False]) -> None:
+        ...
+    @overload  # noqa: E301
+    def __init__(self, atoms: ArrayLike, bonds: ArrayLike,
+                 atom_count: ArrayLike, bond_count: ArrayLike,
+                 validate: Literal[True] = ..., copy: bool = ...) -> None:
+        ...
+    def __init__(self, atoms, bonds, atom_count, bond_count, validate=True, copy=True):  # noqa: E501,E301
+        """Initialize an instance.
+
+        Parameters
+        ----------
+        atoms : :class:`numpy.recarray`, shape :math:`(n, m)`
+            A padded recarray for keeping track of all atom-related information.
+            See :attr:`PDBContainer.atoms`.
+        bonds : :class:`numpy.recarray`, shape :math:`(n, k)`
+            A padded recarray for keeping track of all bond-related information.
+            See :attr:`PDBContainer.bonds`.
+        atom_count : :class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)`
+            An ndarray for keeping track of the number of atoms in each molecule in **atoms**.
+            See :attr:`PDBContainer.atom_count`.
+        bond_count : :class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)`
+            An ndarray for keeping track of the number of bonds in each molecule in **bonds**.
+            See :attr:`PDBContainer.bond_count`.
+
+        Keyword Arguments
+        -----------------
+        validate : :class:`bool`
+            If :data:`True` perform more thorough validation of the input arrays.
+            Note that this also allows the parameters to-be passed as array-like objects
+            in addition to aforementioned :class:`~numpy.ndarray` or
+            :class:`~numpy.recarray` instances.
+        copy : :class:`bool`
+            If :data:`True`, set the passed arrays as copies.
+            Only relevant if :data:`validate = True<True>`.
+
+
+        :rtype: :data:`None`
+
+        """
+        if validate:
+            cls = type(self)
+            rec_set = {'atoms', 'bonds'}
+            items = [
+                ('atoms', atoms),
+                ('bonds', bonds),
+                ('atom_count', atom_count),
+                ('bond_count', bond_count)
+            ]
+
+            for name, _array in items:
+                ndmin = cls.NDIM[name]
+                dtype = cls.DTYPE[name]
+
+                array = np.array(_array, dtype=dtype, ndmin=ndmin, copy=copy)
+                if name in rec_set:
+                    array = array.view(np.recarray)
+                setattr(self, f'_{name}', array)
+
+            len_set = {len(ar) for ar in self.values()}
+            if len(len_set) != 1:
+                raise ValueError("All passed arrays should be of the same length")
+
+        # Assume the input does not have to be parsed
+        else:
+            self._atoms: np.recarray = atoms
+            self._bonds: np.recarray = bonds
+            self._atom_count: np.ndarray = atom_count
+            self._bond_count: np.ndarray = bond_count
 
         for ar in self.values():
             ar.setflags(write=False)
@@ -338,10 +476,10 @@ class PDBContainer:
         indent = 4 * ' '
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
 
-    def __reduce__(self: ST) -> Tuple[Type[ST], PDBTuple]:
+    def __reduce__(self: ST) -> Tuple[Type[ST], ReduceTuple]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
-        return cls, tuple(ar for ar in self.values())  # type: ignore
+        return cls, (*self.values(), False)  # type: ignore
 
     def __copy__(self: ST) -> ST:
         """Implement :func:`copy.copy(self)<copy.copy>`."""
@@ -471,48 +609,11 @@ class PDBContainer:
             assert getattr(index, 'ndim', 1) == 1
 
         iterator = (ar[index] for ar in self.values())
-        return cls(*iterator)
-
-    def items(self) -> Generator[Tuple[AttrName, Union[np.ndarray, np.recarray]], None, None]:
-        """Iterate over the (public) attribute name/value pairs in this instance.
-
-        Examples
-        --------
-        .. testsetup:: python
-
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBContainer
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
-            >>> pdb_container = PDBContainer.from_molecules(mol_list)
-
-        .. code:: python
-
-            >>> from dataCAT import PDBContainer
-
-            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
-            >>> for name, value in pdb_container.items():
-            ...     print(name, '=', object.__repr__(value))  # doctest: +ELLIPSIS
-            atoms = <numpy.recarray object at ...>
-            bonds = <numpy.recarray object at ...>
-            atom_count = <numpy.ndarray object at ...>
-            bond_count = <numpy.ndarray object at ...>
-
-        Yields
-        ------
-        :class:`str` and :class:`numpy.ndarray` / :class:`numpy.recarray`
-            The names and values of all attributes in this instance.
-
-        """
-        cls = type(self)
-        return ((n.strip('_'), getattr(self, n)) for n in cls.__slots__[2:])  # type: ignore
+        return cls(*iterator, validate=False)  # type: ignore
 
     @classmethod
     def keys(cls) -> Generator[AttrName, None, None]:
-        """Iterate over the (public) attribute names in this class.
+        """Yield the (public) attribute names in this class.
 
         Examples
         --------
@@ -521,7 +622,7 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> for name in PDBContainer.keys():
-            ...     print(name)  # doctest: +ELLIPSIS
+            ...     print(name)
             atoms
             bonds
             atom_count
@@ -536,12 +637,11 @@ class PDBContainer:
         return (name.strip('_') for name in cls.__slots__[2:])  # type: ignore
 
     def values(self) -> Generator[Union[np.ndarray, np.recarray], None, None]:
-        """Iterate over the (public) attributes in this instance.
+        """Yield the (public) attributes in this instance.
 
         Examples
         --------
         .. testsetup:: python
-
             >>> import os
             >>> from pathlib import Path
             >>> from scm.plams import readpdb
@@ -549,14 +649,14 @@ class PDBContainer:
 
             >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
             >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
-            >>> pdb_container = PDBContainer.from_molecules(mol_list)
+            >>> pdb = PDBContainer.from_molecules(mol_list)
 
         .. code:: python
 
             >>> from dataCAT import PDBContainer
 
-            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
-            >>> for value in pdb_container.values():
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> for value in pdb.values():
             ...     print(object.__repr__(value))  # doctest: +ELLIPSIS
             <numpy.recarray object at ...>
             <numpy.recarray object at ...>
@@ -572,6 +672,42 @@ class PDBContainer:
         cls = type(self)
         return (getattr(self, name) for name in cls.__slots__[2:])
 
+    def items(self) -> Generator[Tuple[AttrName, Union[np.ndarray, np.recarray]], None, None]:
+        """Yield the (public) attribute name/value pairs in this instance.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import os
+            >>> from pathlib import Path
+            >>> from scm.plams import readpdb
+            >>> from dataCAT import PDBContainer
+
+            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> for name, value in pdb.items():
+            ...     print(name, '=', object.__repr__(value))  # doctest: +ELLIPSIS
+            atoms = <numpy.recarray object at ...>
+            bonds = <numpy.recarray object at ...>
+            atom_count = <numpy.ndarray object at ...>
+            bond_count = <numpy.ndarray object at ...>
+
+        Yields
+        ------
+        :class:`str` and :class:`numpy.ndarray` / :class:`numpy.recarray`
+            The names and values of all attributes in this instance.
+
+        """
+        return ((n, getattr(self, n)) for n in self.keys())
+
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
                        min_atom: int = 0,
@@ -581,13 +717,14 @@ class PDBContainer:
         Examples
         --------
         .. testsetup:: python
-
             >>> import os
             >>> from pathlib import Path
             >>> from scm.plams import readpdb
+            >>> from dataCAT import PDBContainer
 
             >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
             >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
 
         .. code:: python
 
@@ -658,8 +795,11 @@ class PDBContainer:
             atom_counter[i] = j_atom
             bond_counter[i] = j_bond
 
-        return cls(atoms=atom_array, atom_count=atom_counter,
-                   bonds=bond_array, bond_count=bond_counter)
+        return cls(
+            atoms=atom_array, bonds=bond_array,
+            atom_count=atom_counter, bond_count=bond_counter,
+            validate=False
+        )
 
     @overload
     def to_molecules(self, idx: Union[None, Sequence[int], slice, np.ndarray] = ...,
@@ -674,18 +814,15 @@ class PDBContainer:
         Examples
         --------
         .. testsetup:: python
-
             >>> import os
             >>> from pathlib import Path
             >>> from scm.plams import readpdb
             >>> from dataCAT import PDBContainer
 
             >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
-            >>> mol1 = mol_list[2]
-            >>> mol_list1 = mol_list[:3]
-            >>> pdb_container = PDBContainer.from_molecules(mol_list)
+            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
+            >>> mol = mol_list[0]
+            >>> pdb = PDBContainer.from_molecules(mol_list)
 
         An example where one or more new molecules are created.
 
@@ -694,32 +831,32 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
             >>> from scm.plams import Molecule
 
-            >>> pdb_container = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
 
-            # Create a single new molecule from `pdb_container`
-            >>> pdb_container.to_molecules(idx=0)  # doctest: +ELLIPSIS
+            # Create a single new molecule from `pdb`
+            >>> pdb.to_molecules(idx=0)  # doctest: +ELLIPSIS
             <scm.plams.mol.molecule.Molecule object at ...>
 
-            # Create three new molecules from `pdb_container`
-            >>> pdb_container.to_molecules(idx=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
+            # Create three new molecules from `pdb`
+            >>> pdb.to_molecules(idx=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
             [<scm.plams.mol.molecule.Molecule object at ...>,
              <scm.plams.mol.molecule.Molecule object at ...>]
 
-        An example where one or more existing molecules are updated inplace.
+        An example where one or more existing molecules are updated in-place.
 
         .. code:: python
 
-            # Update `mol` with the info from `pdb_container`
-            >>> mol1 = Molecule(...)  # doctest: +SKIP
-            >>> mol2 = pdb_container.to_molecules(idx=2, mol=mol1)
-            >>> mol1 is mol2
+            # Update `mol` with the info from `pdb`
+            >>> mol = Molecule(...)  # doctest: +SKIP
+            >>> mol_new = pdb.to_molecules(idx=2, mol=mol)
+            >>> mol is mol_new
             True
 
-            # Update all molecules in `mol_list` with info from `pdb_container`
-            >>> mol_list1 = [Molecule(...), Molecule(...), Molecule(...)]  # doctest: +SKIP
-            >>> mol_list2 = pdb_container.to_molecules(idx=range(3), mol=mol_list)
-            >>> for m1, m2 in zip(mol_list1, mol_list2):
-            ...     print(m1 is m2)
+            # Update all molecules in `mol_list` with info from `pdb`
+            >>> mol_list = [Molecule(...), Molecule(...), Molecule(...)]  # doctest: +SKIP
+            >>> mol_list_new = pdb.to_molecules(idx=range(3), mol=mol_list)
+            >>> for m, m_new in zip(mol_list, mol_list_new):
+            ...     print(m is m_new)
             True
             True
             True
@@ -734,14 +871,14 @@ class PDBContainer:
             a list of molecules will be returned.
         mol : :class:`~scm.plams.mol.molecule.Molecule` or :class:`Iterable[Molecule]<typing.Iterable>`, optional
             A molecule or list of molecules.
-            If one or molecules are provided here then they will be updated inplace.
+            If one or molecules are provided here then they will be updated in-place.
 
         Returns
         -------
         :class:`~scm.plams.mol.molecule.Molecule` or :class:`List[Molecule]<typing.List>`
             A molecule or list of molecules,
             depending on whether or not **idx** is a scalar or sequence / slice.
-            Note that if :code:`mol is not None`, then the-be returned molecules won't be copies.
+            Note that if :data:`mol is not None<None>`, then the-be returned molecules won't be copies.
 
         """  # noqa: E501
         if idx is None:
@@ -814,6 +951,11 @@ class PDBContainer:
                 idx: Optional[IndexLike] = None) -> None:
         """Export this instance to the specified hdf5 **group**.
 
+        Important
+        ---------
+        If **idx** is passed as a sequence of integers then, contrary to NumPy,
+        they *will* have to be sorted.
+
         Parameters
         ----------
         group : :class:`h5py.Group`
@@ -823,8 +965,6 @@ class PDBContainer:
             Accepted values are ``"append"`` and ``"update"``.
         idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
             An object for slicing all datasets in **group**.
-            Note that, contrary to numpy, if a sequence of integers is provided
-            then they *will* have to be ordered.
 
 
         :rtype: :data:`None`
@@ -876,5 +1016,6 @@ class PDBContainer:
             atoms=group['atoms'][index].view(np.recarray),
             bonds=group['bonds'][index].view(np.recarray),
             atom_count=group['atom_count'][index],
-            bond_count=group['bond_count'][index]
+            bond_count=group['bond_count'][index],
+            validate=False
         )
