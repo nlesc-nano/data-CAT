@@ -31,7 +31,9 @@ tests_require = [
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
-    'AssertionLib>=2.2.0'
+    'AssertionLib>=2.2.0',
+    'twine',
+    'wheel'
 ]
 tests_require += build_require
 
