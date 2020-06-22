@@ -285,17 +285,15 @@ class PDBContainer:
 
         >>> import os
         >>> from pathlib import Path
-        >>> from scm.plams import readpdb
-        >>> from dataCAT import PDBContainer
 
-        >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
+        >>> from dataCAT.testing_utils import (
+        ...     MOL_TUPLE as mol_list,
+        ...     PDB as pdb
+        ... )
+
         >>> hdf5_file = Path('tests') / 'test_files' / 'tmp_file.hdf5'
         >>> if os.path.isfile(hdf5_file):
         ...     os.remove(hdf5_file)
-
-        >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
-        >>> mol = mol_list[0]
-        >>> pdb = PDBContainer.from_molecules(mol_list)
 
     .. code:: python
 
@@ -545,13 +543,7 @@ class PDBContainer:
         --------
         .. testsetup:: python
 
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
+            >>> from dataCAT.testing_utils import PDB as pdb
 
         .. code:: python
 
@@ -642,14 +634,8 @@ class PDBContainer:
         Examples
         --------
         .. testsetup:: python
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBContainer
 
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
+            >>> from dataCAT.testing_utils import PDB as pdb
 
         .. code:: python
 
@@ -679,14 +665,7 @@ class PDBContainer:
         --------
         .. testsetup:: python
 
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBContainer
-
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:1]]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
+            >>> from dataCAT.testing_utils import PDB as pdb
 
         .. code:: python
 
@@ -717,14 +696,11 @@ class PDBContainer:
         Examples
         --------
         .. testsetup:: python
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBContainer
 
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
+            >>> from dataCAT.testing_utils import (
+            ...     PDB as pdb,
+            ...     MOL_TUPLE as mol_list
+            ... )
 
         .. code:: python
 
@@ -814,15 +790,12 @@ class PDBContainer:
         Examples
         --------
         .. testsetup:: python
-            >>> import os
-            >>> from pathlib import Path
-            >>> from scm.plams import readpdb
-            >>> from dataCAT import PDBContainer
 
-            >>> path = Path('tests') / 'test_files' / 'ligand_pdb'
-            >>> mol_list = [readpdb(str(path / f)) for f in os.listdir(path)[:3]]
-            >>> mol = mol_list[0]
-            >>> pdb = PDBContainer.from_molecules(mol_list)
+            >>> from dataCAT.testing_utils import (
+            ...     PDB as pdb,
+            ...     MOL_TUPLE as mol_list,
+            ...     MOL as mol
+            ... )
 
         An example where one or more new molecules are created.
 

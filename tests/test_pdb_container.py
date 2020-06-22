@@ -1,17 +1,12 @@
 """Tests for :class:`dataCAT.PDBContainer`."""
 
-import os
 import copy
 import pickle
-from pathlib import Path
 
 from assertionlib import assertion
-from scm.plams import readpdb
-from dataCAT import PDBContainer
 
-PATH = Path('tests') / 'test_files' / 'ligand_pdb'
-MOL_LIST = tuple(readpdb(str(PATH / f)) for f in os.listdir(PATH))
-PDB = PDBContainer.from_molecules(MOL_LIST)
+from dataCAT import PDBContainer
+from dataCAT.testing_utils import PDB
 
 
 def test_pickle() -> None:

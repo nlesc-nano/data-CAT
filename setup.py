@@ -16,7 +16,12 @@ with open(version_path, encoding='utf-8') as f:
 with open('README.rst', encoding='utf-8') as readme_file:
     readme = readme_file.read()
 
-tests_require=[
+build_require = [
+    'twine',
+    'wheel'
+]
+
+tests_require = [
     'pytest>=5.4.0',
     'pytest-cov',
     'flake8>=3.8.0',
@@ -28,6 +33,15 @@ tests_require=[
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0'
 ]
+tests_require += build_require
+
+# Check if rdkit is manually installed (as it is not available via pypi)
+try:
+    import rdkit
+except ModuleNotFoundError as ex:
+    raise ModuleNotFoundError(
+        "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
+    ) from ex
 
 setup(
     name='Data-CAT',
@@ -37,7 +51,10 @@ setup(
     author=['B. F. van Beek'],
     author_email='b.f.van.beek@vu.nl',
     url='https://github.com/nlesc-nano/data-CAT',
-    packages=['dataCAT'],
+    packages=[
+        'dataCAT',
+        'dataCAT.data'
+    ],
     package_dir={'dataCAT': 'dataCAT'},
     include_package_data=True,
     license='GNU Lesser General Public License v3 or later',
@@ -52,7 +69,13 @@ setup(
         'python-3-8',
         'automation'
     ],
-    package_data={'dataCAT': ['py.typed', '*.pyi']},
+    package_data={
+        'dataCAT': [
+            'py.typed',
+            '*.pyi',
+            'data/*.pdb'
+        ]
+    },
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
@@ -69,6 +92,7 @@ setup(
     test_suite='tests',
     python_requires='>=3.6',
     install_requires=[
+        'h5py',
         'numpy',
         'pandas',
         'pyyaml>=5.1',
@@ -82,6 +106,7 @@ setup(
     ],
     tests_require=tests_require,
     extras_require={
-        'test': tests_require
+        'test': tests_require,
+        'build': build_require
     }
 )
