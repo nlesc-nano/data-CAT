@@ -31,9 +31,17 @@ tests_require = [
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
-    'AssertionLib>=2.2.0',
+    'AssertionLib>=2.2.0'
 ]
 tests_require += build_require
+
+# Check if rdkit is manually installed (as it is not available via pypi)
+try:
+    import rdkit
+except ModuleNotFoundError as ex:
+    raise ModuleNotFoundError(
+        "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
+    ) from ex
 
 setup(
     name='Data-CAT',
@@ -84,7 +92,6 @@ setup(
     test_suite='tests',
     python_requires='>=3.6',
     install_requires=[
-        'rdkit',
         'h5py',
         'numpy',
         'pandas',
