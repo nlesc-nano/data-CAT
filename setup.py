@@ -37,7 +37,10 @@ setup(
     author=['B. F. van Beek'],
     author_email='b.f.van.beek@vu.nl',
     url='https://github.com/nlesc-nano/data-CAT',
-    packages=['dataCAT'],
+    packages=[
+        'dataCAT',
+        'dataCAT.data'
+    ],
     package_dir={'dataCAT': 'dataCAT'},
     include_package_data=True,
     license='GNU Lesser General Public License v3 or later',
@@ -52,7 +55,13 @@ setup(
         'python-3-8',
         'automation'
     ],
-    package_data={'dataCAT': ['py.typed', '*.pyi']},
+    package_data={
+        'dataCAT': [
+            'py.typed',
+            '*.pyi',
+            'data/*.pdb'
+        ]
+    },
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
