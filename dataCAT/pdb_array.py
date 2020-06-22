@@ -73,26 +73,25 @@ API
 
 import textwrap
 from types import MappingProxyType
-from collections import abc
 from itertools import repeat
+from collections import abc
 from typing import (
     List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
 )
 
+import h5py
 import numpy as np
 from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
+from assertionlib import assertion
 
 from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
-    from h5py import File, Group
     from numpy.typing import ArrayLike
 
 else:
-    Group = 'h5py.Group'
-    File = 'h5py.File'
     ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
@@ -274,6 +273,7 @@ class PDBContainer:
     * Molecule-interconversion: :meth:`~PDBContainer.to_molecules` &
       :meth:`~PDBContainer.from_molecules`.
     * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
+      :meth:`~PDBContainer.validate_hdf5`,
       :meth:`~PDBContainer.to_hdf5` &  :meth:`~PDBContainer.from_hdf5`.
     * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
       :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
@@ -884,7 +884,8 @@ class PDBContainer:
         return [_rec_to_mol(*args) for args in iterator]
 
     @classmethod
-    def create_hdf5_group(cls, file: Union[File, Group], name: str, **kwargs: Any) -> Group:
+    def create_hdf5_group(cls, file: Union[h5py.File, h5py.Group],
+                          name: str, **kwargs: Any) -> h5py.Group:
         r"""Create a h5py Group for storing :class:`dataCAT.PDBContainer` instances.
 
         Parameters
@@ -920,7 +921,53 @@ class PDBContainer:
             dset.attrs['__doc__'] = f"A dataset representing `{cls_name}.atoms`.".encode()
         return grp
 
-    def to_hdf5(self, group: Group, mode: Hdf5Mode = 'append',
+    @classmethod
+    def validate_hdf5(cls, group: h5py.Group) -> None:
+        """Validate the passed hdf5 **group**, ensuring it is compatible with :meth:`~PDBContainer.to_hdf5` and :meth:`~PDBContainer.from_hdf5`.
+
+        An :exc:`AssertionError` will be raise if **group** does not validate.
+
+        This method is called automatically when an exception is raised by
+        :meth:`~PDBContainer.to_hdf5` or :meth:`~PDBContainer.from_hdf5`.
+
+        Parameters
+        ----------
+        group : :class:`h5py.Group`
+            The to-be validated hdf5 Group.
+
+        Raises
+        ------
+        :exc:`AssertionError`
+            Raised if the validation process fails.
+
+        """  # noqa: E501
+        if not isinstance(group, h5py.Group):
+            raise TypeError("'group' expected a h5py.Group; "
+                            f"observed type: {group.__class__.__name__}")
+
+        # Check if **group** has all required keys
+        keys = set(cls.keys())
+        difference = keys - group.keys()
+        if difference:
+            missing_keys = ', '.join(repr(i) for i in difference)
+            raise AssertionError(f"Missing keys in {group}: {missing_keys}")
+
+        # Check the dimensionality and dtype of all datasets
+        len_dict = {}
+        iterator = ((k, group[k]) for k in cls.keys())
+        for key, dset in iterator:
+            len_dict[key] = len(dset)
+            assertion.eq(dset.ndim, cls.NDIM[key], message=f"{key} ndim mismatch")
+            assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{key} dtype mismatch")
+
+        # Check that all datasets are of the same length
+        if len(set(len_dict.values())) != 1:
+            raise AssertionError(
+                f"All datasets in {group} should be of the same length.\n"
+                f"Observed lengths: {len_dict!r}"
+            )
+
+    def to_hdf5(self, group: h5py.Group, mode: Hdf5Mode = 'append',
                 idx: Optional[IndexLike] = None) -> None:
         """Export this instance to the specified hdf5 **group**.
 
@@ -952,15 +999,19 @@ class PDBContainer:
                 index = np.asarray(idx) if not isinstance(idx, slice) else idx
                 assert getattr(index, 'ndim', 1) == 1
 
-        if mode == 'append':
-            append_pdb_values(group, self)
-        elif mode == 'update':
-            update_pdb_values(group, self, index)
-        else:
-            raise ValueError(repr(mode))
+        try:
+            if mode == 'append':
+                return append_pdb_values(group, self)
+            elif mode == 'update':
+                return update_pdb_values(group, self, index)
+        except Exception as ex:
+            cls = type(self)
+            cls.validate_hdf5(group)
+            raise ex
+        raise ValueError(repr(mode))
 
     @classmethod
-    def from_hdf5(cls: Type[ST], group: Group, idx: Optional[IndexLike] = None) -> ST:
+    def from_hdf5(cls: Type[ST], group: h5py.Group, idx: Optional[IndexLike] = None) -> ST:
         """Construct a new PDBContainer from the passed hdf5 **group**.
 
         Parameters
@@ -985,10 +1036,14 @@ class PDBContainer:
                 index = np.asarray(idx) if not isinstance(idx, slice) else idx
                 assert getattr(index, 'ndim', 1) == 1
 
-        return cls(
-            atoms=group['atoms'][index].view(np.recarray),
-            bonds=group['bonds'][index].view(np.recarray),
-            atom_count=group['atom_count'][index],
-            bond_count=group['bond_count'][index],
-            validate=False
-        )
+        try:
+            return cls(
+                atoms=group['atoms'][index].view(np.recarray),
+                bonds=group['bonds'][index].view(np.recarray),
+                atom_count=group['atom_count'][index],
+                bond_count=group['bond_count'][index],
+                validate=False
+            )
+        except Exception as ex:
+            cls.validate_hdf5(group)
+            raise ex

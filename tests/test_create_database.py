@@ -60,7 +60,7 @@ def test_create_hdf5() -> None:
 
     filename = _create_hdf5(PATH)
     assertion.eq(filename, HDF5_PATH)
-    with h5py.File(HDF5_PATH, 'r') as f:
+    with h5py.File(HDF5_PATH, 'r', libver='latest') as f:
         for item in ref_keys1:
             assertion.contains(f.keys(), item)
         for item in ref_keys2:

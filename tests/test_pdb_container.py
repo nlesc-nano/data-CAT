@@ -2,11 +2,18 @@
 
 import copy
 import pickle
+from pathlib import Path
 
+import h5py
 from assertionlib import assertion
+from nanoutils import delete_finally
 
 from dataCAT import PDBContainer
 from dataCAT.testing_utils import PDB
+
+PATH = Path('tests') / 'test_files'
+HDF5_PATH = PATH / 'database' / 'structures.hdf5'
+HDF5_FAIL = PATH / 'tmp.hdf5'
 
 
 def test_pickle() -> None:
@@ -51,3 +58,29 @@ def test_init() -> None:
     atoms = [(True, 1, 'Cad', 'LIG', 'A', 1, -5.231, 0.808, -0.649, 1, 0, 'C', 0, 0)]
     bonds = [(1, 2, 1)]
     assertion.assert_(PDBContainer, atoms, bonds, 1, 1)
+
+
+@delete_finally(HDF5_FAIL)
+def test_validate() -> None:
+    """Test :meth:`PDBContainer.validate_hdf5`."""
+    with h5py.File(HDF5_PATH, 'r', libver='latest') as f:
+        group = f['ligand']
+        PDB.validate_hdf5(group)
+
+    with h5py.File(HDF5_FAIL, 'a', libver='latest') as f:
+        group = f.create_group('test')
+
+        try:
+            PDB.from_hdf5(group)
+        except AssertionError as ex:
+            assertion.isinstance(ex.__context__, KeyError)
+            group.create_dataset('atoms', data=[1])
+        else:
+            raise AssertionError("Failed to raise an AssertionError")
+
+        try:
+            PDB.to_hdf5(group)
+        except AssertionError as ex:
+            assertion.isinstance(ex.__context__, IndexError)
+        else:
+            raise AssertionError("Failed to raise an AssertionError")

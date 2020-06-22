@@ -11,6 +11,13 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Fixed bug with the `PDBContainer` hashing system.
 * Moved part of the hdf5 database creation process to `PDBContainer.create_hdf5_group()`.
 * Added `PDBContainer.keys()` and `PDBContainer.values()`.
+* Moved a number of test files to `dataCAT.testing_utils` and `dataCAT.data`.
+* Ignore flake8 `N806`.
+* Added a test for building wheels.
+* Added `h5py` to `install_requires`.
+* Check for the presence of `rdkit` when running `setup.py`.
+* Added `PDBContainer.validate_hdf5()`.
+* Execute `.validate_hdf5()` automatically when `.to_hdf5()` or `.from_hdf5()` crashes.
 
 
 0.3.0
