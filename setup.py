@@ -16,7 +16,12 @@ with open(version_path, encoding='utf-8') as f:
 with open('README.rst', encoding='utf-8') as readme_file:
     readme = readme_file.read()
 
-tests_require=[
+build_require = [
+    'twine',
+    'wheel'
+]
+
+tests_require = [
     'pytest>=5.4.0',
     'pytest-cov',
     'flake8>=3.8.0',
@@ -27,9 +32,8 @@ tests_require=[
     'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
     'AssertionLib>=2.2.0',
-    'twine',
-    'wheel'
 ]
+tests_require += build_require
 
 setup(
     name='Data-CAT',
@@ -80,6 +84,8 @@ setup(
     test_suite='tests',
     python_requires='>=3.6',
     install_requires=[
+        'rdkit',
+        'h5py',
         'numpy',
         'pandas',
         'pyyaml>=5.1',
@@ -93,6 +99,7 @@ setup(
     ],
     tests_require=tests_require,
     extras_require={
-        'test': tests_require
+        'test': tests_require,
+        'build': build_require
     }
 )
