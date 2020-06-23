@@ -974,10 +974,12 @@ class PDBContainer:
         group : :class:`h5py.Group`
             The to-be updated/appended h5py group.
         mode : :class:`str`
-            Whether to append or update the passed **group**.
+            Whether to append the passed **group** with new values or
+            update user-specified existing value in-place (see **idx**).
             Accepted values are ``"append"`` and ``"update"``.
         idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
             An object for slicing all datasets in **group**.
+            Only relevant when :code:`mode = "update"`.
 
 
         :rtype: :data:`None`
