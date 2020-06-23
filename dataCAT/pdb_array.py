@@ -75,7 +75,7 @@ import textwrap
 from types import MappingProxyType
 from itertools import repeat
 from typing import (
-    List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
+    List, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
 )
 
