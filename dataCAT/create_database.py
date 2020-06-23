@@ -32,18 +32,12 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from nanoutils import Literal, PathType, VersionInfo
+from nanoutils import Literal, PathType
 from CAT.logger import logger
-from CAT import version_info as CAT_VERSION  # noqa: N812
 
-from . import version_info as DATACAT_VERSION  # noqa: N812
+from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
 from .pdb_array import PDBContainer
 from .functions import from_pdb_array
-
-try:
-    from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
-except ImportError:
-    NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
 __all__: List[str] = []
 
