@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
-__all__ = ['create_hdf5_log', 'update_hdf5_log']
+__all__ = ['create_hdf5_log', 'update_hdf5_log', 'clear_hdf5_log']
 
 VERSION = (CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION)
 
@@ -113,3 +113,10 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
     group['index'][n] = index
 
     group.attrs['n'] += 1
+
+
+def clear_hdf5_log(file: Union[h5py.Group, h5py.File],
+                   initial_versions: Sequence[Tuple[int, int, int]] = VERSION) -> h5py.Group:
+    n_entries = file['logger'].attrs['n_step']
+    del file['logger']
+    return create_hdf5_log(file, n_entries, initial_versions)
