@@ -89,7 +89,6 @@ from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
-
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
