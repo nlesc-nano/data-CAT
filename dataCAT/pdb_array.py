@@ -74,7 +74,6 @@ API
 import textwrap
 from types import MappingProxyType
 from itertools import repeat
-from collections import abc
 from typing import (
     List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
@@ -732,19 +731,19 @@ class PDBContainer:
             A pdb container.
 
         """
-        if isinstance(mol_list, abc.Iterator):
-            mol_list_: Collection[Molecule] = list(mol_list)
-        else:
-            mol_list_ = mol_list  # type: ignore
-        mol_count = len(mol_list_)
+        try:
+            mol_count = len(mol_list)  # type: ignore
+        except TypeError:
+            mol_list = list(mol_list)
+            mol_count = len(mol_list)
 
         # Gather the shape of the to-be created atom (pdb-file) array
-        _atom_count = max((len(mol.atoms) for mol in mol_list_), default=0)
+        _atom_count = max((len(mol.atoms) for mol in mol_list), default=0)
         atom_count = max(_atom_count, min_atom)
         atom_shape = mol_count, atom_count
 
         # Gather the shape of the to-be created bond array
-        _bond_count = max((len(mol.bonds) for mol in mol_list_), default=0)
+        _bond_count = max((len(mol.bonds) for mol in mol_list), default=0)
         bond_count = max(_bond_count, min_bond)
         bond_shape = mol_count, bond_count
 
@@ -756,7 +755,7 @@ class PDBContainer:
         bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
 
         # Fill the to-be returned arrays
-        for i, mol in enumerate(mol_list_):
+        for i, mol in enumerate(mol_list):
             j_atom = len(mol.atoms)
             j_bond = len(mol.bonds)
 
