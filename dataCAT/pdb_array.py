@@ -73,6 +73,7 @@ API
 
 import textwrap
 from types import MappingProxyType
+from datetime import datetime
 from itertools import repeat
 from typing import (
     List, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
@@ -85,7 +86,10 @@ from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
-from .functions import update_pdb_values, append_pdb_values, int_to_slice
+from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
+from .functions import (
+    update_pdb_values, append_pdb_values, int_to_slice, sanitize_datetime, sanitize_version
+)
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
@@ -93,6 +97,8 @@ else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
+
+VERSION = (CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION)  # type: ignore
 
 ST = TypeVar('ST', bound='PDBContainer')
 
@@ -256,6 +262,29 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 Hdf5Mode = Literal['append', 'update']
 IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
 AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
+
+#: The docstring to-be assigned by :meth:`PDBContainer.create_hdf5_group`.
+HDF5_DOCSTRING = """A Group of datasets representing :class:`{cls_name}`.
+
+Attributes
+----------
+date_created
+    The date when the h5py Group was created.
+date_modified
+    The date when the h5py Group was last modified.
+version_created
+    The CAT, Nano-CAT and Data-CAT versions when the h5py Group was created.
+version_modified
+    The CAT, Nano-CAT and Data-CAT versions when the h5py Group was last modified.
+
+See Also
+--------
+:data:`dataCAT.functions.DTYPE_DT`
+    A mapping representing the data type of **date_created** and **date_modified**.
+:data:`dataCAT.functions.DTYPE_VERSION`
+    A mapping representing the data type of **version_created** and **version_modified**.
+
+"""
 
 
 class PDBContainer:
@@ -900,7 +929,9 @@ class PDBContainer:
         cls_name = cls.__name__
 
         grp = file.create_group(name, track_order=True)
-        grp.attrs['__doc__'] = f"A group of datasets representing `{cls_name}`.".encode()
+        grp.attrs['__doc__'] = np.string_(HDF5_DOCSTRING.format(cls_name=cls_name))
+        grp.attrs['date_created'] = sanitize_datetime(datetime.now())
+        grp.attrs['version_created'] = sanitize_version(*VERSION)
 
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
@@ -984,6 +1015,7 @@ class PDBContainer:
         :rtype: :data:`None`
 
         """
+        # Parse **idx**
         if idx is None:
             index: Union[slice, np.ndarray] = slice(None)
         else:
@@ -993,16 +1025,22 @@ class PDBContainer:
                 index = np.asarray(idx) if not isinstance(idx, slice) else idx
                 assert getattr(index, 'ndim', 1) == 1
 
+        # Parse **mode**
+        if mode not in {'append', 'update'}:
+            raise ValueError(repr(mode))
+
+        # Export to the .hdf5 file
         try:
+            group.attrs['date_modified'] = sanitize_datetime(datetime.now())
+            group.attrs['version_modified'] = sanitize_version(*VERSION)
             if mode == 'append':
                 return append_pdb_values(group, self)
             elif mode == 'update':
                 return update_pdb_values(group, self, index)
+
         except Exception as ex:
-            cls = type(self)
-            cls.validate_hdf5(group)
+            self.validate_hdf5(group)
             raise ex
-        raise ValueError(repr(mode))
 
     @classmethod
     def from_hdf5(cls: Type[ST], group: h5py.Group, idx: Optional[IndexLike] = None) -> ST:

@@ -63,9 +63,11 @@ def test_init() -> None:
 @delete_finally(HDF5_FAIL)
 def test_validate() -> None:
     """Test :meth:`PDBContainer.validate_hdf5`."""
+    attr_set = {'__doc__', 'date_created', 'version_created'}
     with h5py.File(HDF5_PATH, 'r', libver='latest') as f:
         group = f['ligand']
         PDB.validate_hdf5(group)
+        assertion.assert_(set.issubset, attr_set, group.attrs.keys())
 
     with h5py.File(HDF5_FAIL, 'a', libver='latest') as f:
         group = f.create_group('test')
