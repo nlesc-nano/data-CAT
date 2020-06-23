@@ -14,11 +14,9 @@ API
 """
 
 import reprlib
-import warnings
 import textwrap
 from os import getcwd, PathLike
 from os.path import abspath
-from time import sleep
 from types import MappingProxyType
 from functools import partial
 from itertools import count
@@ -41,7 +39,7 @@ from CAT.workflows import HDF5_INDEX, OPT, MOL
 
 from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
 from .context_managers import OpenYaml, OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings
+from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings, hdf5_availability
 from .pdb_array import PDBContainer
 
 __all__ = ['Database']
@@ -131,7 +129,7 @@ class Database:
         self._csv_lig = partial(OpenLig, filename=lig_path)
         self._csv_qd = partial(OpenQD, filename=qd_path)
         self._yaml = partial(OpenYaml, filename=yaml_path)
-        self._hdf5 = partial(h5py.File, hdf5_path)
+        self._hdf5 = partial(h5py.File, hdf5_path, libver='latest')
 
         # Try to create or access the mongodb database
         try:
@@ -472,7 +470,7 @@ class Database:
 
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5('r+', libver='latest') as f:
+        with self.hdf5('r+') as f:
             if new.any():
                 mol_series = df.loc[new.index, MOL]
                 pdb_new = PDBContainer.from_molecules(mol_series)
@@ -503,7 +501,7 @@ class Database:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
         # Add new entries to the database
         self.hdf5_availability()
-        with self.hdf5('r+', libver='latest') as f:
+        with self.hdf5('r+') as f:
             i, j, k = f[column].shape
 
             # Create a 3D array of input files
@@ -664,7 +662,7 @@ class Database:
         """
         # Open the database and pull entries
         self.hdf5_availability()
-        with self.hdf5('r', libver='latest') as f:
+        with self.hdf5('r') as f:
             pdb = PDBContainer.from_hdf5(f[database], index)
             mol_list = pdb.to_molecules()
 
@@ -697,23 +695,11 @@ class Database:
         :exc:`OSError`
             Raised if **max_attempts** is exceded.
 
+        See Also
+        --------
+        :func:`dataCAT.hdf5_availability`
+            This method as a function.
+
         """
-        err = (f"h5py.File({self.hdf5.args[0]!r}) is currently unavailable; "
-               f"repeating attempt in {timeout:1.1f} seconds")
-
-        i = max_attempts if max_attempts is not None else np.inf
-        if i <= 0:
-            raise ValueError(f"'max_attempts' must be larger than 0; observed value: {i!r}")
-
-        while i:
-            try:
-                with self.hdf5('r+', libver='latest'):
-                    return None  # the .hdf5 file can safely be opened
-            except OSError as ex:  # the .hdf5 file cannot be safely opened yet
-                warn = ResourceWarning(err)
-                warn.__cause__ = exception = ex
-                warnings.warn(warn)
-                sleep(timeout)
-            i -= 1
-
-        raise exception
+        filename = self.hdf5.args[0]
+        hdf5_availability(filename, timeout, max_attempts, libver='latest')

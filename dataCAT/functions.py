@@ -10,7 +10,8 @@ Index
     even_index
     update_pdb_shape
     update_pdb_values
-    append_pdb_value
+    append_pdb_values
+    hdf5_availability
 
 API
 ---
@@ -20,16 +21,20 @@ API
 .. autofunction:: even_index
 .. autofunction:: update_pdb_shape
 .. autofunction:: update_pdb_values
-.. autofunction:: append_pdb_value
+.. autofunction:: append_pdb_values
+.. autofunction:: hdf5_availability
 
 """
 
 import warnings
+from time import sleep
 from types import MappingProxyType
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, Hashable, TYPE_CHECKING
+    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
+    Hashable, Optional, TYPE_CHECKING
 )
 
+import h5py
 import numpy as np
 import pandas as pd
 
@@ -38,17 +43,20 @@ import scm.plams.interfaces.molecule.rdkit as molkit
 from rdkit import Chem
 from rdkit.Chem import Mol
 
-from nanoutils import SupportsIndex
+from nanoutils import SupportsIndex, PathType
 from CAT.utils import get_template
 
 if TYPE_CHECKING:
-    from h5py import Group
-    from .pdb_array import PDBContainer
+    from .pdb_array import PDBContainer, IndexLike
 else:
-    Group = 'h5py.Group'
     PDBContainer = 'dataCAT.PDBContainer'
+    IndexLike = 'dataCAT.pdb_array.IndexLike'
 
-__all__ = ['df_to_mongo_dict', 'int_to_slice']
+__all__ = [
+    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'sanitize_yaml_settings',
+    'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
+    'hdf5_availability'
+]
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -79,10 +87,10 @@ def df_to_mongo_dict(df: pd.DataFrame,
     .. code:: python
 
         >>> import pandas as pd
-        >>> from dataCAT import df_to_mongo_dict
+        >>> from dataCAT.functions import df_to_mongo_dict
 
         >>> df = pd.DataFrame(...)  # doctest: +SKIP
-        >>> print(df)  # doctest: +SKIP
+        >>> print(df)  # doctest: +NORMALIZE_WHITESPACE
         index           E_solv
         sub index      Acetone Acetonitrile
         smiles  anchor
@@ -102,15 +110,14 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
     Parameters
     ----------
-    df : |pd.DataFrame|_
+    df : :class:`pandas.DataFrame`
         A Pandas DataFrame whose axis and columns are instance of pd.MultiIndex.
-
-    as_gen : bool
-        If ``True``, return a generator of dictionaries rather than a list of dictionaries.
+    as_gen : :class:`bool`
+        If :class:`True`, return a generator of dictionaries rather than a list of dictionaries.
 
     Returns
     -------
-    |Generator|_ [|dict|_] or |list|_ [|dict|_]
+    :class:`Generator[dict, None, None]<typing.Generator>` or :class:`List[dict]<typing.List>`
         A generator or list of nested dictionaries construced from **df**.
         Each row in **df** is converted into a single dictionary.
         The to-be returned dictionaries are updated with a dictionary containing their respective
@@ -134,12 +141,12 @@ def df_to_mongo_dict(df: pd.DataFrame,
     return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
-#: A dictionary with NumPy dtypes as keys and matching ``None``-esque items as values
+#: A dictionary with NumPy dtypes as keys and matching :data:`None`-esque items as values.
 DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
-    np.dtype('int'): -1,
-    np.dtype('float'): np.nan,
-    np.dtype('O'): None,
-    np.dtype('bool'): False
+    np.dtype(np.int64): -1,
+    np.dtype(np.float64): np.nan,
+    np.dtype(np.object_): None,
+    np.dtype(np.bool_): False
 })
 
 
@@ -149,19 +156,19 @@ def get_nan_row(df: pd.DataFrame) -> list:
     The object in question depends on the data type of the column.
     Will default to ``None`` if a specific data type is not recognized
 
-        * |np.int64|_: ``-1``
-        * |np.float64|_: ``np.nan``
-        * |object|_: ``None``
-        * |bool|_: ``False``
+        * :class:`~numpy.int64`: :data:`-1`
+        * :class:`~numpy.float64`: :data:`~numpy.nan`
+        * :class:`~numpy.object_`: :data:`None`
+        * :class:`~numpy.bool_`: :data:`False`
 
     Parameters
     ----------
-    df : |pd.DataFrame|_
+    df : :class:`pandas.DataFrame`
         A dataframe.
 
     Returns
     -------
-    |list|_ [|int|_, |float|_, |bool|_ and/or |None|_]
+    :class:`list`
         A list of none-esque objects, one for each column in **df**.
 
     """
@@ -174,16 +181,15 @@ def as_pdb_array(mol_list: Collection[Molecule], min_size: int = 0,
 
     Parameters
     ----------
-    mol_list: :math:`m` |list|_ [|plams.Molecule|_]
-        A list of :math:`m` PLAMS molecules.
-
-    min_size : int
+    mol_list: :class:`Collection[Molecule]<typing.Collection>`, length :math:`m`
+        A collection of :math:`m` PLAMS molecules.
+    min_size : :class:`int`
         The minimumum length of the pdb_array.
         The array is padded with empty strings if required.
 
     Returns
     -------
-    :math:`m*n` |np.ndarray|_ [|np.bytes|_ *|S80*]
+    :class:`numpy.ndarray[|S80]<numpy.ndarray>`, shape :math:`(m, n)`
         An array with :math:`m` partially deserialized .pdb files with up to :math:`n` lines each.
 
     """
@@ -213,15 +219,14 @@ def from_pdb_array(array: np.ndarray, rdmol: bool = True,
 
     Parameters
     ----------
-    array : :math:`n` |np.ndarray|_ [|np.bytes|_ / S80]
+    array : :class:`numpy.ndarray[|S80]<numpy.ndarray>`, shape :math:`(n,)`
         A (partially) de-serialized .pdb file with :math:`n` lines.
-
-    rdmol : |bool|_
-        If ``True``, return an RDKit molecule instead of a PLAMS molecule.
+    rdmol : :class:`bool`
+        If :data:`bool`, return an RDKit molecule instead of a PLAMS molecule.
 
     Returns
     -------
-    |plams.Molecule|_ or |rdkit.Chem.Mol|_
+    :class:`plams.Molecule<scm.plams.mol.molecule.Molecule>` or :class:`rdkit.Chem.Mol`
         A PLAMS or RDKit molecule build from **array**.
 
     """
@@ -242,15 +247,14 @@ def sanitize_yaml_settings(settings: Settings,
 
     Parameters
     ----------
-    settings : |plams.Settings|_
+    settings : :class:`plams.Settings<scm.plams.core.settings.Settings>`
         A settings instance with, potentially, undesired keys and values.
-
-    job_type: |str|_
+    job_type : :class:`str`
         The name of key in the settings blacklist.
 
     Returns
     -------
-    |plams.Settings|_
+    :class:`plams.Settings<scm.plams.core.settings.Settings>`
         A new Settings instance with all unwanted keys and values removed.
 
     Raises
@@ -295,15 +299,14 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
 
     Parameters
     ----------
-    df1 : |pd.DataFrame|_
+    df1 : :class:`pandas.DataFrame`
         A DataFrame whose index is to-be a superset of ``df2.index``.
-
-    df2 : |pd.DataFrame|_
+    df2 : :class:`pandas.DataFrame`
         A DataFrame whose index is to-be a subset of ``df1.index``.
 
     Returns
     -------
-    |pd.DataFrame|_
+    :class:`pandas.DataFrame`
         A new (sorted) dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
         Returns **df1** if ``df2.index`` is already a subset of ``df1.index``
 
@@ -320,7 +323,7 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     return df1.append(df_tmp, sort=True)
 
 
-def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
+def update_pdb_shape(group: h5py.Group, pdb: PDBContainer) -> None:
     """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
 
     Parameters
@@ -344,8 +347,7 @@ def update_pdb_shape(group: Group, pdb: PDBContainer) -> None:
         dataset.shape = shape
 
 
-def update_pdb_values(group: Group, pdb: PDBContainer,
-                      idx: Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]) -> None:
+def update_pdb_values(group: h5py.Group, pdb: PDBContainer, idx: Optional[IndexLike]) -> None:
     """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
 
     Follows the standard broadcasting rules as employed by h5py.
@@ -374,7 +376,7 @@ def update_pdb_values(group: Group, pdb: PDBContainer,
             dataset[index, :j] = ar
 
 
-def append_pdb_values(group: Group, pdb: PDBContainer) -> None:
+def append_pdb_values(group: h5py.Group, pdb: PDBContainer) -> None:
     """Append all datasets in **group** positioned with its counterpart from **pdb**.
 
     Parameters
@@ -409,7 +411,7 @@ def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
     .. code:: python
 
         >>> import numpy as np
-        >>> from dataCAT import int_to_slice
+        >>> from dataCAT.functions import int_to_slice
 
         >>> array = np.ones(10)
         >>> array[0]
@@ -445,3 +447,55 @@ def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
             return slice(integer, None)
         else:
             return slice(integer, integer + 1)
+
+
+def hdf5_availability(filename: PathType, timeout: float = 5.0,
+                      max_attempts: Optional[int] = 10,
+                      **kwargs: Any) -> None:
+    r"""Check if a .hdf5 file is opened by another process; return once it is not.
+
+    If two processes attempt to simultaneously open a single hdf5 file then
+    h5py will raise an :exc:`OSError`.
+
+    The purpose of this method is ensure that a .hdf5 file is actually closed,
+    thus allowing the :meth:`Database.from_hdf5` method to safely access **filename** without
+    the risk of raising an :exc:`OSError`.
+
+    Parameters
+    ----------
+    filename : :class:`str`, :class:`bytes` or :class:`os.PathLike`
+        A path-like object pointing to the hdf5 file of interest.
+    timeout : :class:`float`
+        Time timeout, in seconds, between subsequent attempts of opening **filename**.
+    max_attempts : :class:`int`, optional
+        Optional: The maximum number attempts for opening **filename**.
+        If the maximum number of attempts is exceeded, raise an :exc:`OSError`.
+        Setting this value to :data:`None` will set the number of attempts to unlimited.
+    \**kwargs : :data:`~typing.Any`
+        Further keyword arguments for :class:`h5py.File`.
+
+    Raises
+    ------
+    :exc:`OSError`
+        Raised if **max_attempts** is exceded.
+
+    """
+    err = (f"h5py.File({filename!r}) is currently unavailable; "
+           f"repeating attempt in {timeout:1.1f} seconds")
+
+    i = max_attempts if max_attempts is not None else np.inf
+    if i <= 0:
+        raise ValueError(f"'max_attempts' must be larger than 0; observed value: {i!r}")
+
+    while i:
+        try:
+            with h5py.File(filename, 'r+', **kwargs):
+                return None  # the .hdf5 file can safely be opened
+        except OSError as ex:  # the .hdf5 file cannot be safely opened yet
+            warn = ResourceWarning(err)
+            warn.__cause__ = exception = ex
+            warnings.warn(warn)
+            sleep(timeout)
+        i -= 1
+
+    raise exception

@@ -77,8 +77,7 @@ def test_parse_database() -> None:
 
 def test_hdf5_availability() -> None:
     """Test :meth:`dataCAT.Database.hdf5_availability`."""
-    filename = join(DB_PATH, 'structures.hdf5')
-    with h5py.File(filename, 'r', libver='latest'):
+    with DB.hdf5('r'):
         assertion.assert_(DB.hdf5_availability, 1.0, 2, exception=OSError)
 
 
