@@ -739,18 +739,12 @@ class PDBContainer:
         mol_count = len(mol_list_)
 
         # Gather the shape of the to-be created atom (pdb-file) array
-        try:
-            _atom_count = max(len(mol.atoms) for mol in mol_list_)
-        except ValueError:  # if mol_list is empty
-            _atom_count = 0
+        _atom_count = max((len(mol.atoms) for mol in mol_list_), default=0)
         atom_count = max(_atom_count, min_atom)
         atom_shape = mol_count, atom_count
 
         # Gather the shape of the to-be created bond array
-        try:
-            _bond_count = max(len(mol.bonds) for mol in mol_list_)
-        except ValueError:  # if mol_list is empty
-            _bond_count = 0
+        _bond_count = max((len(mol.bonds) for mol in mol_list_), default=0)
         bond_count = max(_bond_count, min_bond)
         bond_shape = mol_count, bond_count
 
