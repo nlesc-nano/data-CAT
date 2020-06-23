@@ -18,6 +18,9 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Check for the presence of `rdkit` when running `setup.py`.
 * Added `PDBContainer.validate_hdf5()`.
 * Execute `.validate_hdf5()` automatically when `.to_hdf5()` or `.from_hdf5()` crashes.
+* Moved `hdf5_availability()` from `Database` to `dataCAT.functions`.
+* Cleaned up the global namespace.
+* Added `libver="latest"` to `Database.hdf5`.
 
 
 0.3.0

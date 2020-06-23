@@ -75,7 +75,7 @@ import textwrap
 from types import MappingProxyType
 from itertools import repeat
 from typing import (
-    List, Collection, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
+    List, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
 )
 
@@ -89,7 +89,6 @@ from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike
-
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
