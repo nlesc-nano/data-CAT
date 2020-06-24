@@ -701,7 +701,7 @@ class Database:
 
         See Also
         --------
-        :func:`dataCAT.hdf5_availability`
+        :func:`dataCAT.functions.hdf5_availability`
             This method as a function.
 
         """
