@@ -12,6 +12,7 @@ Index
     update_pdb_values
     append_pdb_values
     hdf5_availability
+    
 API
 ---
 .. autofunction:: df_to_mongo_dict
