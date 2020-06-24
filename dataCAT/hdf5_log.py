@@ -25,7 +25,7 @@ API
 """
 
 from types import MappingProxyType
-from typing import Union, Mapping, Sequence, Tuple, TYPE_CHECKING
+from typing import Union, Mapping, Sequence, Tuple, Optional, TYPE_CHECKING
 from datetime import datetime
 
 import h5py
@@ -72,6 +72,8 @@ VERSION_DTYPE = np.dtype(list(VERSION_MAPPING.items()))
 
 INDEX_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
 
+MSG_DTYPE = h5py.string_dtype(encoding='ascii')
+
 _VERSION = np.array([CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION], dtype=VERSION_DTYPE)  # type: ignore  # noqa: E501
 _VERSION.setflags(write=False)
 
@@ -89,6 +91,8 @@ date : dataset
     :code:`group['version'].dims[0]`.
 index : dataset
     A dataset with the indices of which elements in the database were modified.
+message : dataset
+    A dataset holding user-specified modification messages.
 version : dataset
     A dataset keeping track of (user-specified) package versions.
 version_names : dataset
@@ -156,11 +160,12 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
         ...     print('group', '=', group)
         ...     for name, dset in group.items():
         ...         print(f'group[{name!r}]', '=', dset)
-        group = <HDF5 group "/logger" (4 members)>
+        group = <HDF5 group "/logger" (5 members)>
         group['date'] = <HDF5 dataset "date": shape (100,), type "|V11">
-        group['index'] = <HDF5 dataset "index": shape (100,), type "|O">
         group['version'] = <HDF5 dataset "version": shape (100, 3), type "|V3">
         group['version_names'] = <HDF5 dataset "version_names": shape (3,), type "|S8">
+        group['message'] = <HDF5 dataset "message": shape (100,), type "|O">
+        group['index'] = <HDF5 dataset "index": shape (100,), type "|O">
 
     .. testcleanup:: python
 
@@ -199,23 +204,25 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     elif m < 1:
         raise ValueError(f"'version_values' must be larger than 1; observed value: {version_values!r}")  # noqa: E501
 
-    now = _get_now()
-
     # Set attributes
     grp = file.create_group('logger', track_order=True)
     grp.attrs['__doc__'] = np.string_(LOG_DOC)
     grp.attrs['n'] = 0
     grp.attrs['n_step'] = n_entries
     grp.attrs['clear_when_full'] = clear_when_full
-    grp.attrs['date_created'] = now
+    grp.attrs['date_created'] = _get_now()
     grp.attrs['version_created'] = np.asarray(version_values, dtype=VERSION_DTYPE)
 
     # Set the datasets
     shape1 = (n_entries,)
     shape2 = (n_entries, m)
+    data = np.asarray(version_names, dtype=np.string_)
+
     scale1 = grp.create_dataset('date', shape=shape1, maxshape=(None,), dtype=DT_DTYPE, chunks=shape1)  # noqa: E501
-    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=INDEX_DTYPE, chunks=shape1)
     grp.create_dataset('version', shape=shape2, maxshape=(None, m), dtype=VERSION_DTYPE, chunks=shape2)  # noqa: E501
+    scale2 = grp.create_dataset('version_names', data=data, shape=(m,), dtype=data.dtype)
+    grp.create_dataset('message', shape=shape1, maxshape=(None,), dtype=MSG_DTYPE, chunks=shape1)
+    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=INDEX_DTYPE, chunks=shape1)
 
     # Set dataset scales
     scale1.make_scale('date')
@@ -223,10 +230,9 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     grp['version'].dims[0].attach_scale(scale1)
     grp['index'].dims[0].label = 'date'
     grp['index'].dims[0].attach_scale(scale1)
+    grp['message'].dims[0].label = 'date'
+    grp['message'].dims[0].attach_scale(scale1)
 
-    # Set more dataset scales
-    data = np.asarray(version_names, dtype=np.string_)
-    scale2 = grp.create_dataset('version_names', data=data, shape=(m,), dtype=data.dtype)
     scale2.make_scale('version_names')
     grp['version'].dims[1].label = 'version_names'
     grp['version'].dims[1].attach_scale(scale2)
@@ -234,6 +240,7 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
 
 
 def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
+                    message: Optional[str] = None,
                     version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> None:
     r"""Add a new entry to the hdf5 logger in **file**.
 
@@ -265,7 +272,7 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
         ...     date_before = group['logger/date'][n]
         ...     index_before = group['logger/index'][n]
         ...
-        ...     update_hdf5_log(group, idx=[0, 1, 2, 3])
+        ...     update_hdf5_log(group, idx=[0, 1, 2, 3], message='append')
         ...     date_after = group['logger/date'][n]
         ...     index_after = group['logger/index'][n]
 
@@ -327,6 +334,8 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
     group['date'][n] = _get_now()
     group['version'][n] = version_values
     group['index'][n] = index
+    if message is not None:
+        group['message'][n] = message
 
     group.attrs['n'] += 1
 
@@ -417,11 +426,11 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
         ...     group = f['ligand']
         ...     df = log_to_dataframe(group)
         ...     print(df)  # doctest: +NORMALIZE_WHITESPACE
-                                     CAT             Nano-CAT             Data-CAT                           index
+                                     CAT             Nano-CAT             Data-CAT             message               index
                                    major minor micro    major minor micro    major minor micro
         date
-        2020-06-24 15:28:09.861074     0     9     6        0     6     1        0     3     1                 [0]
-        2020-06-24 15:56:18.971201     0     9     6        0     6     1        0     3     1  [1, 2, 3, 4, 5, 6]
+        2020-06-24 15:28:09.861074     0     9     6        0     6     1        0     3     1  update                 [0]
+        2020-06-24 15:56:18.971201     0     9     6        0     6     1        0     3     1  append  [1, 2, 3, 4, 5, 6]
 
     Parameters
     ----------
@@ -446,6 +455,7 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
     if not n:
         index = pd.Index([], dtype='datetime64[ns]', name='date')
         df = pd.DataFrame(columns=columns, index=index, dtype='int8')
+        df[('message', '')] = np.array([], dtype=str)
         df[('index', '')] = np.array([], dtype=object)
         return df
 
@@ -457,5 +467,6 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
     # Construct and return the DataFrame
     data = grp['version'][:n].view('int8')
     df = pd.DataFrame(data, index=index, columns=columns)
+    df[('message', '')] = grp['message'][:n].astype(str)
     df[('index', '')] = grp['index'][:n]
     return df
