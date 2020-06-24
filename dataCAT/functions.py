@@ -12,11 +12,6 @@ Index
     update_pdb_values
     append_pdb_values
     hdf5_availability
-    sanitize_datetime
-    sanitize_version
-    DTYPE_DT
-    DTYPE_VERSION
-
 API
 ---
 .. autofunction:: df_to_mongo_dict
@@ -27,19 +22,12 @@ API
 .. autofunction:: update_pdb_values
 .. autofunction:: append_pdb_values
 .. autofunction:: hdf5_availability
-.. autofunction:: sanitize_datetime
-.. autofunction:: sanitize_version
-.. autodata:: DTYPE_DT
-    :annotation: : Mapping[str, np.dtype] = ...
-.. autodata:: DTYPE_VERSION
-    :annotation: : Mapping[str, np.dtype] = ...
 
 """
 
 import warnings
 from time import sleep
 from types import MappingProxyType
-from datetime import datetime
 from typing import (
     Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
     Hashable, Optional, TYPE_CHECKING
@@ -66,8 +54,7 @@ else:
 __all__ = [
     'df_to_mongo_dict', 'get_nan_row', 'even_index', 'sanitize_yaml_settings',
     'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
-    'hdf5_availability', 'sanitize_datetime', 'sanitize_version',
-    'DTYPE_DT', 'DTYPE_VERSION'
+    'hdf5_availability'
 ]
 
 

@@ -35,7 +35,6 @@ from pymongo import MongoClient, ASCENDING
 from nanoutils import Literal, PathType
 from CAT.logger import logger
 
-from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
 from .hdf5_log import create_hdf5_log
 from .pdb_array import PDBContainer
 from .functions import from_pdb_array

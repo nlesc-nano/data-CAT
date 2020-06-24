@@ -7,6 +7,8 @@ Index
     MOL_TUPLE
     MOL
     PDB
+    HDF5_TMP
+    HDF5_READ
 
 API
 ---
@@ -16,17 +18,22 @@ API
     :annotation: : Molecule = ...
 .. autodata:: PDB
     :annotation: : PDBContainer = ...
+.. autodata:: HDF5_TMP
+    :annotation: : pathlib.Path = ...
+.. autodata:: HDF5_READ
+    :annotation: : pathlib.Path = ...
 
 """
 
 from typing import Tuple
+from pathlib import Path
 
 from scm.plams import readpdb, Molecule
 
 from .pdb_array import PDBContainer
 from .data import PDB_TUPLE
 
-__all__ = ['MOL_TUPLE', 'MOL', 'PDB']
+__all__ = ['MOL_TUPLE', 'MOL', 'PDB', 'HDF5_TMP', 'HDF5_READ']
 
 #: A tuple of PLAMS Molecules.
 MOL_TUPLE: Tuple[Molecule, ...] = tuple(readpdb(f) for f in PDB_TUPLE)
@@ -36,3 +43,9 @@ MOL: Molecule = MOL_TUPLE[0]
 
 #: A PDBContainer.
 PDB: PDBContainer = PDBContainer.from_molecules(MOL_TUPLE)
+
+#: A path to a temporary (to-be created) hdf5 file.
+HDF5_TMP = Path('tests') / 'test_files' / 'tmp_file.hdf5'
+
+#: A path to a read-only hdf5 file.
+HDF5_READ = Path('tests') / 'test_files' / 'database' / 'structures.hdf5'

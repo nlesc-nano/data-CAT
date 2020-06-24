@@ -1,12 +1,36 @@
-""" """
+"""A module related to logging and hdf5.
+
+Index
+-----
+.. currentmodule:: dataCAT
+.. autosummary::
+    create_hdf5_log
+    update_hdf5_log
+    reset_hdf5_log
+    log_to_dataframe
+    DT_MAPPING
+    VERSION_MAPPING
+
+API
+---
+.. autofunction:: create_hdf5_log
+.. autofunction:: update_hdf5_log
+.. autofunction:: reset_hdf5_log
+.. autofunction:: log_to_dataframe
+.. autodata:: DT_MAPPING
+    :annotation: : Mapping[str, np.dtype] = ...
+.. autodata:: VERSION_MAPPING
+    :annotation: : Mapping[str, np.dtype] = ...
+
+"""
 
 from types import MappingProxyType
-from typing import Union, Mapping, Any, Sequence, Tuple, Optional, TYPE_CHECKING
-from logging import Logger
+from typing import Union, Mapping, Sequence, Tuple, TYPE_CHECKING
 from datetime import datetime
 
 import h5py
 import numpy as np
+import pandas as pd
 
 from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
 
@@ -15,9 +39,10 @@ if TYPE_CHECKING:
 else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
-__all__ = ['create_hdf5_log', 'update_hdf5_log', 'clear_hdf5_log']
-
-VERSION = (CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION)
+__all__ = [
+    'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log', 'log_to_dataframe',
+    'DT_MAPPING', 'VERSION_MAPPING'
+]
 
 _DT_MAPPING = {
     'year': 'int16',
@@ -38,85 +63,399 @@ _VERSION_MAPPING = {
     'minor': 'int8',
     'micro': 'int8'
 }
+
+#: A mapping representing a version dtype.
 VERSION_MAPPING: Mapping[str, np.dtype] = MappingProxyType({
-    k: np.dtype((v, 3)) for k, v in _VERSION_MAPPING.items()
+    k: np.dtype(v) for k, v in _VERSION_MAPPING.items()
 })
 VERSION_DTYPE = np.dtype(list(VERSION_MAPPING.items()))
 
-SLICE_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
+INDEX_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
+
+_VERSION = np.array([CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION], dtype=VERSION_DTYPE)  # type: ignore  # noqa: E501
+_VERSION.setflags(write=False)
+
+_VERSION_NAMES = np.array(['CAT', 'Nano-CAT', 'Data-CAT'], dtype=np.string_)
+_VERSION_NAMES.setflags(write=False)
 
 
-def _get_dt_tuple():
-    date = datetime.now()
-    return tuple(getattr(date, key) for key in DT_MAPPING.keys())
+LOG_DOC = """A h5py Group for logging database modifications.
+
+Attributes
+----------
+date : dataset
+    A dataset for denoting dates and times when the database was modified.
+    Used as dimensional scale for :code:`group['index'].dims[0]` and
+    :code:`group['version'].dims[0]`.
+index : dataset
+    A dataset with the indices of which elements in the database were modified.
+version : dataset
+    A dataset keeping track of (user-specified) package versions.
+version_names : dataset
+    A dataset with the names of the packages whose versions are displayed in **version**.
+    Used as dimensional scale for :code:`group['version'].dims[1]`.
+
+n : attribute
+    An attribute with the index of the next to-be set dataset element.
+n_step : attribute
+    An attribute with the increment in which the length of each dataset should be
+    increased in the case of :code:`n >= len(dataset)`.
+    Only relevant when :code:`clear_when_full = False`.
+clear_when_full : :class:`bool`
+    Whether or not to delete and recreate the dataset when it's full.
+    Otherwise its length be increased by **n_step**.
+date_created : attribute
+    An attribute with the date and time from when this logger was created.
+version_created : attribute
+    An attribute with the versions of a set of user-specified packages from when
+    this logger was created.
+
+"""
+
+
+def _get_now() -> np.recarray:
+    now = datetime.now()
+    tup = tuple(getattr(now, k) for k in DT_MAPPING.keys())
+    return np.rec.array(tup, dtype=DT_DTYPE)
 
 
 def create_hdf5_log(file: Union[h5py.File, h5py.Group],
                     n_entries: int = 100,
-                    initial_versions: Sequence[Tuple[int, int, int]] = VERSION
+                    clear_when_full: bool = False,
+                    version_names: Sequence[Union[str, bytes]] = _VERSION_NAMES,
+                    version_values: Sequence[Tuple[int, int, int]] = _VERSION
                     ) -> h5py.Group:
-    """Placeholder."""
-    m = len(initial_versions)
+    """Create a hdf5 group for logging database modifications.
+
+    The logger Group consists of four main datasets:
+
+    * ``"date"``: Denotes dates and times for when the database is modified.
+    * ``"index"``: Denotes indices of which elements in the database were modified.
+    * ``"version"``: Denotes user-specified package versions for when the database is modified.
+    * ``"version_names"`` : See the **version_names** parameter.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> import os
+        >>> from dataCAT.testing_utils import HDF5_TMP as hdf5_file
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT import create_hdf5_log
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+        >>> with h5py.File(hdf5_file, 'a') as f:
+        ...     group = create_hdf5_log(f)
+        ...
+        ...     print('group', '=', group)
+        ...     for name, dset in group.items():
+        ...         print(f'group[{name!r}]', '=', dset)
+        group = <HDF5 group "/logger" (4 members)>
+        group['date'] = <HDF5 dataset "date": shape (100,), type "|V11">
+        group['index'] = <HDF5 dataset "index": shape (100,), type "|O">
+        group['version'] = <HDF5 dataset "version": shape (100, 3), type "|V3">
+        group['version_names'] = <HDF5 dataset "version_names": shape (3,), type "|S8">
+
+    .. testcleanup:: python
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+    Parameters
+    ----------
+    file : :class:`h5py.File` or :class:`h5py.Group`
+        The File or Group where the logger should be created.
+    n_entries : :class:`int`
+        The initial number of entries in each to-be created dataset.
+        In addition, everytime the datasets run out of available slots their length
+        will be increased by this number (assuming :data:`clear_when_full = False`).
+    clear_when_full : :class:`bool`
+        If :data:`True`, delete the logger and create a new one whenever it is full.
+        Increase the size of each dataset by **n_entries** otherwise.
+    version_names : :class:`Sequence[str or bytes]`
+        A sequence consisting of strings and/or bytes representing the
+        names of the to-be stored package versions.
+        Should be of the same length as **version_values**.
+    version_values : :class:`Sequence[Tuple[int, int, int]]`
+        A sequence with 3-tuples, each tuple representing a package version associated with
+        its respective counterpart in **version_names**.
+
+    Returns
+    -------
+    :class:`h5py.Group`
+        The newly created ``"logger"`` group.
+
+    """
+    m = len(version_values)
 
     if n_entries < 1:
         raise ValueError(f"'n_entries' must ba larger than 1; observed value: {n_entries!r}")
     elif m < 1:
-        raise ValueError(f"'initial_versions' must be larger than 1")
+        raise ValueError(f"'version_values' must be larger than 1; observed value: {version_values!r}")  # noqa: E501
 
-    date_tuple = _get_dt_tuple()
+    now = _get_now()
 
+    # Set attributes
     grp = file.create_group('logger', track_order=True)
-    grp.attrs['__doc__'] = np.string_("A h5py Group for keeping track of database access.")
+    grp.attrs['__doc__'] = np.string_(LOG_DOC)
     grp.attrs['n'] = 0
     grp.attrs['n_step'] = n_entries
-    grp.attrs['date_created'] = np.array(date_tuple, dtype=DT_DTYPE)
-    grp.attrs['version_created'] = np.array(initial_versions, dtype=VERSION_DTYPE)
+    grp.attrs['clear_when_full'] = clear_when_full
+    grp.attrs['date_created'] = now
+    grp.attrs['version_created'] = np.asarray(version_values, dtype=VERSION_DTYPE)
 
-    shape1 = (n_entries, )
+    # Set the datasets
+    shape1 = (n_entries,)
     shape2 = (n_entries, m)
-    grp.create_dataset('date', shape=shape1, maxshape=(None,), dtype=DT_DTYPE, chunks=shape1)
+    scale1 = grp.create_dataset('date', shape=shape1, maxshape=(None,), dtype=DT_DTYPE, chunks=shape1)  # noqa: E501
+    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=INDEX_DTYPE, chunks=shape1)
     grp.create_dataset('version', shape=shape2, maxshape=(None, m), dtype=VERSION_DTYPE, chunks=shape2)  # noqa: E501
-    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=SLICE_DTYPE, chunks=shape1)
+
+    # Set dataset scales
+    scale1.make_scale('date')
+    grp['version'].dims[0].label = 'date'
+    grp['version'].dims[0].attach_scale(scale1)
+    grp['index'].dims[0].label = 'date'
+    grp['index'].dims[0].attach_scale(scale1)
+
+    # Set more dataset scales
+    data = np.asarray(version_names, dtype=np.string_)
+    scale2 = grp.create_dataset('version_names', data=data, shape=(m,), dtype=data.dtype)
+    scale2.make_scale('version_names')
+    grp['version'].dims[1].label = 'version_names'
+    grp['version'].dims[1].attach_scale(scale2)
     return grp
 
 
 def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
-                    version: Sequence[Tuple[int, int, int]] = VERSION) -> None:
-    """Placeholder."""
+                    version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> None:
+    r"""Add a new entry to the hdf5 logger in **file**.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> import os
+        >>> from shutil import copyfile
+        >>> from dataCAT.testing_utils import HDF5_READ, HDF5_TMP as hdf5_file
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+        >>> _ = copyfile(HDF5_READ, hdf5_file)
+
+    .. code:: python
+
+        >>> from datetime import datetime
+
+        >>> import h5py
+        >>> from dataCAT import update_hdf5_log
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+
+        >>> with h5py.File(hdf5_file, 'r+') as f:
+        ...     group = f['ligand']
+        ...
+        ...     n = group['logger'].attrs['n']
+        ...     date_before = group['logger/date'][n]
+        ...     index_before = group['logger/index'][n]
+        ...
+        ...     update_hdf5_log(group, idx=[0, 1, 2, 3])
+        ...     date_after = group['logger/date'][n]
+        ...     index_after = group['logger/index'][n]
+
+        >>> print(index_before, index_after, sep='\n')
+        []
+        [0 1 2 3]
+
+        >>> print(date_before, date_after, sep='\n')  # doctest: +SKIP
+        (0, 0, 0, 0, 0, 0, 0)
+        (2020, 6, 24, 16, 33, 7, 959888)
+
+    .. testcleanup:: python
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+    Parameters
+    ----------
+    file : :class:`h5py.File` or :class:`h5py.Group`
+        The h5py Group or Dataset containing the logger.
+        The logger *must* be stored under the ``"logger"`` key.
+    idx : :class:`numpy.ndarray`
+        A numpy array with the indices of (to-be logged) updated elements.
+    version_values : :class:`Sequence[Tuple[int, int, int]]`
+        A sequence with 3-tuples representing to-be updated package versions.
+
+
+    :rtype: :data:`None`
+
+    """
     group = file['logger']
 
     n = group.attrs['n']
-    n_max = len(group['data'])
+    n_max = len(group['date'])
 
     # Increase the size of the datasets by *n_step*
     if n >= n_max:
-        n_max += group.attrs['n_step']
-        group['date'].resize(n_max, axis=0)
-        group['version'].resize(n_max, axis=0)
-        group['index'].resize(n_max, axis=0)
+        if group.attrs['clear_when_full']:
+            version_names = group['version_names']
+            reset_hdf5_log(file, version_names)
+            n = 0
+        else:
+            n_max += group.attrs['n_step']
+            group['date'].resize(n_max, axis=0)
+            group['version'].resize(n_max, axis=0)
+            group['index'].resize(n_max, axis=0)
 
     # Parse the passed **idx**
     index = np.array(idx, ndmin=1, copy=False)
+    generic = index.dtype.type
     if index.ndim > 1:
         raise ValueError
-
-    generic = index.dtype.type
     if issubclass(generic, np.bool_):
         index, *_ = index.nonzero()
     elif not issubclass(generic, np.integer):
         raise TypeError
 
     # Update the datasets
-    date = _get_dt_tuple()
-    group['date'][n] = date
-    group['version'][n] = version
+    group['date'][n] = _get_now()
+    group['version'][n] = version_values
     group['index'][n] = index
 
     group.attrs['n'] += 1
 
 
-def clear_hdf5_log(file: Union[h5py.Group, h5py.File],
-                   initial_versions: Sequence[Tuple[int, int, int]] = VERSION) -> h5py.Group:
-    n_entries = file['logger'].attrs['n_step']
+def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
+                   version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> h5py.Group:
+    r"""Clear and reset the :code:`file["logger"]` group in the passed **file**.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> import os
+        >>> from shutil import copyfile
+        >>> from dataCAT.testing_utils import HDF5_READ, HDF5_TMP as hdf5_file
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+        >>> _ = copyfile(HDF5_READ, hdf5_file)
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT import reset_hdf5_log
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+
+        >>> with h5py.File(hdf5_file, 'r+') as f:
+        ...     group = f['ligand']
+        ...     print('before:')
+        ...     print(group['logger'].attrs['n'])
+        ...
+        ...     _ = reset_hdf5_log(group)
+        ...     print('\nafter:')
+        ...     print(group['logger'].attrs['n'])
+        before:
+        2
+        <BLANKLINE>
+        after:
+        0
+
+    .. testcleanup:: python
+
+        >>> if os.path.isfile(hdf5_file):
+        ...     os.remove(hdf5_file)
+
+    Parameters
+    ----------
+    file : :class:`h5py.File` or :class:`h5py.Group`
+        The h5py Group or Dataset containing the logger.
+        The logger *must* be stored under the ``"logger"`` key.
+    version_values : :class:`Sequence[Tuple[int, int, int]]`
+        A sequence with 3-tuples representing to-be updated package versions.
+
+    Returns
+    -------
+    :class:`h5py.Group`
+        The newly (re-)created ``"logger"`` group.
+
+    """
+    group = file['logger']
+
+    version_names = group['version_names']
+    n_entries = group.attrs['n_step']
+    clear_when_full = group.attrs['clear_when_full']
+
     del file['logger']
-    return create_hdf5_log(file, n_entries, initial_versions)
+    return create_hdf5_log(file, n_entries, clear_when_full, version_names, version_values)
+
+
+def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
+    """Export the log embedded within **file** to a Pandas DataFrame.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> from dataCAT.testing_utils import HDF5_READ as hdf5_file
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT import log_to_dataframe
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+
+        >>> with h5py.File(hdf5_file, 'r') as f:
+        ...     group = f['ligand']
+        ...     df = log_to_dataframe(group)
+        ...     print(df)  # doctest: +NORMALIZE_WHITESPACE
+                                     CAT             Nano-CAT             Data-CAT                           index
+                                   major minor micro    major minor micro    major minor micro
+        date
+        2020-06-24 15:28:09.861074     0     9     6        0     6     1        0     3     1                 [0]
+        2020-06-24 15:56:18.971201     0     9     6        0     6     1        0     3     1  [1, 2, 3, 4, 5, 6]
+
+    Parameters
+    ----------
+    file : :class:`h5py.File` or :class:`h5py.Group`
+        The h5py Group or Dataset containing the logger.
+        The logger *must* be stored under the ``"logger"`` key.
+
+    Returns
+    -------
+    :class:`pandas.DataFrame`
+        A DataFrame containing the content of :code:`file["logger"]`.
+
+    """  # noqa: E501
+    grp = file['logger']
+    n = grp.attrs['n']
+
+    # Prepare the columns
+    _columns = grp['version_names'][:].astype(str)
+    columns = pd.MultiIndex.from_product([_columns, grp['version'].dtype.names])
+
+    # In case the datasets are empty
+    if not n:
+        index = pd.Index([], dtype='datetime64[ns]', name='date')
+        df = pd.DataFrame(columns=columns, index=index, dtype='int8')
+        df[('index', '')] = np.array([], dtype=object)
+        return df
+
+    # Prepare the index
+    date = grp['date'][:n]
+    _index = np.fromiter((datetime(*i) for i in date), count=len(date), dtype='datetime64[us]')
+    index = pd.Index(_index, dtype='datetime64[ns]', name='date')
+
+    # Construct and return the DataFrame
+    data = grp['version'][:n].view('int8')
+    df = pd.DataFrame(data, index=index, columns=columns)
+    df[('index', '')] = grp['index'][:n]
+    return df

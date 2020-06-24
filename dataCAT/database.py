@@ -41,6 +41,7 @@ from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mo
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings, hdf5_availability
 from .pdb_array import PDBContainer
+from .hdf5_log import update_hdf5_log
 
 __all__ = ['Database']
 
@@ -471,15 +472,17 @@ class Database:
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
+            group = f[database]
             if new.any():
                 mol_series = df.loc[new.index, MOL]
                 pdb_new = PDBContainer.from_molecules(mol_series)
-                pdb_new.to_hdf5(f[database], mode='append')
+                pdb_new.to_hdf5(group, mode='append')
 
-                j = len(f[database]['atoms'])
+                j = len(group['atoms'])
                 i = j - len(mol_series)
                 ret = pd.Series(np.arange(i, j), index=new.index, name=HDF5_INDEX)
 
+                update_hdf5_log(group, idx=ret.values)
                 df.update(ret, overwrite=True)
                 if opt:
                     df.loc[new.index, OPT] = True
@@ -492,7 +495,8 @@ class Database:
                 mol_series = df.loc[old.index, MOL]
 
                 pdb_old = PDBContainer.from_molecules(mol_series)
-                pdb_old.to_hdf5(f[database], mode='update', idx=old.values)
+                pdb_old.to_hdf5(group, mode='update', idx=old.values)
+                update_hdf5_log(group, idx=old.values)
                 if opt:
                     df.loc[old.index, OPT] = True
         return ret
