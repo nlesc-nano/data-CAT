@@ -32,18 +32,12 @@ import numpy as np
 import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from nanoutils import Literal, PathType, VersionInfo
+from nanoutils import Literal, PathType
 from CAT.logger import logger
-from CAT import version_info as CAT_VERSION  # noqa: N812
 
-from . import version_info as DATACAT_VERSION  # noqa: N812
+from .hdf5_log import create_hdf5_log
 from .pdb_array import PDBContainer
 from .functions import from_pdb_array
-
-try:
-    from nanoCAT import version_info as NANOCAT_VERSION  # noqa: N812
-except ImportError:
-    NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
 __all__: List[str] = []
 
@@ -169,30 +163,27 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         'job_settings_cdft'
     )
 
-    kwargs_version = {'maxshape': (None, 3), 'shape': (1, 3), 'dtype': int}
-
     with h5py.File(path, 'a', libver='latest') as f:
-        # Store the version of CAT, nano-CAT and data-CAT
-        if 'CAT.__version__' not in f:
-            f.create_dataset('CAT.__version__', data=[CAT_VERSION], **kwargs_version)
-        if 'nanoCAT.__version__' not in f:
-            f.create_dataset('nanoCAT.__version__', data=[NANOCAT_VERSION], **kwargs_version)
-        if 'dataCAT.__version__' not in f:
-            f.create_dataset('dataCAT.__version__', data=[DATACAT_VERSION], **kwargs_version)
-
-        # Create new 2D datasets
         for grp_name in dataset_names:
+            # Check for pre-dataCAT-0.3 style databses
             if isinstance(f.get(grp_name), h5py.Dataset):
                 logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {grp_name!r}')
                 iterator = (from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name])
                 pdb = PDBContainer.from_molecules(iterator)
                 del f[grp_name]
-            elif grp_name in f:
-                continue
             else:
                 pdb = None
 
-            group = PDBContainer.create_hdf5_group(f, grp_name, **kwargs)
+            # Create a new group if it does not exist yet
+            if grp_name not in f:
+                group = PDBContainer.create_hdf5_group(f, grp_name, **kwargs)
+            else:
+                group = f[grp_name]
+
+            # Check of the log is present
+            if 'logger' not in group:
+                create_hdf5_log(group)
+
             if pdb is not None:
                 pdb.to_hdf5(group, mode='append')
 

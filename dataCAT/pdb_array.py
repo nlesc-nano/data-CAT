@@ -5,69 +5,13 @@ Index
 .. currentmodule:: dataCAT
 .. autosummary::
     PDBContainer
-    DTYPE_ATOM
-    DTYPE_BOND
+    ATOM_MAPPING
+    BOND_MAPPING
 
 API
 ---
 .. autoclass:: PDBContainer
     :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
-
-.. data:: DTYPE_ATOM
-    :type: Mapping[str, np.dtype]
-    :value: ...
-
-    A mapping representing the dtype of :attr:`PDBContainer.atoms`.
-
-    Most field names are based on to their, identically named, counterpart as produced by
-    :func:`readpdb()<scm.plams.interfaces.molecule.rdkit.readpdb>`,
-    the data in question being stored in the
-    :class:`Atom.properties.pdb_info<scm.plams.mol.atom.Atom>` block.
-
-    There are six exception to this general rule:
-
-    * ``x``, ``y`` & ``z``: Based on :class:`Atom.x<scm.plams.mol.atom.Atom>`,
-      :class:`Atom.y<scm.plams.mol.atom.Atom>` and :class:`Atom.z<scm.plams.mol.atom.Atom>`.
-    * ``symbol``: Based on :class:`Atom.symbol<scm.plams.mol.atom.Atom>`.
-    * ``charge``: Based on :class:`Atom.properties.charge<scm.plams.mol.atom.Atom>`.
-    * ``charge_float``: Based on :class:`Atom.properties.charge_float<scm.plams.mol.atom.Atom>`.
-
-    .. code:: python
-
-        mappingproxy({
-            'IsHeteroAtom':  dtype('bool'),
-            'SerialNumber':  dtype('int16'),
-            'Name':          dtype('S4'),
-            'ResidueName':   dtype('S3'),
-            'ChainId':       dtype('S1'),
-            'ResidueNumber': dtype('int16'),
-            'x':             dtype('float32'),
-            'y':             dtype('float32'),
-            'z':             dtype('float32'),
-            'Occupancy':     dtype('float32'),
-            'TempFactor':    dtype('float32'),
-            'symbol':        dtype('S4'),
-            'charge':        dtype('int8'),
-            'charge_float':  dtype('float64')
-        })
-
-
-.. data:: DTYPE_BOND
-    :type: Mapping[str, np.dtype]
-    :value: ...
-
-    A mapping representing the dtype of :attr:`PDBContainer.bonds`.
-
-    Field names are based on to their, identically named,
-    counterpart in :class:`~scm.plams.mol.bond.Bond`.
-
-    .. code:: python
-
-        mappingproxy({
-            'atom1': dtype('int32'),
-            'atom2': dtype('int32'),
-            'order': dtype('int8')
-        })
 
 """  # noqa: E501
 
@@ -85,6 +29,7 @@ from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
+from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE
 from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
@@ -92,40 +37,9 @@ if TYPE_CHECKING:
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
-__all__ = ['DTYPE_ATOM', 'DTYPE_BOND', 'PDBContainer']
+__all__ = ['PDBContainer']
 
 ST = TypeVar('ST', bound='PDBContainer')
-
-_DTYPE_ATOM = {
-    'IsHeteroAtom': 'bool',
-    'SerialNumber': 'int16',
-    'Name': 'S4',
-    'ResidueName': 'S3',
-    'ChainId': 'S1',
-    'ResidueNumber': 'int16',
-    'x': 'float32',
-    'y': 'float32',
-    'z': 'float32',
-    'Occupancy': 'float32',
-    'TempFactor': 'float32',
-    'symbol': 'S4',
-    'charge': 'int8',
-    'charge_float': 'float64'
-}
-DTYPE_ATOM: Mapping[str, np.dtype] = MappingProxyType(
-    {k: np.dtype(v) for k, v in _DTYPE_ATOM.items()}
-)
-del _DTYPE_ATOM
-
-_DTYPE_BOND = {
-    'atom1': 'int32',
-    'atom2': 'int32',
-    'order': 'int8'
-}
-DTYPE_BOND: Mapping[str, np.dtype] = MappingProxyType({
-    k: np.dtype(v) for k, v in _DTYPE_BOND.items()
-})
-del _DTYPE_BOND
 
 _AtomTuple = Tuple[
     bool,  # IsHeteroAtom
@@ -150,8 +64,8 @@ _BondTuple = Tuple[
     int,  # order
 ]
 
-ReduceTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray, Literal[False]]
-Coords = Tuple[float, float, float]
+_ReduceTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray, Literal[False]]
+_Coords = Tuple[float, float, float]
 
 
 class _PDBInfo(TypedDict):
@@ -205,7 +119,7 @@ def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
     return ret
 
 
-def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, Coords, str], None, None]:
+def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, _Coords, str], None, None]:
     """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
     for IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float in atom_array:  # noqa: E501
         _pdb_info = {
@@ -253,9 +167,12 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
     return ret
 
 
-Hdf5Mode = Literal['append', 'update']
 IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
-AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
+Hdf5Mode = Literal['append', 'update']
+_AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
+
+#: The docstring to-be assigned by :meth:`PDBContainer.create_hdf5_group`.
+HDF5_DOCSTRING = """A Group of datasets representing :class:`{cls_name}`."""
 
 
 class PDBContainer:
@@ -282,14 +199,13 @@ class PDBContainer:
     .. testsetup:: python
 
         >>> import os
-        >>> from pathlib import Path
 
         >>> from dataCAT.testing_utils import (
         ...     MOL_TUPLE as mol_list,
-        ...     PDB as pdb
+        ...     PDB as pdb,
+        ...     HDF5_TMP as hdf5_file
         ... )
 
-        >>> hdf5_file = Path('tests') / 'test_files' / 'tmp_file.hdf5'
         >>> if os.path.isfile(hdf5_file):
         ...     os.remove(hdf5_file)
 
@@ -333,7 +249,7 @@ class PDBContainer:
     __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
 
     #: A mapping holding the dimensionality of each array embedded within this class.
-    NDIM: ClassVar[Mapping[AttrName, int]] = MappingProxyType({
+    NDIM: ClassVar[Mapping[_AttrName, int]] = MappingProxyType({
         'atoms': 2,
         'bonds': 2,
         'atom_count': 1,
@@ -341,18 +257,18 @@ class PDBContainer:
     })
 
     #: A mapping holding the dtype of each array embedded within this class.
-    DTYPE: ClassVar[Mapping[AttrName, np.dtype]] = MappingProxyType({
-        'atoms': np.dtype(list(DTYPE_ATOM.items())),
-        'bonds': np.dtype(list(DTYPE_BOND.items())),
-        'atom_count': np.dtype('int32'),
-        'bond_count': np.dtype('int32'),
+    DTYPE: ClassVar[Mapping[_AttrName, np.dtype]] = MappingProxyType({
+        'atoms': ATOMS_DTYPE,
+        'bonds': BONDS_DTYPE,
+        'atom_count': ATOM_COUNT_DTYPE,
+        'bond_count': BOND_COUNT_DTYPE,
     })
 
     @property
     def atoms(self) -> np.recarray:
         """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a read-only padded recarray for keeping track of all atom-related information.
 
-        See :data:`dataCAT.DTYPE_ATOM` for a comprehensive overview of
+        See :data:`dataCAT.dtype.ATOMS_DTYPE` for a comprehensive overview of
         all field names and dtypes.
 
         """  # noqa: E501
@@ -364,7 +280,7 @@ class PDBContainer:
 
         Note that all atomic indices are 1-based.
 
-        See :data:`dataCAT.DTYPE_BOND` for a comprehensive overview of
+        See :data:`dataCAT.dtype.BONDS_DTYPE` for a comprehensive overview of
         all field names and dtypes.
 
         """  # noqa: E501
@@ -472,7 +388,7 @@ class PDBContainer:
         indent = 4 * ' '
         return f'{self.__class__.__name__}(\n{textwrap.indent(ret, indent)}\n)'
 
-    def __reduce__(self: ST) -> Tuple[Type[ST], ReduceTuple]:
+    def __reduce__(self: ST) -> Tuple[Type[ST], _ReduceTuple]:
         """Helper for :mod:`pickle`."""
         cls = type(self)
         return cls, (*self.values(), False)  # type: ignore
@@ -602,7 +518,7 @@ class PDBContainer:
         return cls(*iterator, validate=False)  # type: ignore
 
     @classmethod
-    def keys(cls) -> Generator[AttrName, None, None]:
+    def keys(cls) -> Generator[_AttrName, None, None]:
         """Yield the (public) attribute names in this class.
 
         Examples
@@ -656,7 +572,7 @@ class PDBContainer:
         cls = type(self)
         return (getattr(self, name) for name in cls.__slots__[2:])
 
-    def items(self) -> Generator[Tuple[AttrName, Union[np.ndarray, np.recarray]], None, None]:
+    def items(self) -> Generator[Tuple[_AttrName, Union[np.ndarray, np.recarray]], None, None]:
         """Yield the (public) attribute name/value pairs in this instance.
 
         Examples
@@ -900,7 +816,7 @@ class PDBContainer:
         cls_name = cls.__name__
 
         grp = file.create_group(name, track_order=True)
-        grp.attrs['__doc__'] = f"A group of datasets representing `{cls_name}`.".encode()
+        grp.attrs['__doc__'] = np.string_(HDF5_DOCSTRING.format(cls_name=cls_name))
 
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
@@ -980,10 +896,13 @@ class PDBContainer:
             An object for slicing all datasets in **group**.
             Only relevant when :code:`mode = "update"`.
 
-
-        :rtype: :data:`None`
+        Returns
+        -------
+        :class:`numpy.ndarray[int]<numpy.ndarray>`
+            A numpy array with
 
         """
+        # Parse **idx**
         if idx is None:
             index: Union[slice, np.ndarray] = slice(None)
         else:
@@ -993,16 +912,20 @@ class PDBContainer:
                 index = np.asarray(idx) if not isinstance(idx, slice) else idx
                 assert getattr(index, 'ndim', 1) == 1
 
+        # Parse **mode**
+        if mode not in {'append', 'update'}:
+            raise ValueError(f"Invalid mode: {mode!r}")
+
+        # Export to the .hdf5 file
         try:
             if mode == 'append':
                 return append_pdb_values(group, self)
             elif mode == 'update':
                 return update_pdb_values(group, self, index)
+
         except Exception as ex:
-            cls = type(self)
-            cls.validate_hdf5(group)
+            self.validate_hdf5(group)
             raise ex
-        raise ValueError(repr(mode))
 
     @classmethod
     def from_hdf5(cls: Type[ST], group: h5py.Group, idx: Optional[IndexLike] = None) -> ST:
