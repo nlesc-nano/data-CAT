@@ -290,14 +290,16 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
     index = np.array(idx, ndmin=1, copy=False)
     generic = index.dtype.type
     if index.ndim > 1:
-        raise ValueError
+        raise ValueError("The dimensionality of 'idx' should be <= 1; "
+                         f"observed dimensionality: {index.ndim!r}")
     elif not index.ndim:
         index = index.astype(INDEX_DTYPE)
 
     if issubclass(generic, np.bool_):
         index, *_ = index.nonzero()
     elif not issubclass(generic, np.integer):
-        raise TypeError
+        raise TypeError("'idx' expected an integer or boolean array; "
+                        f"observed dtype: {index.dtype!r}")
 
     # Update the datasets
     group['date'][n] = _get_now()
