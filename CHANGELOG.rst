@@ -8,6 +8,11 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 0.4.0
 *****
+* Updated the hdf5 logging system.
+
+
+0.3.1
+*****
 * Fixed bug with the `PDBContainer` hashing system.
 * Moved part of the hdf5 database creation process to `PDBContainer.create_hdf5_group()`.
 * Added `PDBContainer.keys()` and `PDBContainer.values()`.
@@ -21,7 +26,6 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Moved `hdf5_availability()` from `Database` to `dataCAT.functions`.
 * Cleaned up the global namespace.
 * Added `libver="latest"` to `Database.hdf5`.
-* Updated the hdf5 logging system.
 
 
 0.3.0
