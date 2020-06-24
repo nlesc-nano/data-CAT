@@ -22,7 +22,7 @@ from functools import partial
 from itertools import count
 from typing import (
     Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, Tuple, Type
+    overload, Tuple, Type, Iterable
 )
 
 import h5py
@@ -632,21 +632,17 @@ class Database:
 
         # Update **df** with preexisting molecules from **self**, returning *None*
         if inplace:
-            rdmol_list = self.from_hdf5(idx, database=database)
-            for mol, rdmol in zip(df.loc[df_slice, MOL], rdmol_list):
-                mol.from_rdmol(rdmol)
-            ret = None
+            self.from_hdf5(idx, database=database, mol_list=df.loc[df_slice, MOL], rdmol=False)
+            return None
 
         # Create and return a new series of PLAMS molecules
         else:
             mol_list = self.from_hdf5(idx, database=database, rdmol=False)
-            ret = pd.Series(mol_list, index=df[df_slice].index, name=MOL)
-
-        return ret
+            return pd.Series(mol_list, index=df[df_slice].index, name=MOL)
 
     def from_hdf5(self, index: Union[slice, Sequence[int]],
-                  database: Union[Ligand, QD] = 'ligand',
-                  rdmol: bool = True) -> List[Union[Molecule, Mol]]:
+                  database: Union[Ligand, QD] = 'ligand', rdmol: bool = True,
+                  mol_list: Optional[Iterable[Molecule]] = None) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
         Parameters
@@ -668,11 +664,11 @@ class Database:
         self.hdf5_availability()
         with self.hdf5('r') as f:
             pdb = PDBContainer.from_hdf5(f[database], index)
-            mol_list = pdb.to_molecules()
+            mol_list_ = pdb.to_molecules(mol=mol_list)
 
         if rdmol:
-            return [from_rdmol(mol) for mol in mol_list]
-        return mol_list
+            return [from_rdmol(mol) for mol in mol_list_]
+        return mol_list_
 
     def hdf5_availability(self, timeout: float = 5.0,
                           max_attempts: Optional[int] = 10) -> None:
