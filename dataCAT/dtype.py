@@ -20,6 +20,19 @@ API
 
     .
 
+    Most field names are based on to their, identically named, counterpart as produced by
+    :func:`readpdb()<scm.plams.interfaces.molecule.rdkit.readpdb>`,
+    the data in question being stored in the
+    :class:`Atom.properties.pdb_info<scm.plams.mol.atom.Atom>` block.
+
+    There are six exception to this general rule:
+
+    * ``x``, ``y`` & ``z``: Based on :class:`Atom.x<scm.plams.mol.atom.Atom>`,
+      :class:`Atom.y<scm.plams.mol.atom.Atom>` and :class:`Atom.z<scm.plams.mol.atom.Atom>`.
+    * ``symbol``: Based on :class:`Atom.symbol<scm.plams.mol.atom.Atom>`.
+    * ``charge``: Based on :class:`Atom.properties.charge<scm.plams.mol.atom.Atom>`.
+    * ``charge_float``: Based on :class:`Atom.properties.charge_float<scm.plams.mol.atom.Atom>`.
+
     .. code:: python
 
         >>> from dataCAT.dtype import ATOMS_DTYPE
@@ -44,6 +57,9 @@ API
     :annotation: : numpy.dtype = ...
 
     .
+
+    Field names are based on to their, identically named,
+    counterpart in :class:`plams.Bond<scm.plams.mol.bond.Bond>`.
 
     .. code:: python
 
@@ -83,6 +99,9 @@ API
 
     .
 
+    Field names are based on their, identically named, counterpart in
+    the :class:`~datetime.datetime` class.
+
     .. code:: python
 
         >>> from dataCAT.dtype import DT_DTYPE
@@ -101,6 +120,9 @@ API
 
     .
 
+    Field names are based on their, identically named, counterpart in
+    the :class:`nanoutils.VersionInfo` namedtuple.
+
     .. code:: python
 
         >>> from dataCAT.dtype import VERSION_DTYPE
@@ -115,6 +137,8 @@ API
 
     .
 
+    Used for representing a ragged array of 32-bit integers.
+
     .. code:: python
 
         >>> from dataCAT.dtype import INDEX_DTYPE
@@ -126,6 +150,8 @@ API
     :annotation: : numpy.dtype = ...
 
     .
+
+    Used for representing variable-length ASCII strings.
 
     .. code:: python
 
