@@ -29,9 +29,10 @@ from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
 from .dtype import DT_DTYPE, VERSION_DTYPE, MSG_DTYPE, INDEX_DTYPE
 
 if TYPE_CHECKING:
-    from numpy.typing import DtypeLike
+    from numpy.typing import DtypeLike, ArrayLike
 else:
     DtypeLike = 'numpy.typing.DtypeLike'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = [
     'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log', 'log_to_dataframe'
@@ -203,7 +204,7 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     return grp
 
 
-def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
+def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
                     message: Optional[str] = None,
                     version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> None:
     r"""Add a new entry to the hdf5 logger in **file**.
@@ -275,20 +276,24 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
     # Increase the size of the datasets by *n_step*
     if n >= n_max:
         if group.attrs['clear_when_full']:
-            version_names = group['version_names']
-            reset_hdf5_log(file, version_names)
+            reset_hdf5_log(file, version_values)
             n = 0
+            group = file['logger']
         else:
             n_max += group.attrs['n_step']
             group['date'].resize(n_max, axis=0)
             group['version'].resize(n_max, axis=0)
             group['index'].resize(n_max, axis=0)
+            group['message'].resize(n_max, axis=0)
 
     # Parse the passed **idx**
     index = np.array(idx, ndmin=1, copy=False)
     generic = index.dtype.type
     if index.ndim > 1:
         raise ValueError
+    elif not index.ndim:
+        index = index.astype(INDEX_DTYPE)
+
     if issubclass(generic, np.bool_):
         index, *_ = index.nonzero()
     elif not issubclass(generic, np.integer):
@@ -362,7 +367,7 @@ def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
     """
     group = file['logger']
 
-    version_names = group['version_names']
+    version_names = group['version_names'][:]
     n_entries = group.attrs['n_step']
     clear_when_full = group.attrs['clear_when_full']
 
