@@ -13,62 +13,6 @@ API
 .. autoclass:: PDBContainer
     :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
 
-.. data:: ATOM_MAPPING
-    :type: Mapping[str, np.dtype]
-    :value: ...
-
-    A mapping representing the dtype of :attr:`PDBContainer.atoms`.
-
-    Most field names are based on to their, identically named, counterpart as produced by
-    :func:`readpdb()<scm.plams.interfaces.molecule.rdkit.readpdb>`,
-    the data in question being stored in the
-    :class:`Atom.properties.pdb_info<scm.plams.mol.atom.Atom>` block.
-
-    There are six exception to this general rule:
-
-    * ``x``, ``y`` & ``z``: Based on :class:`Atom.x<scm.plams.mol.atom.Atom>`,
-      :class:`Atom.y<scm.plams.mol.atom.Atom>` and :class:`Atom.z<scm.plams.mol.atom.Atom>`.
-    * ``symbol``: Based on :class:`Atom.symbol<scm.plams.mol.atom.Atom>`.
-    * ``charge``: Based on :class:`Atom.properties.charge<scm.plams.mol.atom.Atom>`.
-    * ``charge_float``: Based on :class:`Atom.properties.charge_float<scm.plams.mol.atom.Atom>`.
-
-    .. code:: python
-
-        mappingproxy({
-            'IsHeteroAtom':  dtype('bool'),
-            'SerialNumber':  dtype('int16'),
-            'Name':          dtype('S4'),
-            'ResidueName':   dtype('S3'),
-            'ChainId':       dtype('S1'),
-            'ResidueNumber': dtype('int16'),
-            'x':             dtype('float32'),
-            'y':             dtype('float32'),
-            'z':             dtype('float32'),
-            'Occupancy':     dtype('float32'),
-            'TempFactor':    dtype('float32'),
-            'symbol':        dtype('S4'),
-            'charge':        dtype('int8'),
-            'charge_float':  dtype('float64')
-        })
-
-
-.. data:: BOND_MAPPING
-    :type: Mapping[str, np.dtype]
-    :value: ...
-
-    A mapping representing the dtype of :attr:`PDBContainer.bonds`.
-
-    Field names are based on to their, identically named,
-    counterpart in :class:`~scm.plams.mol.bond.Bond`.
-
-    .. code:: python
-
-        mappingproxy({
-            'atom1': dtype('int32'),
-            'atom2': dtype('int32'),
-            'order': dtype('int8')
-        })
-
 """  # noqa: E501
 
 import textwrap
@@ -85,6 +29,7 @@ from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
+from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE
 from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
@@ -92,40 +37,9 @@ if TYPE_CHECKING:
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
-__all__ = ['ATOM_DTYPE', 'BOND_DTYPE', 'PDBContainer']
+__all__ = ['PDBContainer']
 
 ST = TypeVar('ST', bound='PDBContainer')
-
-_ATOM_MAPPING = {
-    'IsHeteroAtom': 'bool',
-    'SerialNumber': 'int16',
-    'Name': 'S4',
-    'ResidueName': 'S3',
-    'ChainId': 'S1',
-    'ResidueNumber': 'int16',
-    'x': 'float32',
-    'y': 'float32',
-    'z': 'float32',
-    'Occupancy': 'float32',
-    'TempFactor': 'float32',
-    'symbol': 'S4',
-    'charge': 'int8',
-    'charge_float': 'float64'
-}
-ATOM_MAPPING: Mapping[str, np.dtype] = MappingProxyType(
-    {k: np.dtype(v) for k, v in _ATOM_MAPPING.items()}
-)
-ATOM_DTYPE = np.dtype(list(ATOM_MAPPING.items()))
-
-_BOND_MAPPING = {
-    'atom1': 'int32',
-    'atom2': 'int32',
-    'order': 'int8'
-}
-BOND_MAPPING: Mapping[str, np.dtype] = MappingProxyType({
-    k: np.dtype(v) for k, v in _BOND_MAPPING.items()
-})
-BOND_DTYPE = np.dtype(list(BOND_MAPPING.items()))
 
 _AtomTuple = Tuple[
     bool,  # IsHeteroAtom
@@ -344,17 +258,17 @@ class PDBContainer:
 
     #: A mapping holding the dtype of each array embedded within this class.
     DTYPE: ClassVar[Mapping[_AttrName, np.dtype]] = MappingProxyType({
-        'atoms': ATOM_DTYPE,
-        'bonds': BOND_DTYPE,
-        'atom_count': np.dtype('int32'),
-        'bond_count': np.dtype('int32'),
+        'atoms': ATOMS_DTYPE,
+        'bonds': BONDS_DTYPE,
+        'atom_count': ATOM_COUNT_DTYPE,
+        'bond_count': BOND_COUNT_DTYPE,
     })
 
     @property
     def atoms(self) -> np.recarray:
         """:class:`numpy.recarray`, shape :math:`(n, m)`: Get a read-only padded recarray for keeping track of all atom-related information.
 
-        See :data:`dataCAT.ATOM_MAPPING` for a comprehensive overview of
+        See :data:`dataCAT.dtype.ATOMS_DTYPE` for a comprehensive overview of
         all field names and dtypes.
 
         """  # noqa: E501
@@ -366,7 +280,7 @@ class PDBContainer:
 
         Note that all atomic indices are 1-based.
 
-        See :data:`dataCAT.BOND_MAPPING` for a comprehensive overview of
+        See :data:`dataCAT.dtype.BONDS_DTYPE` for a comprehensive overview of
         all field names and dtypes.
 
         """  # noqa: E501

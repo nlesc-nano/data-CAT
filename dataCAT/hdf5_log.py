@@ -8,8 +8,6 @@ Index
     update_hdf5_log
     reset_hdf5_log
     log_to_dataframe
-    DT_MAPPING
-    VERSION_MAPPING
 
 API
 ---
@@ -17,15 +15,10 @@ API
 .. autofunction:: update_hdf5_log
 .. autofunction:: reset_hdf5_log
 .. autofunction:: log_to_dataframe
-.. autodata:: DT_MAPPING
-    :annotation: : Mapping[str, np.dtype] = ...
-.. autodata:: VERSION_MAPPING
-    :annotation: : Mapping[str, np.dtype] = ...
 
 """
 
-from types import MappingProxyType
-from typing import Union, Mapping, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Union, Sequence, Tuple, Optional, TYPE_CHECKING
 from datetime import datetime
 
 import h5py
@@ -33,6 +26,7 @@ import numpy as np
 import pandas as pd
 
 from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
+from .dtype import DT_DTYPE, VERSION_DTYPE, MSG_DTYPE, INDEX_DTYPE
 
 if TYPE_CHECKING:
     from numpy.typing import DtypeLike
@@ -40,39 +34,8 @@ else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
-    'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log', 'log_to_dataframe',
-    'DT_MAPPING', 'VERSION_MAPPING'
+    'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log', 'log_to_dataframe'
 ]
-
-_DT_MAPPING = {
-    'year': 'int16',
-    'month': 'int8',
-    'day': 'int8',
-    'hour': 'int8',
-    'minute': 'int8',
-    'second': 'int8',
-    'microsecond': 'int32'
-}
-DT_MAPPING: Mapping[str, np.dtype] = MappingProxyType({
-    k: np.dtype(v) for k, v in _DT_MAPPING.items()
-})
-DT_DTYPE = np.dtype(list(DT_MAPPING.items()))
-
-_VERSION_MAPPING = {
-    'major': 'int8',
-    'minor': 'int8',
-    'micro': 'int8'
-}
-
-#: A mapping representing a version dtype.
-VERSION_MAPPING: Mapping[str, np.dtype] = MappingProxyType({
-    k: np.dtype(v) for k, v in _VERSION_MAPPING.items()
-})
-VERSION_DTYPE = np.dtype(list(VERSION_MAPPING.items()))
-
-INDEX_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
-
-MSG_DTYPE = h5py.string_dtype(encoding='ascii')
 
 _VERSION = np.array([CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION], dtype=VERSION_DTYPE)  # type: ignore  # noqa: E501
 _VERSION.setflags(write=False)
@@ -89,15 +52,15 @@ date : dataset
     A dataset for denoting dates and times when the database was modified.
     Used as dimensional scale for :code:`group['index'].dims[0]` and
     :code:`group['version'].dims[0]`.
-index : dataset
-    A dataset with the indices of which elements in the database were modified.
-message : dataset
-    A dataset holding user-specified modification messages.
 version : dataset
     A dataset keeping track of (user-specified) package versions.
 version_names : dataset
     A dataset with the names of the packages whose versions are displayed in **version**.
     Used as dimensional scale for :code:`group['version'].dims[1]`.
+message : dataset
+    A dataset holding user-specified modification messages.
+index : dataset
+    A dataset with the indices of which elements in the database were modified.
 
 n : attribute
     An attribute with the index of the next to-be set dataset element.
@@ -119,7 +82,7 @@ version_created : attribute
 
 def _get_now() -> np.recarray:
     now = datetime.now()
-    tup = tuple(getattr(now, k) for k in DT_MAPPING.keys())
+    tup = tuple(getattr(now, k) for k in DT_DTYPE.fields.keys())
     return np.rec.array(tup, dtype=DT_DTYPE)
 
 
@@ -134,9 +97,10 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     The logger Group consists of four main datasets:
 
     * ``"date"``: Denotes dates and times for when the database is modified.
-    * ``"index"``: Denotes indices of which elements in the database were modified.
     * ``"version"``: Denotes user-specified package versions for when the database is modified.
     * ``"version_names"`` : See the **version_names** parameter.
+    * ``"message"``: Holds user-specified modification messages.
+    * ``"index"``: Denotes indices of which elements in the database were modified.
 
     Examples
     --------
@@ -179,15 +143,15 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     n_entries : :class:`int`
         The initial number of entries in each to-be created dataset.
         In addition, everytime the datasets run out of available slots their length
-        will be increased by this number (assuming :data:`clear_when_full = False`).
+        will be increased by this number (assuming :data:`clear_when_full = False<False>`).
     clear_when_full : :class:`bool`
         If :data:`True`, delete the logger and create a new one whenever it is full.
         Increase the size of each dataset by **n_entries** otherwise.
-    version_names : :class:`Sequence[str or bytes]`
+    version_names : :class:`Sequence[str or bytes]<typing.Sequence>`
         A sequence consisting of strings and/or bytes representing the
         names of the to-be stored package versions.
         Should be of the same length as **version_values**.
-    version_values : :class:`Sequence[Tuple[int, int, int]]`
+    version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
         A sequence with 3-tuples, each tuple representing a package version associated with
         its respective counterpart in **version_names**.
 
@@ -296,7 +260,7 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: np.ndarray,
         The logger *must* be stored under the ``"logger"`` key.
     idx : :class:`numpy.ndarray`
         A numpy array with the indices of (to-be logged) updated elements.
-    version_values : :class:`Sequence[Tuple[int, int, int]]`
+    version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
         A sequence with 3-tuples representing to-be updated package versions.
 
 
@@ -387,7 +351,7 @@ def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
     file : :class:`h5py.File` or :class:`h5py.Group`
         The h5py Group or Dataset containing the logger.
         The logger *must* be stored under the ``"logger"`` key.
-    version_values : :class:`Sequence[Tuple[int, int, int]]`
+    version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
         A sequence with 3-tuples representing to-be updated package versions.
 
     Returns
@@ -426,11 +390,13 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
         ...     group = f['ligand']
         ...     df = log_to_dataframe(group)
         ...     print(df)  # doctest: +NORMALIZE_WHITESPACE
-                                     CAT             Nano-CAT             Data-CAT             message               index
-                                   major minor micro    major minor micro    major minor micro
-        date
-        2020-06-24 15:28:09.861074     0     9     6        0     6     1        0     3     1  update                 [0]
-        2020-06-24 15:56:18.971201     0     9     6        0     6     1        0     3     1  append  [1, 2, 3, 4, 5, 6]
+                                     CAT              ... Data-CAT message               index
+                                   major minor micro  ...    micro
+        date                                          ...
+        2020-06-24 15:28:09.861074     0     9     6  ...        1  update                 [0]
+        2020-06-24 15:56:18.971201     0     9     6  ...        1  append  [1, 2, 3, 4, 5, 6]
+        <BLANKLINE>
+        [2 rows x 11 columns]
 
     Parameters
     ----------

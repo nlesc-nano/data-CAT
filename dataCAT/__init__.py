@@ -16,24 +16,21 @@ version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
 del VersionInfo
 
 from .df_proxy import DFProxy
-from .hdf5_log import (
-    create_hdf5_log, update_hdf5_log, reset_hdf5_log, log_to_dataframe,
-    DT_MAPPING, VERSION_MAPPING
-)
-from .pdb_array import PDBContainer, ATOM_MAPPING, BOND_MAPPING
+from .hdf5_log import create_hdf5_log, update_hdf5_log, reset_hdf5_log, log_to_dataframe
+from .pdb_array import PDBContainer
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .database import Database
-from . import functions, testing_utils
+from . import functions, testing_utils, dtype
 
 __author__ = 'B. F. van Beek'
 __email__ = 'b.f.van.beek@vu.nl'
 
 __all__ = [
     'CAT_VERSION', 'NANOCAT_VERSION', 'DATACAT_VERSION',
-    'functions', 'testing_utils',
-    'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log', 'DT_MAPPING', 'VERSION_MAPPING',
+    'functions', 'testing_utils', 'dtype',
+    'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log',
     'DFProxy',
-    'PDBContainer', 'ATOM_MAPPING', 'BOND_MAPPING',
+    'PDBContainer',
     'OpenYaml', 'OpenLig', 'OpenQD',
     'Database',
 ]
