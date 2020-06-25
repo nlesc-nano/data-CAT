@@ -1,19 +1,23 @@
 """Tests for :class:`dataCAT.PDBContainer`."""
 
+import os
 import copy
 import pickle
 from pathlib import Path
 
 import h5py
+
+from scm.plams import writepdb
 from assertionlib import assertion
 from nanoutils import delete_finally
-
 from dataCAT import PDBContainer
 from dataCAT.testing_utils import PDB
 
 PATH = Path('tests') / 'test_files'
+
 HDF5_PATH = PATH / 'database' / 'structures.hdf5'
-HDF5_FAIL = PATH / 'tmp.hdf5'
+HDF5_FAIL = PATH / '.tmp.hdf5'
+PDB_OUTPUT = PATH / '.pdb_files'
 
 
 def test_pickle() -> None:
@@ -58,6 +62,19 @@ def test_init() -> None:
     atoms = [(True, 1, 'Cad', 'LIG', 'A', 1, -5.231, 0.808, -0.649, 1, 0, 'C', 0, 0)]
     bonds = [(1, 2, 1)]
     assertion.assert_(PDBContainer, atoms, bonds, 1, 1)
+
+    index = range(1)
+    assertion.assert_(PDBContainer, atoms, bonds, 1, 1, index)
+
+
+@delete_finally(PDB_OUTPUT)
+def test_to_molecules() -> None:
+    """Test :meth:`PDBContainer.to_molecules`."""
+    os.mkdir(PDB_OUTPUT)
+    mol_list = PDB.to_molecules()
+    for i, mol in enumerate(mol_list):
+        filename = str(PDB_OUTPUT / f'mol{i}.pdb')
+        writepdb(mol, filename)
 
 
 @delete_finally(HDF5_FAIL)

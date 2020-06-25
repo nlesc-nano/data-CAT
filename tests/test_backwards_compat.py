@@ -7,18 +7,22 @@ import numpy as np
 
 from scm.plams import readpdb
 from nanoutils import delete_finally
+from assertionlib import assertion
 from dataCAT import Database, PDBContainer
 
 PATH = Path('tests') / 'test_files'
-DB_PATH_OLD = PATH / 'database_pre_0_3'
-DB_PATH_NEW = PATH / '_database_pre_0_3'
+
+DB_PATH_OLD3 = PATH / 'database_pre_0_3'
+DB_PATH_NEW3 = PATH / '.database_pre_0_3'
+DB_PATH_OLD4 = PATH / 'database_pre_0_4'
+DB_PATH_NEW4 = PATH / '.database_pre_0_4'
 
 
-@delete_finally(DB_PATH_NEW)
-def test_create_database() -> None:
+@delete_finally(DB_PATH_NEW3)
+def test_create_database_3() -> None:
     """Test the backwards compatiblity of pre-``0.3`` databases."""
-    shutil.copytree(DB_PATH_OLD, DB_PATH_NEW)
-    db = Database(DB_PATH_NEW)
+    shutil.copytree(DB_PATH_OLD3, DB_PATH_NEW3)
+    db = Database(DB_PATH_NEW3)
 
     with db.hdf5('r', libver='latest') as f:
         pdb = PDBContainer.from_hdf5(f['ligand'])
@@ -27,7 +31,7 @@ def test_create_database() -> None:
     mol_list_ref = []
     files = ('C3H7O1.pdb', 'C2H5O1.pdb', 'C1H3O1.pdb')
     for _path in files:
-        path = str(DB_PATH_NEW / _path)
+        path = str(DB_PATH_NEW3 / _path)
         mol_list_ref.append(readpdb(path))
 
     # Compare molecules
@@ -35,3 +39,30 @@ def test_create_database() -> None:
         msg = f'{mol1.get_formula()} & {mol2.get_formula()}'
         np.testing.assert_allclose(mol1, mol2, rtol=0, atol=10**-2, err_msg=msg)
         np.testing.assert_array_equal(mol1.bond_matrix(), mol2.bond_matrix(), err_msg=msg)
+
+
+@delete_finally(DB_PATH_NEW4)
+def test_create_database_4() -> None:
+    """Test the backwards compatiblity of pre-``0.4`` databases."""
+    shutil.copytree(DB_PATH_OLD4, DB_PATH_NEW4)
+    db = Database(DB_PATH_NEW4)
+
+    with db.hdf5('r', libver='latest') as f:
+        grp = f['ligand']
+        scale = grp['index']
+        pdb = PDBContainer.from_hdf5(grp)
+
+        assertion.eq(grp['atoms'].dims[0]['index'], scale)
+        assertion.eq(grp['bonds'].dims[0]['index'], scale)
+        assertion.eq(grp['atom_count'].dims[0]['index'], scale)
+        assertion.eq(grp['bond_count'].dims[0]['index'], scale)
+
+        assertion.eq(grp['atoms'].dims[0].label, 'index')
+        assertion.eq(grp['bonds'].dims[0].label, 'index')
+        assertion.eq(grp['atom_count'].dims[0].label, 'index')
+        assertion.eq(grp['bond_count'].dims[0].label, 'index')
+
+        assertion.eq(grp['atoms'].dims[1].label, 'atoms')
+        assertion.eq(grp['bonds'].dims[1].label, 'bonds')
+
+    assertion.eq(pdb.index, np.arange(3, dtype='int32'), post_process=np.all)
