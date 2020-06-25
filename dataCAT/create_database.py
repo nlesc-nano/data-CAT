@@ -187,8 +187,9 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
                 pdb = None
 
             # Create a new group if it does not exist yet
+            dtype = IDX_DTYPE[grp_name]
             if grp_name not in f:
-                group = PDBContainer.create_hdf5_group(f, grp_name, **kwargs)
+                group = PDBContainer.create_hdf5_group(f, grp_name, dtype, **kwargs)
             else:
                 group = f[grp_name]
 
@@ -197,7 +198,6 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
                 if pdb is None:
                     logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
                 i = len(group['atoms'])
-                dtype = IDX_DTYPE[grp_name]
                 _set_index(PDBContainer, group, dtype, i)
 
             # Check of the log is present

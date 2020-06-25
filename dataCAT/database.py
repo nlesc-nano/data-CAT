@@ -478,8 +478,16 @@ class Database:
             group = f[database]
             if new.any():
                 mol_series = df.loc[new.index, MOL]
-                index = new.index.values.astype(idx_dtype).view(np.recarray)
-                pdb_new = PDBContainer.from_molecules(mol_series, index=index)
+
+                index = new.index.values.astype(idx_dtype)
+                if database in {'qd', 'qd_no_opt'}:
+                    # TODO: Fix the messy MultiIndex
+                    core_anchor = index['core anchor']
+                    for i, j in enumerate(core_anchor):
+                        j_split = j.split()
+                        core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=np.int32)
+
+                pdb_new = PDBContainer.from_molecules(mol_series, index=index.view(np.recarray))
                 pdb_new.to_hdf5(group, mode='append')
 
                 j = len(group['atoms'])
