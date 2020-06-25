@@ -175,7 +175,8 @@ import numpy as np
 
 __all__ = [
     'ATOMS_DTYPE', 'BONDS_DTYPE', 'ATOM_COUNT_DTYPE', 'BOND_COUNT_DTYPE',
-    'DT_DTYPE', 'VERSION_DTYPE', 'INDEX_DTYPE', 'MSG_DTYPE'
+    'DT_DTYPE', 'VERSION_DTYPE', 'INDEX_DTYPE', 'MSG_DTYPE',
+    'LIG_IDX_DTYPE', 'QD_IDX_DTYPE', 'BACKUP_IDX_DTYPE'
 ]
 
 _ATOMS_MAPPING = {
@@ -212,6 +213,7 @@ ATOM_COUNT_DTYPE = np.dtype('int32')
 #: The datatype of :attr:`PDBContainer.bond_count<dataCAT.PDBContainer.bond_count>`
 BOND_COUNT_DTYPE = np.dtype('int32')
 
+
 _DT_MAPPING = {
     'year': 'int16',
     'month': 'int8',
@@ -238,3 +240,20 @@ INDEX_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
 
 #: The datatype of the ``"message"`` dataset created by :func:`~dataCAT.create_hdf5_log`
 MSG_DTYPE = h5py.string_dtype(encoding='ascii')
+
+_LIG_IDX_MAPPING = {
+    'ligand': h5py.string_dtype(encoding='ascii'),
+    'ligand anchor': np.dtype('int32')
+}
+LIG_IDX_DTYPE = np.dtype(list(_LIG_IDX_MAPPING.items()))
+
+
+_QD_IDX_MAPPING = {
+    'core': h5py.string_dtype(encoding='ascii'),
+    'core anchor': h5py.vlen_dtype(np.dtype('int32')),
+    'ligand': h5py.string_dtype(encoding='ascii'),
+    'ligand anchor': np.dtype('int32')
+}
+QD_IDX_DTYPE = np.dtype(list(_QD_IDX_MAPPING.items()))
+
+BACKUP_IDX_DTYPE = np.dtype('int32')

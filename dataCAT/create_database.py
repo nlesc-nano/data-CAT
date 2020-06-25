@@ -24,7 +24,8 @@ API
 
 from os import PathLike
 from os.path import join, isfile
-from typing import Dict, Any, List, Union, AnyStr, overload
+from types import MappingProxyType
+from typing import Dict, Any, List, Union, AnyStr, Mapping, overload
 
 import yaml
 import h5py
@@ -35,9 +36,10 @@ from pymongo import MongoClient, ASCENDING
 from nanoutils import Literal, PathType
 from CAT.logger import logger
 
+from .dtype import BACKUP_IDX_DTYPE, LIG_IDX_DTYPE, QD_IDX_DTYPE
 from .hdf5_log import create_hdf5_log
 from .pdb_array import PDBContainer
-from .functions import from_pdb_array
+from .functions import from_pdb_array, _set_index
 
 __all__: List[str] = []
 
@@ -127,6 +129,16 @@ def _create_csv_qd(filename: PathType) -> None:
     df.to_csv(filename)
 
 
+IDX_DTYPE: Mapping[str, np.dtype] = MappingProxyType({
+    'core': BACKUP_IDX_DTYPE,
+    'core_no_opt': BACKUP_IDX_DTYPE,
+    'ligand': LIG_IDX_DTYPE,
+    'ligand_no_opt': LIG_IDX_DTYPE,
+    'qd': QD_IDX_DTYPE,
+    'qd_no_opt': QD_IDX_DTYPE
+})
+
+
 @overload
 def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
     ...
@@ -153,7 +165,7 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
     path = join(path, name)
 
     # Define arguments for 2D datasets
-    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', )
+    dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt')
     kwargs = {'chunks': True, 'compression': 'gzip'}
 
     # Define arguments for 3D datasets
@@ -165,7 +177,7 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
     with h5py.File(path, 'a', libver='latest') as f:
         for grp_name in dataset_names:
-            # Check for pre-dataCAT-0.3 style databses
+            # Check for pre-dataCAT-0.3 style databases
             if isinstance(f.get(grp_name), h5py.Dataset):
                 logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {grp_name!r}')
                 iterator = (from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name])
@@ -179,6 +191,12 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
                 group = PDBContainer.create_hdf5_group(f, grp_name, **kwargs)
             else:
                 group = f[grp_name]
+
+            # Check for pre-dataCAT-0.4 style databases
+            if 'index' not in group:
+                i = len(group['atoms'])
+                dtype = IDX_DTYPE[grp_name]
+                _set_index(PDBContainer, group, dtype, i)
 
             # Check of the log is present
             if 'logger' not in group:
