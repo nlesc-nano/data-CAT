@@ -202,7 +202,7 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
             # Check of the log is present
             if 'logger' not in group:
-                create_hdf5_log(group)
+                create_hdf5_log(group, **kwargs)
 
             if pdb is not None:
                 pdb.to_hdf5(group, mode='append')
