@@ -5,13 +5,11 @@ Index
 .. currentmodule:: dataCAT
 .. autosummary::
     PDBContainer
-    ATOM_MAPPING
-    BOND_MAPPING
 
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, index, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
 
 """  # noqa: E501
 
