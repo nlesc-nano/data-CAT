@@ -141,10 +141,14 @@ API
 
     .. code:: python
 
+        >>> import h5py
         >>> from dataCAT.dtype import INDEX_DTYPE
 
         >>> print(repr(INDEX_DTYPE))
         dtype('O')
+
+        >>> h5py.check_vlen_dtype(INDEX_DTYPE)
+        dtype('int32')
 
 .. autodata:: MSG_DTYPE
     :annotation: : numpy.dtype = ...
@@ -155,10 +159,14 @@ API
 
     .. code:: python
 
+        >>> import h5py
         >>> from dataCAT.dtype import MSG_DTYPE
 
         >>> print(repr(MSG_DTYPE))
         dtype('O')
+
+        >>> h5py.check_string_dtype(MSG_DTYPE)
+        string_info(encoding='ascii', length=None)
 
 """
 
