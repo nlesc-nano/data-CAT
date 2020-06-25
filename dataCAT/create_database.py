@@ -179,7 +179,7 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         for grp_name in dataset_names:
             # Check for pre-dataCAT-0.3 style databases
             if isinstance(f.get(grp_name), h5py.Dataset):
-                logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {grp_name!r}')
+                logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
                 iterator = (from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name])
                 pdb = PDBContainer.from_molecules(iterator)
                 del f[grp_name]
@@ -194,6 +194,8 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
             # Check for pre-dataCAT-0.4 style databases
             if 'index' not in group:
+                if pdb is None:
+                    logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
                 i = len(group['atoms'])
                 dtype = IDX_DTYPE[grp_name]
                 _set_index(PDBContainer, group, dtype, i)
