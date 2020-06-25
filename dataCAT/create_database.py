@@ -177,17 +177,19 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
     with h5py.File(path, 'a', libver='latest') as f:
         for grp_name in dataset_names:
+            dtype = IDX_DTYPE[grp_name]
+
             # Check for pre-dataCAT-0.3 style databases
             if isinstance(f.get(grp_name), h5py.Dataset):
                 logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
-                iterator = (from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name])
-                pdb = PDBContainer.from_molecules(iterator)
+                mol_list = [from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name]]
+                index = np.rec.array(None, dtype=dtype, shape=(len(mol_list),))
+                pdb = PDBContainer.from_molecules(mol_list, index=index)
                 del f[grp_name]
             else:
                 pdb = None
 
             # Create a new group if it does not exist yet
-            dtype = IDX_DTYPE[grp_name]
             if grp_name not in f:
                 group = PDBContainer.create_hdf5_group(f, grp_name, dtype, **kwargs)
             else:

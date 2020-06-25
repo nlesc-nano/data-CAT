@@ -9,6 +9,7 @@ from scm.plams import readpdb
 from nanoutils import delete_finally
 from assertionlib import assertion
 from dataCAT import Database, PDBContainer
+from dataCAT.dtype import LIG_IDX_DTYPE
 
 PATH = Path('tests') / 'test_files'
 
@@ -40,6 +41,10 @@ def test_create_database_3() -> None:
         np.testing.assert_allclose(mol1, mol2, rtol=0, atol=10**-2, err_msg=msg)
         np.testing.assert_array_equal(mol1.bond_matrix(), mol2.bond_matrix(), err_msg=msg)
 
+    with db.hdf5('r', libver='latest') as f:
+        group = f['ligand']
+        pdb.validate_hdf5(group)
+
 
 @delete_finally(DB_PATH_NEW4)
 def test_create_database_4() -> None:
@@ -65,4 +70,8 @@ def test_create_database_4() -> None:
         assertion.eq(grp['atoms'].dims[1].label, 'atoms')
         assertion.eq(grp['bonds'].dims[1].label, 'bonds')
 
-    assertion.eq(pdb.index, np.arange(3, dtype='int32'), post_process=np.all)
+        pdb.validate_hdf5(grp)
+
+    ref = np.rec.array(None, dtype=LIG_IDX_DTYPE, shape=(3,))
+    ref[:] = b''
+    assertion.eq(pdb.index, ref, post_process=np.all)
