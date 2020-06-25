@@ -243,7 +243,7 @@ MSG_DTYPE = h5py.string_dtype(encoding='ascii')
 
 _LIG_IDX_MAPPING = {
     'ligand': h5py.string_dtype(encoding='ascii'),
-    'ligand anchor': np.dtype('int32')
+    'ligand anchor': h5py.string_dtype(encoding='ascii')
 }
 LIG_IDX_DTYPE = np.dtype(list(_LIG_IDX_MAPPING.items()))
 
@@ -252,7 +252,7 @@ _QD_IDX_MAPPING = {
     'core': h5py.string_dtype(encoding='ascii'),
     'core anchor': h5py.vlen_dtype(np.dtype('int32')),
     'ligand': h5py.string_dtype(encoding='ascii'),
-    'ligand anchor': np.dtype('int32')
+    'ligand anchor': h5py.string_dtype(encoding='ascii')
 }
 QD_IDX_DTYPE = np.dtype(list(_QD_IDX_MAPPING.items()))
 

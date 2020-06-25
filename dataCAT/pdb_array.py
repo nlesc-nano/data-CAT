@@ -129,7 +129,8 @@ def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
 
 def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, _Coords, str], None, None]:
     """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
-    for IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float in atom_array:  # noqa: E501
+    for ar in atom_array:
+        IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float = ar.item()  # noqa: E501
         _pdb_info = {
             'IsHeteroAtom': IsHeteroAtom,
             'SerialNumber': SerialNumber,
@@ -871,9 +872,11 @@ class PDBContainer:
         """
         cls_name = cls.__name__
 
+        # Create the group
         grp = file.create_group(name, track_order=True)
         grp.attrs['__doc__'] = np.string_(HDF5_DOCSTRING.format(cls_name=cls_name))
 
+        # Create the datasets
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
         key_iter = (k for k in cls.keys() if k != 'index')
@@ -883,12 +886,14 @@ class PDBContainer:
             dtype = DTYPE[key]
 
             dset = grp.create_dataset(key, shape=shape, maxshape=maxshape, dtype=dtype, **kwargs)
-            dset.attrs['__doc__'] = f"A dataset representing `{cls_name}.atoms`.".encode()
+            dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.atoms`.")
 
+        # Set the index
         _dtype = index_dtype if index_dtype is not None else cls.DTYPE['index']
         scale = grp.create_dataset('index', shape=(0,), maxshape=(None,), dtype=_dtype)
         scale.make_scale('index')
 
+        # Use the index as a scale
         dset_iter = (grp[k] for k in cls.keys() if k != 'index')
         for dset in dset_iter:
             dset.dims[0].label = 'index'
