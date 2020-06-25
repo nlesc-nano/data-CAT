@@ -345,7 +345,7 @@ class PDBContainer:
             See :attr:`PDBContainer.bond_count`.
         index : :class:`numpy.recarray`, shape :math:`(n,)`, optional
             A recarray representing an index.
-            If :data:`None`, use a simple numerical index (_i.e._ :func:`numpy.arange`).
+            If :data:`None`, use a simple numerical index (*i.e.* :func:`numpy.arange`).
             See :attr:`PDBContainer.index`.
 
         Keyword Arguments
