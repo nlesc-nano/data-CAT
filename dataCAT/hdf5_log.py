@@ -18,7 +18,7 @@ API
 
 """
 
-from typing import Union, Sequence, Tuple, Optional, TYPE_CHECKING
+from typing import Union, Sequence, Tuple, Optional, Any, TYPE_CHECKING
 from datetime import datetime
 
 import h5py
@@ -91,9 +91,9 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
                     n_entries: int = 100,
                     clear_when_full: bool = False,
                     version_names: Sequence[Union[str, bytes]] = _VERSION_NAMES,
-                    version_values: Sequence[Tuple[int, int, int]] = _VERSION
-                    ) -> h5py.Group:
-    """Create a hdf5 group for logging database modifications.
+                    version_values: Sequence[Tuple[int, int, int]] = _VERSION,
+                    **kwargs: Any) -> h5py.Group:
+    r"""Create a hdf5 group for logging database modifications.
 
     The logger Group consists of four main datasets:
 
@@ -155,6 +155,8 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
         A sequence with 3-tuples, each tuple representing a package version associated with
         its respective counterpart in **version_names**.
+    \**kwargs : :data:`~Any`
+        Further keyword arguments for the h5py :meth:`~h5py.Group.create_dataset` function.
 
     Returns
     -------
@@ -183,11 +185,11 @@ def create_hdf5_log(file: Union[h5py.File, h5py.Group],
     shape2 = (n_entries, m)
     data = np.asarray(version_names, dtype=np.string_)
 
-    scale1 = grp.create_dataset('date', shape=shape1, maxshape=(None,), dtype=DT_DTYPE, chunks=shape1)  # noqa: E501
-    grp.create_dataset('version', shape=shape2, maxshape=(None, m), dtype=VERSION_DTYPE, chunks=shape2)  # noqa: E501
-    scale2 = grp.create_dataset('version_names', data=data, shape=(m,), dtype=data.dtype)
-    grp.create_dataset('message', shape=shape1, maxshape=(None,), dtype=MSG_DTYPE, chunks=shape1)
-    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=INDEX_DTYPE, chunks=shape1)
+    scale1 = grp.create_dataset('date', shape=shape1, maxshape=(None,), dtype=DT_DTYPE, chunks=shape1, **kwargs)  # noqa: E501
+    grp.create_dataset('version', shape=shape2, maxshape=(None, m), dtype=VERSION_DTYPE, chunks=shape2, **kwargs)  # noqa: E501
+    scale2 = grp.create_dataset('version_names', data=data, shape=(m,), dtype=data.dtype, **kwargs)
+    grp.create_dataset('message', shape=shape1, maxshape=(None,), dtype=MSG_DTYPE, chunks=shape1, **kwargs)  # noqa: E501
+    grp.create_dataset('index', shape=shape1, maxshape=(None,), dtype=INDEX_DTYPE, chunks=shape1, **kwargs)  # noqa: E501
 
     # Set dataset scales
     scale1.make_scale('date')
