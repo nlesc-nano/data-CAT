@@ -5,13 +5,11 @@ Index
 .. currentmodule:: dataCAT
 .. autosummary::
     PDBContainer
-    ATOM_MAPPING
-    BOND_MAPPING
 
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, index, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
 
 """  # noqa: E501
 
@@ -29,13 +27,14 @@ from scm.plams import Molecule, Atom, Bond
 from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
-from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE
+from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE, BACKUP_IDX_DTYPE
 from .functions import update_pdb_values, append_pdb_values, int_to_slice
 
 if TYPE_CHECKING:
-    from numpy.typing import ArrayLike
+    from numpy.typing import ArrayLike, DtypeLike
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
+    DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = ['PDBContainer']
 
@@ -64,7 +63,14 @@ _BondTuple = Tuple[
     int,  # order
 ]
 
-_ReduceTuple = Tuple[np.recarray, np.recarray, np.ndarray, np.ndarray, Literal[False]]
+_ReduceTuple = Tuple[
+    np.recarray,
+    np.recarray,
+    np.ndarray,
+    np.ndarray,
+    np.recarray,
+    Literal[False]
+]
 _Coords = Tuple[float, float, float]
 
 
@@ -121,7 +127,8 @@ def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
 
 def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, _Coords, str], None, None]:
     """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
-    for IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float in atom_array:  # noqa: E501
+    for ar in atom_array:
+        IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float = ar.item()  # noqa: E501
         _pdb_info = {
             'IsHeteroAtom': IsHeteroAtom,
             'SerialNumber': SerialNumber,
@@ -169,7 +176,7 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 
 IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
 Hdf5Mode = Literal['append', 'update']
-_AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count']
+_AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count', 'index']
 
 #: The docstring to-be assigned by :meth:`PDBContainer.create_hdf5_group`.
 HDF5_DOCSTRING = """A Group of datasets representing :class:`{cls_name}`."""
@@ -222,7 +229,8 @@ class PDBContainer:
             atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
             bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
             atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-            bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
+            bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+            index      = numpy.recarray(..., shape=(23,), dtype=...)
         )
 
         >>> hdf5_file = str(...)  # doctest: +SKIP
@@ -233,11 +241,12 @@ class PDBContainer:
         ...     print('group', '=', group)
         ...     for name, dset in group.items():
         ...         print(f'group[{name!r}]', '=', dset)
-        group = <HDF5 group "/ligand" (4 members)>
+        group = <HDF5 group "/ligand" (5 members)>
         group['atoms'] = <HDF5 dataset "atoms": shape (23, 76), type "|V46">
         group['bonds'] = <HDF5 dataset "bonds": shape (23, 75), type "|V9">
         group['atom_count'] = <HDF5 dataset "atom_count": shape (23,), type "<i4">
         group['bond_count'] = <HDF5 dataset "bond_count": shape (23,), type "<i4">
+        group['index'] = <HDF5 dataset "index": shape (23,), type "<i4">
 
     .. testcleanup:: python
 
@@ -246,7 +255,9 @@ class PDBContainer:
 
     """
 
-    __slots__ = ('__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count')
+    __slots__ = (
+        '__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count', '_index'
+    )
 
     #: A mapping holding the dimensionality of each array embedded within this class.
     NDIM: ClassVar[Mapping[_AttrName, int]] = MappingProxyType({
@@ -254,6 +265,7 @@ class PDBContainer:
         'bonds': 2,
         'atom_count': 1,
         'bond_count': 1,
+        'index': 1
     })
 
     #: A mapping holding the dtype of each array embedded within this class.
@@ -262,6 +274,7 @@ class PDBContainer:
         'bonds': BONDS_DTYPE,
         'atom_count': ATOM_COUNT_DTYPE,
         'bond_count': BOND_COUNT_DTYPE,
+        'index': BACKUP_IDX_DTYPE
     })
 
     @property
@@ -296,17 +309,24 @@ class PDBContainer:
         """:class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)` : Get a read-only ndarray for keeping track of the number of atoms in each molecule in :attr:`~PDBContainer.bonds`."""  # noqa: E501
         return self._bond_count
 
+    @property
+    def index(self) -> np.recarray:
+        """:class:`numpy.recarray`, shape :math:`(n,)`: Get a recarray representing an index."""  # noqa: E501
+        return self._index
+
     @overload
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
                  atom_count: np.ndarray, bond_count: np.ndarray,
+                 index: np.recarray,
                  validate: Literal[False]) -> None:
         ...
     @overload  # noqa: E301
     def __init__(self, atoms: ArrayLike, bonds: ArrayLike,
                  atom_count: ArrayLike, bond_count: ArrayLike,
-                 validate: Literal[True] = ..., copy: bool = ...) -> None:
+                 index: Optional[ArrayLike] = None,
+                 validate: Literal[True] = ..., copy: bool = ...,) -> None:
         ...
-    def __init__(self, atoms, bonds, atom_count, bond_count, validate=True, copy=True):  # noqa: E501,E301
+    def __init__(self, atoms, bonds, atom_count, bond_count, index=None, validate=True, copy=True, index_dtype=None):  # noqa: E501,E301
         """Initialize an instance.
 
         Parameters
@@ -323,6 +343,10 @@ class PDBContainer:
         bond_count : :class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)`
             An ndarray for keeping track of the number of bonds in each molecule in **bonds**.
             See :attr:`PDBContainer.bond_count`.
+        index : :class:`numpy.recarray`, shape :math:`(n,)`, optional
+            A recarray representing an index.
+            If :data:`None`, use a simple numerical index (*i.e.* :func:`numpy.arange`).
+            See :attr:`PDBContainer.index`.
 
         Keyword Arguments
         -----------------
@@ -358,6 +382,12 @@ class PDBContainer:
                     array = array.view(np.recarray)
                 setattr(self, f'_{name}', array)
 
+            if index is None:
+                self._index = np.array(index, ndmin=1, copy=copy).view(np.recarray)
+            else:
+                dtype = cls.DTYPE['index']
+                self._index = np.arange(len(array), dtype=dtype).view(np.recarray)
+
             len_set = {len(ar) for ar in self.values()}
             if len(len_set) != 1:
                 raise ValueError("All passed arrays should be of the same length")
@@ -368,6 +398,7 @@ class PDBContainer:
             self._bonds: np.recarray = bonds
             self._atom_count: np.ndarray = atom_count
             self._bond_count: np.ndarray = bond_count
+            self._index: np.recarray = index
 
         for ar in self.values():
             ar.setflags(write=False)
@@ -469,7 +500,8 @@ class PDBContainer:
                 atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
+                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+                index      = numpy.recarray(..., shape=(23,), dtype=...)
             )
 
             >>> pdb[0]
@@ -477,7 +509,8 @@ class PDBContainer:
                 atoms      = numpy.recarray(..., shape=(1, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(1, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(1,), dtype=int32),
-                bond_count = numpy.ndarray(..., shape=(1,), dtype=int32)
+                bond_count = numpy.ndarray(..., shape=(1,), dtype=int32),
+                index      = numpy.recarray(..., shape=(1,), dtype=...)
             )
 
             >>> pdb[:10]
@@ -485,7 +518,8 @@ class PDBContainer:
                 atoms      = numpy.recarray(..., shape=(10, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(10, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(10,), dtype=int32),
-                bond_count = numpy.ndarray(..., shape=(10,), dtype=int32)
+                bond_count = numpy.ndarray(..., shape=(10,), dtype=int32),
+                index      = numpy.recarray(..., shape=(10,), dtype=...)
             )
 
             >>> pdb[[0, 5, 7, 9, 10]]
@@ -493,7 +527,8 @@ class PDBContainer:
                 atoms      = numpy.recarray(..., shape=(5, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(5, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(5,), dtype=int32),
-                bond_count = numpy.ndarray(..., shape=(5,), dtype=int32)
+                bond_count = numpy.ndarray(..., shape=(5,), dtype=int32),
+                index      = numpy.recarray(..., shape=(5,), dtype=...)
             )
 
         Parameters
@@ -515,7 +550,9 @@ class PDBContainer:
             assert getattr(index, 'ndim', 1) == 1
 
         iterator = (ar[index] for ar in self.values())
-        return cls(*iterator, validate=False)  # type: ignore
+        ret = cls(*iterator, validate=False)  # type: ignore
+        ret._index = ret._index.view(np.recarray)
+        return ret  # type: ignore
 
     @classmethod
     def keys(cls) -> Generator[_AttrName, None, None]:
@@ -533,6 +570,7 @@ class PDBContainer:
             bonds
             atom_count
             bond_count
+            index
 
         Yields
         ------
@@ -562,6 +600,7 @@ class PDBContainer:
             <numpy.recarray object at ...>
             <numpy.ndarray object at ...>
             <numpy.ndarray object at ...>
+            <numpy.recarray object at ...>
 
         Yields
         ------
@@ -570,7 +609,7 @@ class PDBContainer:
 
         """
         cls = type(self)
-        return (getattr(self, name) for name in cls.__slots__[2:])
+        return (getattr(self, name) for name in cls.keys())
 
     def items(self) -> Generator[Tuple[_AttrName, Union[np.ndarray, np.recarray]], None, None]:
         """Yield the (public) attribute name/value pairs in this instance.
@@ -592,6 +631,7 @@ class PDBContainer:
             bonds = <numpy.recarray object at ...>
             atom_count = <numpy.ndarray object at ...>
             bond_count = <numpy.ndarray object at ...>
+            index = <numpy.recarray object at ...>
 
         Yields
         ------
@@ -604,7 +644,8 @@ class PDBContainer:
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
                        min_atom: int = 0,
-                       min_bond: int = 0) -> ST:
+                       min_bond: int = 0,
+                       index: Optional[ArrayLike] = None) -> ST:
         """Convert an iterable or sequence of molecules into a new :class:`PDBContainer` instance.
 
         Examples
@@ -628,7 +669,8 @@ class PDBContainer:
                 atoms      = numpy.recarray(..., shape=(23, 76), dtype=...),
                 bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32)
+                bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
+                index      = numpy.recarray(..., shape=(23,), dtype=...)
             )
 
         Parameters
@@ -639,6 +681,9 @@ class PDBContainer:
             The minimum number of atoms which :attr:`PDBContainer.atoms` should accomodate.
         min_bond : :class:`int`
             The minimum number of bonds which :attr:`PDBContainer.bonds` should accomodate.
+        index : array-like, optional
+            An array-like object representing an user-specified index.
+            Defaults to a simple range index if :data:`None` (see :func:`numpy.arange`).
 
         Returns
         -------
@@ -651,6 +696,14 @@ class PDBContainer:
         except TypeError:
             mol_list = list(mol_list)
             mol_count = len(mol_list)
+
+        # Parse the index
+        if index is None:
+            idx = np.arange(mol_count, dtype=cls.DTYPE['index']).view(np.recarray)
+        else:
+            idx = np.asarray(index).view(np.recarray)
+        if len(idx) != mol_count:
+            raise ValueError("'mol_list' and 'idx' must be of equal length")
 
         # Gather the shape of the to-be created atom (pdb-file) array
         _atom_count = max((len(mol.atoms) for mol in mol_list), default=0)
@@ -682,7 +735,7 @@ class PDBContainer:
         return cls(
             atoms=atom_array, bonds=bond_array,
             atom_count=atom_counter, bond_count=bond_counter,
-            validate=False
+            index=idx, validate=False
         )
 
     @overload
@@ -793,7 +846,9 @@ class PDBContainer:
 
     @classmethod
     def create_hdf5_group(cls, file: Union[h5py.File, h5py.Group],
-                          name: str, **kwargs: Any) -> h5py.Group:
+                          name: str,
+                          index_dtype: DtypeLike = None,
+                          **kwargs: Any) -> h5py.Group:
         r"""Create a h5py Group for storing :class:`dataCAT.PDBContainer` instances.
 
         Parameters
@@ -815,18 +870,35 @@ class PDBContainer:
         """
         cls_name = cls.__name__
 
+        # Create the group
         grp = file.create_group(name, track_order=True)
         grp.attrs['__doc__'] = np.string_(HDF5_DOCSTRING.format(cls_name=cls_name))
 
+        # Create the datasets
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
-        for key in cls.keys():
+        key_iter = (k for k in cls.keys() if k != 'index')
+        for key in key_iter:
             maxshape = NDIM[key] * (None,)
             shape = NDIM[key] * (0,)
             dtype = DTYPE[key]
 
             dset = grp.create_dataset(key, shape=shape, maxshape=maxshape, dtype=dtype, **kwargs)
-            dset.attrs['__doc__'] = f"A dataset representing `{cls_name}.atoms`.".encode()
+            dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.atoms`.")
+
+        # Set the index
+        _dtype = index_dtype if index_dtype is not None else cls.DTYPE['index']
+        scale = grp.create_dataset('index', shape=(0,), maxshape=(None,), dtype=_dtype)
+        scale.make_scale('index')
+
+        # Use the index as a scale
+        dset_iter = (grp[k] for k in cls.keys() if k != 'index')
+        for dset in dset_iter:
+            dset.dims[0].label = 'index'
+            dset.dims[0].attach_scale(scale)
+
+        grp['atoms'].dims[1].label = 'atoms'
+        grp['bonds'].dims[1].label = 'bonds'
         return grp
 
     @classmethod
@@ -858,20 +930,21 @@ class PDBContainer:
         difference = keys - group.keys()
         if difference:
             missing_keys = ', '.join(repr(i) for i in difference)
-            raise AssertionError(f"Missing keys in {group}: {missing_keys}")
+            raise AssertionError(f"Missing keys in {group!r}: {missing_keys}")
 
         # Check the dimensionality and dtype of all datasets
         len_dict = {}
         iterator = ((k, group[k]) for k in cls.keys())
         for key, dset in iterator:
             len_dict[key] = len(dset)
-            assertion.eq(dset.ndim, cls.NDIM[key], message=f"{key} ndim mismatch")
-            assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{key} dtype mismatch")
+            assertion.eq(dset.ndim, cls.NDIM[key], message=f"{key!r} ndim mismatch")
+            if key != 'index':
+                assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{key!r} dtype mismatch")
 
         # Check that all datasets are of the same length
         if len(set(len_dict.values())) != 1:
             raise AssertionError(
-                f"All datasets in {group} should be of the same length.\n"
+                f"All datasets in {group!r} should be of the same length.\n"
                 f"Observed lengths: {len_dict!r}"
             )
 
@@ -959,6 +1032,7 @@ class PDBContainer:
                 bonds=group['bonds'][index].view(np.recarray),
                 atom_count=group['atom_count'][index],
                 bond_count=group['bond_count'][index],
+                index=group['index'][index].view(np.recarray),
                 validate=False
             )
         except Exception as ex:

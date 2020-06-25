@@ -37,7 +37,8 @@ from nanoutils import PathType, TypedDict
 from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
-from .create_database import _create_csv, _create_yaml, _create_hdf5, _create_mongodb, QD, Ligand
+from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb,
+                              QD, Ligand, IDX_DTYPE)
 from .context_managers import OpenYaml, OpenLig, OpenQD
 from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings, hdf5_availability
 from .pdb_array import PDBContainer
@@ -469,13 +470,24 @@ class Database:
             old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
             opt = False
 
+        idx_dtype = IDX_DTYPE[database]
+
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
             group = f[database]
             if new.any():
                 mol_series = df.loc[new.index, MOL]
-                pdb_new = PDBContainer.from_molecules(mol_series)
+
+                index = new.index.values.astype(idx_dtype)
+                if database in {'qd', 'qd_no_opt'}:
+                    # TODO: Fix the messy MultiIndex
+                    core_anchor = index['core anchor']
+                    for i, j in enumerate(core_anchor):
+                        j_split = j.split()
+                        core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=np.int32)
+
+                pdb_new = PDBContainer.from_molecules(mol_series, index=index.view(np.recarray))
                 pdb_new.to_hdf5(group, mode='append')
 
                 j = len(group['atoms'])
@@ -494,7 +506,8 @@ class Database:
                 old.sort_values(inplace=True)
                 mol_series = df.loc[old.index, MOL]
 
-                pdb_old = PDBContainer.from_molecules(mol_series)
+                index = mol_series.index.values.astype(idx_dtype).view(np.recarray)
+                pdb_old = PDBContainer.from_molecules(mol_series, index=index)
                 pdb_old.to_hdf5(group, mode='update', idx=old.values)
                 update_hdf5_log(group, idx=old.values, message='update')
                 if opt:

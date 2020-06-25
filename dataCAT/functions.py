@@ -12,7 +12,7 @@ Index
     update_pdb_values
     append_pdb_values
     hdf5_availability
-    
+
 API
 ---
 .. autofunction:: df_to_mongo_dict
@@ -31,7 +31,7 @@ from time import sleep
 from types import MappingProxyType
 from typing import (
     Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
-    Hashable, Optional, TYPE_CHECKING
+    Hashable, Optional, Type, TYPE_CHECKING
 )
 
 import h5py
@@ -48,9 +48,11 @@ from CAT.utils import get_template
 
 if TYPE_CHECKING:
     from .pdb_array import PDBContainer, IndexLike
+    from numpy.typing import DtypeLike
 else:
     PDBContainer = 'dataCAT.PDBContainer'
     IndexLike = 'dataCAT.pdb_array.IndexLike'
+    DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
     'df_to_mongo_dict', 'get_nan_row', 'even_index', 'sanitize_yaml_settings',
@@ -499,3 +501,18 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
         i -= 1
 
     raise exception
+
+
+def _set_index(cls: Type[PDBContainer], group: h5py.Group,
+               dtype: DtypeLike, length: int) -> h5py.Dataset:
+    scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype)
+    scale.make_scale('index')
+
+    iterator = (group[k] for k in cls.keys() if k != 'index')
+    for dset in iterator:
+        dset.dims[0].label = 'index'
+        dset.dims[0].attach_scale(scale)
+
+    group['atoms'].dims[1].label = 'atoms'
+    group['bonds'].dims[1].label = 'bonds'
+    return scale

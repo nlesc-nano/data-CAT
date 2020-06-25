@@ -8,6 +8,10 @@ Index
     BONDS_DTYPE
     ATOM_COUNT_DTYPE
     BOND_COUNT_DTYPE
+    LIG_IDX_DTYPE
+    QD_IDX_DTYPE
+    BACKUP_IDX_DTYPE
+
     DT_DTYPE
     VERSION_DTYPE
     INDEX_DTYPE
@@ -94,6 +98,66 @@ API
         >>> print(repr(BOND_COUNT_DTYPE))
         dtype('int32')
 
+.. autodata:: LIG_IDX_DTYPE
+    :annotation: : numpy.dtype = ...
+
+    .
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT.dtype import LIG_IDX_DTYPE
+
+        >>> print(repr(LIG_IDX_DTYPE))  # doctest: +NORMALIZE_WHITESPACE
+        dtype([('ligand', 'O'),
+               ('ligand anchor', 'O')])
+
+        >>> h5py.check_string_dtype(LIG_IDX_DTYPE.fields['ligand'][0])
+        string_info(encoding='ascii', length=None)
+
+        >>> h5py.check_string_dtype(LIG_IDX_DTYPE.fields['ligand anchor'][0])
+        string_info(encoding='ascii', length=None)
+
+.. autodata:: QD_IDX_DTYPE
+    :annotation: : numpy.dtype = ...
+
+    .
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT.dtype import QD_IDX_DTYPE
+
+        >>> print(repr(QD_IDX_DTYPE))  # doctest: +NORMALIZE_WHITESPACE
+        dtype([('core', 'O'),
+               ('core anchor', 'O'),
+               ('ligand', 'O'),
+               ('ligand anchor', 'O')])
+
+        >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['core'][0])
+        string_info(encoding='ascii', length=None)
+
+        >>> h5py.check_vlen_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
+        dtype('int32')
+
+        >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['ligand'][0])
+        string_info(encoding='ascii', length=None)
+
+        >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['ligand anchor'][0])
+        string_info(encoding='ascii', length=None)
+
+.. autodata:: BACKUP_IDX_DTYPE
+    :annotation: : numpy.dtype = ...
+
+    .
+
+    .. code:: python
+
+        >>> from dataCAT.dtype import BACKUP_IDX_DTYPE
+
+        >>> print(repr(BACKUP_IDX_DTYPE))
+        dtype('int32')
+
 .. autodata:: DT_DTYPE
     :annotation: : numpy.dtype = ...
 
@@ -175,7 +239,8 @@ import numpy as np
 
 __all__ = [
     'ATOMS_DTYPE', 'BONDS_DTYPE', 'ATOM_COUNT_DTYPE', 'BOND_COUNT_DTYPE',
-    'DT_DTYPE', 'VERSION_DTYPE', 'INDEX_DTYPE', 'MSG_DTYPE'
+    'DT_DTYPE', 'VERSION_DTYPE', 'INDEX_DTYPE', 'MSG_DTYPE',
+    'LIG_IDX_DTYPE', 'QD_IDX_DTYPE', 'BACKUP_IDX_DTYPE'
 ]
 
 _ATOMS_MAPPING = {
@@ -212,6 +277,7 @@ ATOM_COUNT_DTYPE = np.dtype('int32')
 #: The datatype of :attr:`PDBContainer.bond_count<dataCAT.PDBContainer.bond_count>`
 BOND_COUNT_DTYPE = np.dtype('int32')
 
+
 _DT_MAPPING = {
     'year': 'int16',
     'month': 'int8',
@@ -238,3 +304,25 @@ INDEX_DTYPE = h5py.vlen_dtype(np.dtype('int32'))
 
 #: The datatype of the ``"message"`` dataset created by :func:`~dataCAT.create_hdf5_log`
 MSG_DTYPE = h5py.string_dtype(encoding='ascii')
+
+_LIG_IDX_MAPPING = {
+    'ligand': h5py.string_dtype(encoding='ascii'),
+    'ligand anchor': h5py.string_dtype(encoding='ascii')
+}
+#: The datatype of :attr:`PDBContainer.index<dataCAT.PDBContainer.index>`
+#: as used by the ligand database
+LIG_IDX_DTYPE = np.dtype(list(_LIG_IDX_MAPPING.items()))
+
+
+_QD_IDX_MAPPING = {
+    'core': h5py.string_dtype(encoding='ascii'),
+    'core anchor': h5py.vlen_dtype(np.dtype('int32')),
+    'ligand': h5py.string_dtype(encoding='ascii'),
+    'ligand anchor': h5py.string_dtype(encoding='ascii')
+}
+#: The datatype of :attr:`PDBContainer.index<dataCAT.PDBContainer.index>`
+#: as used by the QD database
+QD_IDX_DTYPE = np.dtype(list(_QD_IDX_MAPPING.items()))
+
+#: The default datatype of :attr:`PDBContainer.index<dataCAT.PDBContainer.index>`
+BACKUP_IDX_DTYPE = np.dtype('int32')
