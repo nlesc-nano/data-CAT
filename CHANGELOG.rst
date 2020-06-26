@@ -9,6 +9,13 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 0.4.0
 *****
 * Updated the hdf5 logging system.
+* Moved all dtype-related functions and data to `dataCAT.dtype`.
+* Cleaned up the global namespace.
+* Added the `PDBContainer.index` attribute.
+* Create the `index` Dataset when calling `PDBContainer.create_hdf5_group()`. Aforementioned Dataset is used as dimensional scale.
+* Provide users more control over the keyword arguments used for creating datasets.
+* Fixed an issue where`PDBContainer.to_molecules()` would set values as numpy scalars rather than using its builtin counterparts.
+* Added an api for creating datasets for containing quantum-mechanical properties.
 
 
 0.3.1
