@@ -45,7 +45,7 @@ MOL: Molecule = MOL_TUPLE[0]
 PDB: PDBContainer = PDBContainer.from_molecules(MOL_TUPLE)
 
 #: A path to a temporary (to-be created) hdf5 file.
-HDF5_TMP = Path('tests') / 'test_files' / 'tmp_file.hdf5'
+HDF5_TMP = Path('tests') / 'test_files' / '.structures.hdf5'
 
 #: A path to a read-only hdf5 file.
 HDF5_READ = Path('tests') / 'test_files' / 'database' / 'structures.hdf5'

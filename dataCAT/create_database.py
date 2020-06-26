@@ -25,7 +25,8 @@ API
 from os import PathLike
 from os.path import join, isfile
 from types import MappingProxyType
-from typing import Dict, Any, List, Union, AnyStr, Mapping, overload
+from logging import Logger
+from typing import Dict, Any, List, Union, AnyStr, Mapping, Optional, Tuple, overload
 
 import yaml
 import h5py
@@ -36,10 +37,11 @@ from pymongo import MongoClient, ASCENDING
 from nanoutils import Literal, PathType
 from CAT.logger import logger
 
-from .dtype import BACKUP_IDX_DTYPE, LIG_IDX_DTYPE, QD_IDX_DTYPE
+from .dtype import BACKUP_IDX_DTYPE, LIG_IDX_DTYPE, QD_IDX_DTYPE, FORMULA_DTYPE, LIG_COUNT_DTYPE
 from .hdf5_log import create_hdf5_log
 from .pdb_array import PDBContainer
 from .functions import from_pdb_array, _set_index
+from .property_dset import create_prop_dset, create_prop_group
 
 __all__: List[str] = []
 
@@ -139,6 +141,16 @@ IDX_DTYPE: Mapping[str, np.dtype] = MappingProxyType({
 })
 
 
+DEFAULT_PROPERTIES: Mapping[str, Optional[Tuple[str, np.dtype]]] = MappingProxyType({
+    'core': None,
+    'core_no_opt': None,
+    'ligand': ('formula', FORMULA_DTYPE),
+    'ligand_no_opt': None,
+    'qd': ('ligand count', LIG_COUNT_DTYPE),
+    'qd_no_opt': None
+})
+
+
 @overload
 def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
     ...
@@ -177,37 +189,26 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
     with h5py.File(path, 'a', libver='latest') as f:
         for grp_name in dataset_names:
-            dtype = IDX_DTYPE[grp_name]
-
             # Check for pre-dataCAT-0.3 style databases
-            if isinstance(f.get(grp_name), h5py.Dataset):
-                logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
-                mol_list = [from_pdb_array(pdb, rdmol=False, warn=False) for pdb in f[grp_name]]
-                index = np.rec.array(None, dtype=dtype, shape=(len(mol_list),))
-                pdb = PDBContainer.from_molecules(mol_list, index=index)
-                del f[grp_name]
-            else:
-                pdb = None
+            pdb = _update_pdb_dsets(f, grp_name, logger)
 
             # Create a new group if it does not exist yet
             if grp_name not in f:
-                group = PDBContainer.create_hdf5_group(f, grp_name, dtype, **kwargs)
+                group = PDBContainer.create_hdf5_group(f, grp_name, IDX_DTYPE[grp_name], **kwargs)
             else:
                 group = f[grp_name]
 
             # Check for pre-dataCAT-0.4 style databases
-            if 'index' not in group:
-                if pdb is None:
-                    logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {grp_name!r}')
-                i = len(group['atoms'])
-                _set_index(PDBContainer, group, dtype, i)
+            _update_index_dset(group, grp_name, logger)
+
+            if pdb is not None:
+                pdb.to_hdf5(group, mode='append')
+
+            _update_property_dsets(group, grp_name)
 
             # Check of the log is present
             if 'logger' not in group:
                 create_hdf5_log(group, compression='gzip')
-
-            if pdb is not None:
-                pdb.to_hdf5(group, mode='append')
 
         # Create new 3D datasets
         iterator_3d = (grp_name for grp_name in dataset_names_3d if grp_name not in f)
@@ -215,6 +216,48 @@ def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             f.create_dataset(grp_name, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
 
     return path
+
+
+def _update_pdb_dsets(file: h5py.File, name: str,
+                      logger: Optional[Logger] = None) -> Optional[PDBContainer]:
+    """Check for and update pre dataCAT 0.3 style databases."""
+    if not isinstance(file.get(name), h5py.Dataset):
+        return None
+    elif logger is not None:
+        logger.info(f'Updating h5py Dataset to data-CAT >= 0.3 style: {name!r}')
+
+    mol_list = [from_pdb_array(pdb, rdmol=False, warn=False) for pdb in file[name]]
+    m = len(mol_list)
+    del file[name]
+
+    dtype = IDX_DTYPE[name]
+    index = np.rec.array(None, dtype=dtype, shape=(m,))
+    return PDBContainer.from_molecules(mol_list, index=index)
+
+
+def _update_index_dset(group: h5py.Group, name: str, logger: Optional[Logger] = None) -> None:
+    """Check for and update pre dataCAT 0.4 style databases."""
+    if 'index' in group:
+        return None
+    elif logger is not None:
+        logger.info(f'Updating h5py Dataset to data-CAT >= 0.4 style: {name!r}')
+
+    dtype = IDX_DTYPE[name]
+    i = len(group['atoms'])
+    _set_index(PDBContainer, group, dtype, i, compression='gzip')
+
+
+def _update_property_dsets(group: h5py.Group, name: str) -> None:
+    """Check for and update pre dataCAT 0.4 style databases."""
+    if 'properties' in group:
+        return None
+
+    scale = group['index']
+    prop_grp = create_prop_group(group, scale)
+
+    args = DEFAULT_PROPERTIES[name]
+    if args is not None:
+        create_prop_dset(prop_grp, *args, compression='gzip')
 
 
 @overload

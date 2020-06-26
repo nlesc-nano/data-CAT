@@ -16,6 +16,7 @@ version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
 del VersionInfo
 
 from .df_proxy import DFProxy
+from .property_dset import create_prop_group, create_prop_dset, update_prop_dset
 from .hdf5_log import create_hdf5_log, update_hdf5_log, reset_hdf5_log, log_to_dataframe
 from .pdb_array import PDBContainer
 from .context_managers import OpenYaml, OpenLig, OpenQD
@@ -29,8 +30,10 @@ __all__ = [
     'CAT_VERSION', 'NANOCAT_VERSION', 'DATACAT_VERSION',
     'functions', 'testing_utils', 'dtype',
     'create_hdf5_log', 'update_hdf5_log', 'reset_hdf5_log',
+    'create_prop_group', 'create_prop_dset', 'update_prop_dset',
     'DFProxy',
     'PDBContainer',
     'OpenYaml', 'OpenLig', 'OpenQD',
     'Database',
 ]
+__all__.sort()
