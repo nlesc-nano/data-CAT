@@ -55,7 +55,7 @@ def create_prop_group(file: Union[h5py.File, h5py.Group], scale: h5py.Dataset) -
         ...     os.remove(hdf5_file)
         >>> _ = copyfile(HDF5_READ, hdf5_file)
 
-    .. python:: python
+    .. code:: python
 
         >>> import h5py
         >>> from dataCAT import create_prop_group
@@ -120,7 +120,7 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
         ...     scale.make_scale('index')
         ...     _ = create_prop_group(f, scale=scale)
 
-    .. python:: python
+    .. code:: python
 
         >>> import h5py
         >>> from dataCAT import create_prop_dset
@@ -132,8 +132,14 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
         ...     prop_names = ['water', 'methanol', 'ethanol']
         ...
         ...     dset = create_prop_dset(group, 'E_solv', prop_names=prop_names)
+        ...     dset_names = group['E_solv_names']
+        ...
+        ...     print('group', '=', group)
         ...     print('group["E_solv"]', '=', dset)
+        ...     print('group["E_solv_names"]', '=', dset_names)
+        group = <HDF5 group "/properties" (2 members)>
         group["E_solv"] = <HDF5 dataset "E_solv": shape (10, 3), type "<f4">
+        group["E_solv_names"] = <HDF5 dataset "E_solv_names": shape (3,), type "|S8">
 
     .. testcleanup:: python
 
@@ -211,10 +217,10 @@ def update_prop_dset(dset: h5py.Dataset, data: np.ndarray,
     Parameters
     ----------
     dset : :class:`h5py.Dataset`
-        The to-be appended h5py dataset.
+        The to-be updated h5py dataset.
     data : :class:`numpy.ndarray`
         An array containing the to-be added data.
-    index : :class:`slice` or :class:`numpy.ndarray`
+    index : :class:`slice` or :class:`numpy.ndarray`, optional
         The indices of all to-be updated elements in **dset**.
         **index** either should be of the same length as **data**.
 
