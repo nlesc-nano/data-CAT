@@ -504,8 +504,8 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
 
 
 def _set_index(cls: Type[PDBContainer], group: h5py.Group,
-               dtype: DtypeLike, length: int) -> h5py.Dataset:
-    scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype)
+               dtype: DtypeLike, length: int, **kwargs: Any) -> h5py.Dataset:
+    scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype, **kwargs)
     scale.make_scale('index')
 
     iterator = (group[k] for k in cls.keys() if k != 'index')

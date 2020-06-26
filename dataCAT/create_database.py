@@ -244,7 +244,7 @@ def _update_index_dset(group: h5py.Group, name: str, logger: Optional[Logger] = 
 
     dtype = IDX_DTYPE[name]
     i = len(group['atoms'])
-    _set_index(PDBContainer, group, dtype, i)
+    _set_index(PDBContainer, group, dtype, i, compression='gzip')
 
 
 def _update_property_dsets(group: h5py.Group, name: str) -> None:
@@ -257,7 +257,7 @@ def _update_property_dsets(group: h5py.Group, name: str) -> None:
 
     args = DEFAULT_PROPERTIES[name]
     if args is not None:
-        create_prop_dset(prop_grp, *args)
+        create_prop_dset(prop_grp, *args, compression='gzip')
 
 
 @overload
