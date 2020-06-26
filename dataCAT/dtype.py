@@ -232,6 +232,37 @@ API
         >>> h5py.check_string_dtype(MSG_DTYPE)
         string_info(encoding='ascii', length=None)
 
+.. autodata:: FORMULA_DTYPE
+    :annotation: : numpy.dtype = ...
+
+    .
+
+    Used for representing variable-length ASCII strings.
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT.dtype import FORMULA_DTYPE
+
+        >>> print(repr(FORMULA_DTYPE))
+        dtype('O')
+
+        >>> h5py.check_string_dtype(FORMULA_DTYPE)
+        string_info(encoding='ascii', length=None)
+
+
+.. autodata:: LIG_COUNT_DTYPE
+    :annotation: : numpy.dtype = ...
+
+    .
+
+    .. code:: python
+
+        >>> from dataCAT.dtype import LIG_COUNT_DTYPE
+
+        >>> print(repr(LIG_COUNT_DTYPE))
+        dtype('int32')
+
 """
 
 import h5py
@@ -239,8 +270,12 @@ import numpy as np
 
 __all__ = [
     'ATOMS_DTYPE', 'BONDS_DTYPE', 'ATOM_COUNT_DTYPE', 'BOND_COUNT_DTYPE',
+
     'DT_DTYPE', 'VERSION_DTYPE', 'INDEX_DTYPE', 'MSG_DTYPE',
-    'LIG_IDX_DTYPE', 'QD_IDX_DTYPE', 'BACKUP_IDX_DTYPE'
+
+    'LIG_IDX_DTYPE', 'QD_IDX_DTYPE', 'BACKUP_IDX_DTYPE',
+
+    'FORMULA_DTYPE', 'LIG_COUNT_DTYPE'
 ]
 
 _ATOMS_MAPPING = {
@@ -326,3 +361,9 @@ QD_IDX_DTYPE = np.dtype(list(_QD_IDX_MAPPING.items()))
 
 #: The default datatype of :attr:`PDBContainer.index<dataCAT.PDBContainer.index>`
 BACKUP_IDX_DTYPE = np.dtype('int32')
+
+#: The datatype of the ``"/ligand/properties/formula"`` dataset.
+FORMULA_DTYPE = h5py.string_dtype(encoding='ascii')
+
+#: The datatype of the ``"/qd/properties/ligand count"`` dataset.
+LIG_COUNT_DTYPE = np.dtype('int32')
