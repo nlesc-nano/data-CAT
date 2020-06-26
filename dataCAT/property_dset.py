@@ -21,6 +21,8 @@ from typing import Union, Sequence, Any, Optional, TYPE_CHECKING
 import h5py
 import numpy as np
 
+from assertionlib import assertion
+
 if TYPE_CHECKING:
     from numpy.typing import DtypeLike
 else:
@@ -228,7 +230,43 @@ def update_prop_dset(dset: h5py.Dataset, data: np.ndarray,
     :rtype: :data:`None`
 
     """
-    _resize_prop_dset(dset)
-
     idx = slice(None) if index is None else index
-    dset[idx] = data
+
+    try:
+        _resize_prop_dset(dset)
+        dset[idx] = data
+    except Exception as ex:
+        validate_properties(dset.group)
+        raise ex
+
+
+def validate_properties(group: h5py.Group) -> None:
+    """Validate the passed hdf5 **group**, ensuring it is compatible with :func:`create_prop_group` and :func:`create_prop_group`.
+
+    This method is called automatically when an exception is raised by :func:`update_prop_dset`.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be validated hdf5 Group.
+
+    Raises
+    ------
+    :exc:`AssertionError`
+        Raised if the validation process fails.
+
+    """  # noqa: E501
+    assertion.isinstance(group, h5py.Group)
+
+    assertion.contains(group.attrs, 'index')
+    index_ref = group.attrs['index']
+
+    assertion.contains(group.file, index_ref)
+    index = group.file[index_ref]
+    n = len(index)
+
+    iterator = ((k, v) for k, v in group.items() if k != 'index' and not k.endswith('_names'))
+    for name, dset in iterator:
+        assertion.le(len(dset), len(index), message=f'{name!r} invalid dataset length')
+        assertion.contains(dset.dims[0], 'index', message=f'{name!r} missing dataset scale')
+        assertion.eq(dset.dims[0]['index'], index, message=f'{name!r} invalid dataset scale')
