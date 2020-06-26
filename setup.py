@@ -31,7 +31,6 @@ tests_require = [
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
     'CAT@git+https://github.com/nlesc-nano/CAT@devel',
-    'AssertionLib>=2.2.0'
 ]
 tests_require += build_require
 
@@ -100,6 +99,7 @@ setup(
         'pyyaml>=5.1',
         'pymongo',
         'Nano-Utils>=0.4.3',
+        'AssertionLib>=2.2.0',
         'plams@git+https://github.com/SCM-NV/PLAMS@a5696ce62c09153a9fa67b2b03a750913e1d0924',
         'CAT@git+https://github.com/nlesc-nano/CAT@master'
     ],
