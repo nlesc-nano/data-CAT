@@ -69,8 +69,12 @@ def test_create_database_4() -> None:
 
         assertion.eq(grp['atoms'].dims[1].label, 'atoms')
         assertion.eq(grp['bonds'].dims[1].label, 'bonds')
-
         pdb.validate_hdf5(grp)
+
+        assertion.contains(grp, 'properties')
+        formula = grp['properties/formula']
+        assertion.len_eq(formula, len(scale))
+        assertion.eq(formula.dims[0]['index'], scale)
 
     ref = np.rec.array(None, dtype=LIG_IDX_DTYPE, shape=(3,))
     ref[:] = b''
