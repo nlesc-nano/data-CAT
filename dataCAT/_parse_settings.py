@@ -1,3 +1,6 @@
+
+"""A private helper module for parsing job settings .inp files."""
+
 from typing import List, Sequence
 from itertools import count
 
@@ -31,8 +34,7 @@ def _update_hdf5_settings(f: h5py.File, df: pd.DataFrame, column: str) -> None:
     f[column][idx[idx_argsort]] = job_ar[idx_argsort]
 
 
-def _read_inp(job_paths: Sequence[str],
-                ax2: int = 0, ax3: int = 0) -> np.ndarray:
+def _read_inp(job_paths: Sequence[str], ax2: int = 0, ax3: int = 0) -> np.ndarray:
     """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
     # Determine the minimum size of the to-be returned 3D array
     line_count = [[_get_line_count(j) for j in i] for i in job_paths]

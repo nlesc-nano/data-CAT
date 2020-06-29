@@ -6,18 +6,14 @@ from nanoutils import VersionInfo
 
 from .__version__ import __version__
 
-from CAT import version_info as CAT_VERSION, __version__ as _version
-
-if CAT_VERSION <= (0, 9, 6):
-    raise RuntimeError(f'Data-CAT {__version__} requires CAT 0.9.7 or newer; '
-                       f'observed version: {_version}')
+from CAT import version_info as CAT_VERSION
 try:
     from nanoCAT import version_info as NANOCAT_VERSION
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
 version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
-del VersionInfo, _version
+del VersionInfo
 
 from .df_proxy import DFProxy
 from .property_dset import create_prop_group, create_prop_dset, update_prop_dset

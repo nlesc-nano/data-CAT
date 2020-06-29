@@ -33,7 +33,7 @@ from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule, from_rdmol
-from nanoutils import PathType, TypedDict
+from nanoutils import TypedDict
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
 from .create_database import create_csv, create_hdf5, create_mongodb, QD, Ligand, IDX_DTYPE
@@ -68,8 +68,7 @@ class JobRecipe(TypedDict):
 class Database:
     """The Database class."""
 
-    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_yaml',
-                 '_hdf5', '_mongodb', '_hash')
+    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_hdf5', '_mongodb', '_hash')
 
     @property
     def dirname(self) -> str:
@@ -214,9 +213,9 @@ class Database:
         ...
     def _parse_database(self, database):  # noqa: E301
         """Operate on either the ligand or quantum dot database."""
-        if database in ('ligand', 'ligand_no_opt'):
+        if database in {'ligand', 'ligand_no_opt'}:
             return self.csv_lig
-        elif database in ('qd', 'qd_no_opt'):
+        elif database in {'qd', 'qd_no_opt'}:
             return self.csv_qd
         raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
 
@@ -334,7 +333,7 @@ class Database:
         manager = self._parse_database(database)
 
         if job_recipe is not None:
-            warnings.warn(f"job_recipe .yaml storage has been discontinued", DeprecationWarning)
+            warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
         with manager(write=True) as db:
             # Update **db.index**
@@ -345,6 +344,10 @@ class Database:
                 df_columns = df.columns
             else:
                 df_columns = pd.Index(columns)
+
+            # Remove columns with the (now deprecated) `settings` key
+            if isinstance(df_columns, pd.MultiIndex):
+                df_columns = pd.Index([(i, j) for i, j in df_columns if i != 'settings'])
 
             # Update **db.columns**
             bool_ar = df_columns.isin(db.columns)
@@ -364,6 +367,7 @@ class Database:
 
     def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
                          columns: MIT, subset: np.ndarray) -> MIT:
+        """Even the columns of **df** and **db**."""
         drop_idx = []
         for i in columns[subset]:
             # Check for job settings
@@ -416,50 +420,65 @@ class Database:
             old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
             opt = False
 
-        idx_dtype = IDX_DTYPE[database]
-
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
             group = f[database]
+            dtype = IDX_DTYPE[database]
+
             if new.any():
-                mol_series = df.loc[new.index, MOL]
-
-                index = self._sanitize_multi_idx(new.index, idx_dtype, database)
-                pdb_new = PDBContainer.from_molecules(mol_series, index=index)
-                pdb_new.to_hdf5(group, mode='append')
-
-                j = len(group['atoms'])
-                i = j - len(mol_series)
-                ret = pd.Series(np.arange(i, j), index=new.index, name=HDF5_INDEX)
-
-                update_hdf5_log(group, idx=ret.values, message='append')
-                df.update(ret, overwrite=True)
-                if opt:
-                    df.loc[new.index, OPT] = True
+                ret = self._write_hdf5(group, df, new.index, dtype, database, opt=opt)
             else:
                 ret = pd.Series(name=HDF5_INDEX, dtype=int)
 
             # If **overwrite** is *True*
             if overwrite and old.any():
-                old.sort_values(inplace=True)
-                mol_series = df.loc[old.index, MOL]
+                self._overwrite_hdf5(group, old, df, dtype, opt=opt)
+        return ret
 
-                index = mol_series.index.values.astype(idx_dtype).view(np.recarray)
-                pdb_old = PDBContainer.from_molecules(mol_series, index=index)
-                pdb_old.to_hdf5(group, mode='update', idx=old.values)
-                update_hdf5_log(group, idx=old.values, message='update')
-                if opt:
-                    df.loc[old.index, OPT] = True
+    @classmethod
+    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, new_index: pd.Index,
+                    dtype: DtypeLike, database: Union[Ligand, QD] = 'ligand',
+                    opt: bool = False) -> pd.Index:
+        """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
+        mol_series = df.loc[new_index, MOL]
+
+        index = cls._sanitize_multi_idx(new_index, dtype, database)
+        pdb_new = PDBContainer.from_molecules(mol_series, index=index)
+        pdb_new.to_hdf5(group, mode='append')
+
+        j = len(group['atoms'])
+        i = j - len(mol_series)
+        ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
+
+        update_hdf5_log(group, idx=ret.values, message='append')
+        df.update(ret, overwrite=True)
+        if opt:
+            df.loc[new_index, OPT] = True
         return ret
 
     @staticmethod
+    def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
+                        dtype: DtypeLike, opt: bool = False) -> None:
+        """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
+        old.sort_values(inplace=True)
+        mol_series = df.loc[old.index, MOL]
+
+        index = mol_series.index.values.astype(dtype)
+        pdb_old = PDBContainer.from_molecules(mol_series, index=index)
+        pdb_old.to_hdf5(group, mode='update', idx=old.values)
+        update_hdf5_log(group, idx=old.values, message='update')
+        if opt:
+            df.loc[old.index, OPT] = True
+
+    @staticmethod
     def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
+        """Parse and sanitize the passed MultiIndex."""
         # TODO: Fix the messy MultiIndex
         ret: MIT = index.values.astype(dtype)
         if database in {'qd', 'qd_no_opt'}:
             core_anchor = ret['core anchor']
-            anchor_dtype = QD_IDX_DTYPE.fields['core anchor'][0]
+            anchor_dtype = h5py.check_vlen_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
             for i, j in enumerate(core_anchor):
                 j_split = j.split()
                 core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=anchor_dtype)
