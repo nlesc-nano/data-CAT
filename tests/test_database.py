@@ -12,12 +12,12 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from scm.plams import readpdb, Settings
+from scm.plams import readpdb
 from nanoutils import delete_finally
 from assertionlib import assertion
 from CAT.workflows import MOL, HDF5_INDEX, OPT, V_BULK, JOB_SETTINGS_CDFT
 
-from dataCAT import Database, OpenLig, OpenQD, OpenYaml
+from dataCAT import Database, OpenLig, OpenQD
 
 PATH = Path('tests') / 'test_files'
 DB_PATH = PATH / 'database'
@@ -35,9 +35,6 @@ def test_init() -> None:
 
     assertion.eq(DB.csv_qd.keywords['filename'], abspath(join(DB_PATH, 'qd_database.csv')))
     assertion.is_(DB.csv_qd.func, OpenQD)
-
-    assertion.eq(DB.yaml.keywords['filename'], abspath(join(DB_PATH, 'job_settings.yaml')))
-    assertion.is_(DB.yaml.func, OpenYaml)
 
     assertion.eq(DB.hdf5.args[0], abspath(join(DB_PATH, 'structures.hdf5')))
     assertion.is_(DB.hdf5.func, h5py.File)
@@ -60,7 +57,7 @@ def test_eq() -> None:
 
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
-    for name in ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5'):
+    for name in ('dirname', 'csv_lig', 'csv_qd', 'hdf5'):
         assertion.contains(db_str, str(getattr(DB, name)), message=name)
 
 
@@ -144,26 +141,6 @@ def test_update_hdf5() -> None:
     series3 = db.update_hdf5(df, database='ligand', overwrite=True)
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
     assertion.eq(series3, [], post_process=np.all)
-
-
-@delete_finally(DB_PATH_UPDATE)
-def test_update_yaml() -> None:
-    """Test :meth:`~dataCAT.Database.update_yaml`."""
-    shutil.copytree(DB_PATH, DB_PATH_UPDATE)
-    db = Database(DB_PATH_UPDATE)
-
-    job_recipe = {'test1': {'key': 'a', 'value': 'b'},
-                  'test2': {'key': int, 'value': Settings()}}
-    db.update_yaml(job_recipe)  # type: ignore
-
-    with db.yaml(write=False) as dct:
-        assertion.eq(dct.get('a'), ['b'])
-        assertion.eq(dct.get('int'), [{}])
-
-    db.update_yaml(job_recipe)  # type: ignore
-    with db.yaml(write=False) as dct:
-        assertion.eq(dct.get('a'), ['b'])
-        assertion.eq(dct.get('int'), [{}])
 
 
 @delete_finally(DB_PATH_UPDATE)

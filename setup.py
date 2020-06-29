@@ -96,7 +96,6 @@ setup(
         'h5py',
         'numpy',
         'pandas',
-        'pyyaml>=5.1',
         'pymongo',
         'Nano-Utils>=0.4.3',
         'AssertionLib>=2.2.0',

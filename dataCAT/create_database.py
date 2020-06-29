@@ -4,21 +4,15 @@ Index
 -----
 .. currentmodule:: dataCAT.create_database
 .. autosummary::
-    _create_csv
-    _create_csv_lig
-    _create_csv_qd
-    _create_hdf5
-    _create_yaml
-    _create_mongodb
+    create_csv
+    create_hdf5
+    create_mongodb
 
 API
 ---
-.. autofunction:: _create_csv
-.. autofunction:: _create_csv_lig
-.. autofunction:: _create_csv_qd
-.. autofunction:: _create_hdf5
-.. autofunction:: _create_yaml
-.. autofunction:: _create_mongodb
+.. autofunction:: create_csv
+.. autofunction:: create_hdf5
+.. autofunction:: create_mongodb
 
 """
 
@@ -26,9 +20,8 @@ from os import PathLike
 from os.path import join, isfile
 from types import MappingProxyType
 from logging import Logger
-from typing import Dict, Any, List, Union, AnyStr, Mapping, Optional, Tuple, overload
+from typing import Dict, Any, Union, AnyStr, Mapping, Optional, Tuple, overload
 
-import yaml
 import h5py
 import numpy as np
 import pandas as pd
@@ -43,13 +36,13 @@ from .pdb_array import PDBContainer
 from .functions import from_pdb_array, _set_index
 from .property_dset import create_prop_dset, create_prop_group
 
-__all__: List[str] = []
+__all__ = ['create_csv', 'create_hdf5', 'create_mongodb']
 
 Ligand = Literal['ligand', 'ligand_no_opt']
 QD = Literal['qd', 'qd_no_opt']
 
 
-def _create_csv(path: Union[str, PathLike], database: Union[Ligand, QD] = 'ligand') -> str:
+def create_csv(path: Union[str, PathLike], database: Union[Ligand, QD] = 'ligand') -> str:
     """Create a ligand or qd database (csv format) if it does not yet exist.
 
     Parameters
@@ -152,12 +145,12 @@ DEFAULT_PROPERTIES: Mapping[str, Optional[Tuple[str, np.dtype]]] = MappingProxyT
 
 
 @overload
-def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
+def create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
     ...
 @overload  # noqa: E302
-def _create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
+def create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
     ...
-def _create_hdf5(path, name='structures.hdf5'):  # noqa: E302
+def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
     """Create the .pdb structure database (hdf5 format).
 
     Parameters
@@ -260,41 +253,7 @@ def _update_property_dsets(group: h5py.Group, name: str) -> None:
         create_prop_dset(prop_grp, *args, compression='gzip')
 
 
-@overload
-def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
-    ...
-@overload  # noqa: E302
-def _create_yaml(path: Union[AnyStr, 'PathLike[AnyStr]'], name: AnyStr) -> AnyStr:
-    ...
-def _create_yaml(path, name='job_settings.yaml'):  # noqa: E302
-    """Create a job settings database (yaml format).
-
-    Parameters
-    ----------
-    path : str
-        The path (without filenameto the database.
-
-    name : str
-        The filename of the database (excluding its path).
-
-    Returns
-    -------
-    |str|_
-        The absolute path+filename to the pdb structure database.
-
-    """
-    # Define arguments
-    filename = join(path, name)
-
-    # Create a new .yaml file if it does not yet exist
-    if not isfile(filename):
-        with open(filename, 'w') as f:
-            f.write(yaml.dump({None: [None]}, default_flow_style=False, indent=4))
-    return filename
-
-
-def _create_mongodb(host: str = 'localhost', port: int = 27017,
-                    **kwargs: Any) -> Dict[str, Any]:
+def create_mongodb(host: str = 'localhost', port: int = 27017, **kwargs: Any) -> Dict[str, Any]:
     """Create the the MongoDB collections and set their index.
 
     Paramaters

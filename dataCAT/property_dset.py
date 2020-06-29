@@ -263,7 +263,6 @@ def validate_properties(group: h5py.Group) -> None:
 
     assertion.contains(group.file, index_ref)
     index = group.file[index_ref]
-    n = len(index)
 
     iterator = ((k, v) for k, v in group.items() if k != 'index' and not k.endswith('_names'))
     for name, dset in iterator:

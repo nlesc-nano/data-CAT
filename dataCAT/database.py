@@ -15,6 +15,7 @@ API
 
 import reprlib
 import textwrap
+import warnings
 from os import getcwd, PathLike
 from os.path import abspath
 from types import MappingProxyType
@@ -32,15 +33,13 @@ from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
-from scm.plams import Settings, Molecule
+from scm.plams import Settings, Molecule, from_rdmol
 from nanoutils import PathType, TypedDict
-from CAT.mol_utils import from_rdmol  # noqa: F401
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
-from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb,
-                              QD, Ligand, IDX_DTYPE)
-from .context_managers import OpenYaml, OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings, hdf5_availability
+from .create_database import create_csv, create_hdf5, create_mongodb, QD, Ligand, IDX_DTYPE
+from .context_managers import OpenLig, OpenQD
+from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
 
@@ -77,11 +76,6 @@ class Database:
     def csv_qd(self) -> 'partial[OpenQD]':
         """:data:`Callable[..., dataCAT.OpenQD]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenQD` context manager."""  # noqa: E501
         return self._csv_qd
-
-    @property
-    def yaml(self) -> 'partial[OpenYaml]':
-        """:data:`Callable[..., dataCAT.OpenYaml]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenYaml` context manager."""  # noqa: E501
-        return self._yaml
 
     @property
     def hdf5(self) -> 'partial[h5py.File]':
@@ -122,28 +116,26 @@ class Database:
         self._dirname: str = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
-        lig_path = _create_csv(self.dirname, database='ligand')
-        qd_path = _create_csv(self.dirname, database='qd')
-        yaml_path = _create_yaml(self.dirname)
-        hdf5_path = _create_hdf5(self.dirname)
+        lig_path = create_csv(self.dirname, database='ligand')
+        qd_path = create_csv(self.dirname, database='qd')
+        hdf5_path = create_hdf5(self.dirname)
 
         # Populate attributes with MetaManager instances
         self._csv_lig = partial(OpenLig, filename=lig_path)
         self._csv_qd = partial(OpenQD, filename=qd_path)
-        self._yaml = partial(OpenYaml, filename=yaml_path)
         self._hdf5 = partial(h5py.File, hdf5_path, libver='latest')
 
         # Try to create or access the mongodb database
         try:
             self._mongodb: Optional[Mapping[str, Any]] = MappingProxyType(
-                _create_mongodb(host, port, **kwargs)
+                create_mongodb(host, port, **kwargs)
             )
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'hdf5', 'mongodb')
         attr_max = max(len(i) for i in attr_tup)
 
         iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
@@ -162,11 +154,10 @@ class Database:
         if not ret:
             return False
 
-        partial_names = ('csv_lig', 'csv_qd', 'yaml', 'hdf5')
+        partial_names = ('csv_lig', 'csv_qd', 'hdf5')
         iterator = ((getattr(self, name), getattr(value, name)) for name in partial_names)
-        for func1, func2 in iterator:
-            ret &= func1.args == func2.args and func1.keywords == func2.keywords and func1.func is func2.func  # noqa: E501
-        return ret
+        return all(func1.args == func2.args and func1.keywords == func2.keywords and
+                   func1.func is func2.func for func1, func2 in iterator)
 
     def __hash__(self) -> int:
         """Implement :func:`hash(self)<hash>`."""
@@ -192,7 +183,7 @@ class Database:
             return
 
         try:
-            self._mongodb = MappingProxyType(_create_mongodb(**state))
+            self._mongodb = MappingProxyType(create_mongodb(**state))
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
@@ -305,7 +296,7 @@ class Database:
                    database: Union[Ligand, QD] = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
-                   job_recipe: Optional[Settings] = None,
+                   job_recipe: None = None,
                    status: Optional[str] = None) -> None:
         """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
@@ -322,8 +313,6 @@ class Database:
             If :data:`None` Add all columns.
         overwrite : :class:`bool`
             Whether or not previous entries can be overwritten or not.
-        job_recipe : :class:`plams.Settings<scm.plams.core.settings.Settings>`
-            Optional: A Settings instance with settings specific to a job.
         status : :class:`str`, optional
             A descriptor of the status of the moleculair structures.
             Set to ``"optimized"`` to treat them as optimized geometries.
@@ -335,12 +324,8 @@ class Database:
         # Operate on either the ligand or quantum dot database
         manager = self._parse_database(database)
 
-        # Update **self.yaml**
         if job_recipe is not None:
-            job_settings = self.update_yaml(job_recipe)
-            for key, value in job_settings.items():
-                key = ('settings', ) + key
-                df[key] = value
+            warnings.warn(f"job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
         with manager(write=True) as db:
             # Update **db.index**
@@ -378,61 +363,6 @@ class Database:
             df.update(hdf5_series, overwrite=True)
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
-
-    def update_yaml(self, job_recipe: Mapping[KT, JobRecipe]) -> Dict[KT, str]:
-        """Update :attr:`Database.yaml` with (potentially) new user provided settings.
-
-        Examples
-        --------
-        .. code:: python
-
-            >>> from dataCAT import Database
-
-            >>> db = Database(...)  # doctest: +SKIP
-            >>> job_recipe = {
-            ...     'job1': {'key': 'ADFJob', 'value': ...},
-            ...     'job2': {'key': 'AMSJob', 'value': ...}
-            ... }
-
-            >>> db.update_yaml(job_recipe)  # doctest: +SKIP
-
-
-        Parameters
-        ----------
-        job_recipe : :class:`~collections.abc.Mapping`
-            A mapping with the settings of one or more jobs.
-
-        Returns
-        -------
-        :class:`Dict[str, str]<typing.Dict>`
-            A dictionary with the column names as keys and the key for :attr:`Database.yaml`
-            as matching values.
-
-        """
-        ret = {}
-        with self.yaml() as db:
-            for item, v in job_recipe.items():
-                # Unpack and sanitize keys
-                key = v['key']
-                if isinstance(key, type):
-                    key = key.__name__
-
-                # Unpack and sanitize values
-                value = v['value']
-                if isinstance(value, dict):
-                    value = sanitize_yaml_settings(value, key)
-
-                # Check if the appropiate key is available in **self.yaml**
-                if key not in db:
-                    db[key] = []
-
-                # Check if the appropiate value is available in **self.yaml**
-                if value in db[key]:
-                    ret[item] = f'{key} {db[key].index(value)}'
-                else:
-                    db[key].append(value)
-                    ret[item] = f'{key} {len(db[key]) - 1}'
-        return ret
 
     def update_hdf5(self, df: pd.DataFrame,
                     database: Union[Ligand, QD] = 'ligand',
