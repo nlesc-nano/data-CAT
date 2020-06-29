@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.5.0
+*****
+* Removed the .yaml job recipe storage component of the `Database` class.
+* Added a function for validating property Groups.
+* Cleaned up the `Database` class.
+
+
 0.4.0
 *****
 * Updated the hdf5 logging system.
