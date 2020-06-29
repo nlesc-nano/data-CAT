@@ -42,6 +42,7 @@ from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
 from .dtype import QD_IDX_DTYPE
+from .property_dset import create_prop_dset, update_prop_dset
 from ._parse_settings import _update_hdf5_settings
 
 if TYPE_CHECKING:
@@ -337,6 +338,7 @@ class Database:
 
         with manager(write=True) as db:
             # Update **db.index**
+            df.sort_values(by=[HDF5_INDEX], inplace=True)
             db.ndframe = even_index(db.ndframe, df)
 
             # Filter columns
@@ -364,6 +366,38 @@ class Database:
             df.update(hdf5_series, overwrite=True)
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
+
+        # Update the hdf5 file
+        with self.hdf5('r+') as f:
+            # Get the appropiate group
+            name = 'ligand/properties' if manager == self.csv_lig else 'qd/properties'
+            group = f[name]
+
+            # Define the indices
+            index = slice(None) if overwrite else hdf5_series.index
+            hdf5_index = df[HDF5_INDEX].values if overwrite else hdf5_series.values
+
+            # Define the properties
+            lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
+            dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
+            for name, name_seq in dct.items():
+                data = df.loc[index, name].values
+
+                # Get the dataset
+                try:
+                    dset = group[name]
+                except KeyError:
+                    if len(name_seq) == 1:
+                        name_seq = None
+                    dset = create_prop_dset(group, name, data.dtype, name_seq)
+
+                # Update the dataset
+                update_prop_dset(dset, data, hdf5_index)
+
+            # Add an entry to the logger
+            names = [group[k].name for k in dct]
+            message = f'datasets={names!r}; overwrite={overwrite!r}'
+            update_hdf5_log(f['ligand'], hdf5_index, message=message)
 
     def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
                          columns: MIT, subset: np.ndarray) -> MIT:
@@ -451,7 +485,9 @@ class Database:
         i = j - len(mol_series)
         ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
 
-        update_hdf5_log(group, idx=ret.values, message='append')
+        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
+        update_hdf5_log(group, idx=ret.values, message=message)
         df.update(ret, overwrite=True)
         if opt:
             df.loc[new_index, OPT] = True
@@ -461,13 +497,15 @@ class Database:
     def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
                         dtype: DtypeLike, opt: bool = False) -> None:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
-        old.sort_values(inplace=True)
         mol_series = df.loc[old.index, MOL]
 
         index = mol_series.index.values.astype(dtype)
         pdb_old = PDBContainer.from_molecules(mol_series, index=index)
         pdb_old.to_hdf5(group, mode='update', idx=old.values)
-        update_hdf5_log(group, idx=old.values, message='update')
+
+        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
+        update_hdf5_log(group, idx=old.values, message=message)
         if opt:
             df.loc[old.index, OPT] = True
 

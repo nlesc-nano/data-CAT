@@ -46,7 +46,7 @@ index : attribute
 """
 
 
-def create_prop_group(file: Union[h5py.File, h5py.Group], scale: h5py.Dataset) -> h5py.Group:
+def create_prop_group(file: h5py.Group, scale: h5py.Dataset) -> h5py.Group:
     r"""Create a group for holding user-specified properties.
 
     .. testsetup:: python
@@ -238,7 +238,7 @@ def update_prop_dset(dset: h5py.Dataset, data: np.ndarray,
         _resize_prop_dset(dset)
         dset[idx] = data
     except Exception as ex:
-        validate_prop_group(dset.group)
+        validate_prop_group(dset.parent)
         raise ex
 
 

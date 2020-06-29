@@ -845,7 +845,7 @@ class PDBContainer:
         return [_rec_to_mol(*args) for args in iterator]
 
     @classmethod
-    def create_hdf5_group(cls, file: Union[h5py.File, h5py.Group],
+    def create_hdf5_group(cls, file: h5py.Group,
                           name: str,
                           index_dtype: DtypeLike = None,
                           **kwargs: Any) -> h5py.Group:

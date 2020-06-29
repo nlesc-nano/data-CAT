@@ -171,6 +171,16 @@ def test_update_csv() -> None:
     with db.csv_lig(write=False) as df2:
         np.testing.assert_allclose(df[V_BULK], df2.loc[df.index, V_BULK])
 
+    with db.hdf5('r') as f:
+        dset = f['ligand/properties/V_bulk']
+        idx = df[HDF5_INDEX].values
+        np.testing.assert_array_equal(dset[idx], df[V_BULK])
+
+        log = f['ligand/logger']
+        msg = b"datasets=['/ligand/properties/V_bulk']; overwrite=False"
+        assertion.eq(log['message'][3], msg)
+        np.testing.assert_array_equal(log['index'][3], idx)
+
 
 @delete_finally(DB_PATH_UPDATE)
 def test_update_hdf5_settinga() -> None:
