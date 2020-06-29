@@ -11,6 +11,7 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Removed the .yaml job recipe storage component of the `Database` class.
 * Added a function for validating property Groups.
 * Cleaned up the `Database` class.
+* Ensure that all content written to the .csv files is also written to the .hdf5 file.
 
 
 0.4.0
