@@ -485,7 +485,9 @@ class Database:
         i = j - len(mol_series)
         ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
 
-        update_hdf5_log(group, idx=ret.values, message='append')
+        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
+        update_hdf5_log(group, idx=ret.values, message=message)
         df.update(ret, overwrite=True)
         if opt:
             df.loc[new_index, OPT] = True
@@ -500,7 +502,10 @@ class Database:
         index = mol_series.index.values.astype(dtype)
         pdb_old = PDBContainer.from_molecules(mol_series, index=index)
         pdb_old.to_hdf5(group, mode='update', idx=old.values)
-        update_hdf5_log(group, idx=old.values, message='update')
+
+        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
+        update_hdf5_log(group, idx=old.values, message=message)
         if opt:
             df.loc[old.index, OPT] = True
 
