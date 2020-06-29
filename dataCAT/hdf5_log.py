@@ -87,7 +87,7 @@ def _get_now() -> np.recarray:
     return np.rec.array(tup, dtype=DT_DTYPE)
 
 
-def create_hdf5_log(file: Union[h5py.File, h5py.Group],
+def create_hdf5_log(file: h5py.Group,
                     n_entries: int = 100,
                     clear_when_full: bool = False,
                     version_names: Sequence[Union[str, bytes]] = _VERSION_NAMES,
