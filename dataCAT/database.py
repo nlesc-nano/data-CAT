@@ -20,10 +20,9 @@ from os import getcwd, PathLike
 from os.path import abspath
 from types import MappingProxyType
 from functools import partial
-from itertools import count
 from typing import (
     Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, Tuple, Type, Iterable
+    overload, Tuple, Type, Iterable, TYPE_CHECKING
 )
 
 import h5py
@@ -42,6 +41,12 @@ from .context_managers import OpenLig, OpenQD
 from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
+from ._parse_settings import _update_hdf5_settings
+
+if TYPE_CHECKING:
+    from .df_proxy import DFProxy
+else:
+    DFProxy = 'dataCAT.DFProxy'
 
 __all__ = ['Database']
 
@@ -339,18 +344,7 @@ class Database:
 
             # Update **db.columns**
             bool_ar = df_columns.isin(db.columns)
-            drop_idx = []
-            for i in df_columns[~bool_ar]:
-                if 'job_settings' in i[0]:
-                    self._update_hdf5_settings(df, i[0])
-                    del df[i]
-                    drop_idx.append(i)
-                    continue
-                try:
-                    db[i] = np.array((None), dtype=df[i].dtype)
-                except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
-                    db[i] = -1
-            df_columns = df_columns.drop(drop_idx)
+            df_columns = self._even_df_columns(df, db, df_columns, ~bool_ar)
 
             # Update **self.hdf5**; returns a new series of indices
             hdf5_series = self.update_hdf5(
@@ -363,6 +357,24 @@ class Database:
             df.update(hdf5_series, overwrite=True)
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
+
+    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy, columns: pd.MultiIndex,
+                         subset: np.ndarray) -> pd.MultiIndex:
+        drop_idx = []
+        for i in columns[subset]:
+            # Check for job settings
+            if 'job_settings' in i[0]:
+                self._update_hdf5_settings(df, i[0])
+                del df[i]
+                drop_idx.append(i)
+                continue
+
+            # Ensure that **db** has the same keys as **df**
+            try:
+                db[i] = np.array((None), dtype=df[i].dtype)
+            except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
+                db[i] = -1
+        return columns.drop(drop_idx)
 
     def update_hdf5(self, df: pd.DataFrame,
                     database: Union[Ligand, QD] = 'ligand',
@@ -446,53 +458,9 @@ class Database:
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
-        # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
-            i, j, k = f[column].shape
-
-            # Create a 3D array of input files
-            try:
-                job_ar = self._read_inp(df[column], j, k)
-            except ValueError:  # df[column] consists of empty lists, abort
-                return None
-
-            # Reshape **self.hdf5**
-            k = max(i, 1 + int(df[HDF5_INDEX].max()))
-            f[column].shape = k, job_ar.shape[1], job_ar.shape[2]
-
-            # Update the hdf5 dataset
-            idx = df[HDF5_INDEX].astype(int, copy=False)
-            idx_argsort = np.argsort(idx)
-            f[column][idx[idx_argsort]] = job_ar[idx_argsort]
-        return None
-
-    @staticmethod
-    def _read_inp(job_paths: Sequence[str],
-                  ax2: int = 0, ax3: int = 0) -> np.ndarray:
-        """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
-        # Determine the minimum size of the to-be returned 3D array
-        line_count = [[Database._get_line_count(j) for j in i] for i in job_paths]
-        ax1 = len(line_count)
-        ax2 = max(ax2, max(len(i) for i in line_count))
-        ax3 = max(ax3, max(j for i in line_count for j in i))
-
-        # Create and return a padded 3D array of strings
-        ret = np.zeros((ax1, ax2, ax3), dtype='S120')
-        for i, list1, list2 in zip(count(), line_count, job_paths):
-            for j, k, filename in zip(count(), list1, list2):
-                ret[i, j, :k] = np.loadtxt(filename, dtype='S120', comments=None, delimiter='\n')
-        return ret
-
-    @staticmethod
-    def _get_line_count(filename: PathType) -> int:
-        """Return the total number of lines in **filename**."""
-        substract = 0
-        with open(filename, 'r') as f:
-            for i, j in enumerate(f, 1):
-                if j == '\n':
-                    substract += 1
-        return i - substract
+            _update_hdf5_settings(f, df, column)
 
     """ ########################  Pulling results from the database ########################### """
 
