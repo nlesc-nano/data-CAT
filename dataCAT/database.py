@@ -41,17 +41,21 @@ from .context_managers import OpenLig, OpenQD
 from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
+from .dtype import QD_IDX_DTYPE
 from ._parse_settings import _update_hdf5_settings
 
 if TYPE_CHECKING:
     from .df_proxy import DFProxy
+    from numpy.typing import DtypeLike
 else:
     DFProxy = 'dataCAT.DFProxy'
+    DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = ['Database']
 
 KT = TypeVar('KT')
 ST = TypeVar('ST', bound='Database')
+MIT = TypeVar('MIT', bound=pd.MultiIndex)
 
 
 class JobRecipe(TypedDict):
@@ -358,8 +362,8 @@ class Database:
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
-    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy, columns: pd.MultiIndex,
-                         subset: np.ndarray) -> pd.MultiIndex:
+    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
+                         columns: MIT, subset: np.ndarray) -> MIT:
         drop_idx = []
         for i in columns[subset]:
             # Check for job settings
@@ -374,7 +378,7 @@ class Database:
                 db[i] = np.array((None), dtype=df[i].dtype)
             except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
                 db[i] = -1
-        return columns.drop(drop_idx)
+        return columns.drop(drop_idx)  # type: ignore
 
     def update_hdf5(self, df: pd.DataFrame,
                     database: Union[Ligand, QD] = 'ligand',
@@ -421,15 +425,8 @@ class Database:
             if new.any():
                 mol_series = df.loc[new.index, MOL]
 
-                index = new.index.values.astype(idx_dtype)
-                if database in {'qd', 'qd_no_opt'}:
-                    # TODO: Fix the messy MultiIndex
-                    core_anchor = index['core anchor']
-                    for i, j in enumerate(core_anchor):
-                        j_split = j.split()
-                        core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=np.int32)
-
-                pdb_new = PDBContainer.from_molecules(mol_series, index=index.view(np.recarray))
+                index = self._sanitize_multi_idx(new.index, idx_dtype, database)
+                pdb_new = PDBContainer.from_molecules(mol_series, index=index)
                 pdb_new.to_hdf5(group, mode='append')
 
                 j = len(group['atoms'])
@@ -454,6 +451,18 @@ class Database:
                 update_hdf5_log(group, idx=old.values, message='update')
                 if opt:
                     df.loc[old.index, OPT] = True
+        return ret
+
+    @staticmethod
+    def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
+        # TODO: Fix the messy MultiIndex
+        ret: MIT = index.values.astype(dtype)
+        if database in {'qd', 'qd_no_opt'}:
+            core_anchor = ret['core anchor']
+            anchor_dtype = QD_IDX_DTYPE.fields['core anchor'][0]
+            for i, j in enumerate(core_anchor):
+                j_split = j.split()
+                core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=anchor_dtype)
         return ret
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
