@@ -381,7 +381,7 @@ class Database:
             lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for name, name_seq in dct.items():
-                data = df.loc[index, name]
+                data = df.loc[index, name].values
 
                 # Get the dataset
                 try:
