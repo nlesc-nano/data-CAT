@@ -2,18 +2,14 @@
 
 from os.path import join
 
-import yaml
 import numpy as np
 import pandas as pd
 
 from rdkit import Chem
-from scm.plams import Settings
 from assertionlib import assertion
 import scm.plams.interfaces.molecule.rdkit as molkit
 
-from dataCAT.functions import (
-    get_nan_row, as_pdb_array, from_pdb_array, sanitize_yaml_settings, even_index
-)
+from dataCAT.functions import get_nan_row, as_pdb_array, from_pdb_array, even_index
 
 PATH = join('tests', 'test_files')
 
@@ -88,27 +84,3 @@ def test_even_index() -> None:
 
     out2 = even_index(df1, df1.copy())
     assertion.is_(df1, out2)
-
-
-def test_sanitize_yaml_settings() -> None:
-    """Test :func:`dataCAT.functions.sanitize_yaml_settings`."""
-    s = Settings(yaml.load(
-        """
-        description: test
-        input:
-            ams:
-                system:
-                    bondorders:
-                        - 1 2 1.0
-                        - 1 3 1.0
-                        - 1 4 1.0
-                        - 2 6 1.0
-            uff:
-                library: uff
-
-        """, Loader=yaml.FullLoader
-    ))
-
-    out = sanitize_yaml_settings(s, 'AMSJob')
-    ref = {'input': {'uff': {'library': 'uff'}}}
-    assertion.eq(out, ref)

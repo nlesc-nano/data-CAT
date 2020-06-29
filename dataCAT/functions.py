@@ -6,7 +6,6 @@ Index
 .. autosummary::
     df_to_mongo_dict
     get_nan_row
-    sanitize_yaml_settings
     even_index
     update_pdb_shape
     update_pdb_values
@@ -17,7 +16,6 @@ API
 ---
 .. autofunction:: df_to_mongo_dict
 .. autofunction:: get_nan_row
-.. autofunction:: sanitize_yaml_settings
 .. autofunction:: even_index
 .. autofunction:: update_pdb_shape
 .. autofunction:: update_pdb_values
@@ -38,13 +36,12 @@ import h5py
 import numpy as np
 import pandas as pd
 
-from scm.plams import Molecule, Settings
+from scm.plams import Molecule
 import scm.plams.interfaces.molecule.rdkit as molkit
 from rdkit import Chem
 from rdkit.Chem import Mol
 
 from nanoutils import SupportsIndex, PathType
-from CAT.utils import get_template
 
 if TYPE_CHECKING:
     from .pdb_array import PDBContainer, IndexLike
@@ -55,7 +52,7 @@ else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'sanitize_yaml_settings',
+    'df_to_mongo_dict', 'get_nan_row', 'even_index',
     'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
     'hdf5_availability'
 ]
@@ -241,59 +238,6 @@ def from_pdb_array(array: np.ndarray, rdmol: bool = True,
     if not rdmol:
         return molkit.from_rdmol(ret)
     return ret
-
-
-def sanitize_yaml_settings(settings: Settings,
-                           job_type: str) -> Settings:
-    """Remove a predetermined set of unwanted keys and values from a settings object.
-
-    Parameters
-    ----------
-    settings : :class:`plams.Settings<scm.plams.core.settings.Settings>`
-        A settings instance with, potentially, undesired keys and values.
-    job_type : :class:`str`
-        The name of key in the settings blacklist.
-
-    Returns
-    -------
-    :class:`plams.Settings<scm.plams.core.settings.Settings>`
-        A new Settings instance with all unwanted keys and values removed.
-
-    Raises
-    ------
-    KeyError
-        Raised if **jobtype** is not found in .../CAT/data/templates/settings_blacklist.yaml.
-
-    """
-    # Prepare a blacklist of specific keys
-    blacklist = get_template('settings_blacklist.yaml')
-    if job_type not in blacklist:
-        return settings.copy()
-
-    settings_del = blacklist['generic']
-    settings_del.update(blacklist[job_type])
-
-    # Recursivelly delete all keys from **s** if aforementioned keys are present in the s_del
-    ret = settings.copy()
-    del_nested(settings, ret, settings_del)
-    return ret
-
-
-def del_nested(s_ref: Settings, s_ret: dict, del_item: dict) -> None:
-    """Remove all keys in **del_item** from **collection**: a (nested) dictionary and/or list."""
-    empty = Settings()
-    iterator = s_ref.items() if isinstance(s_ref, dict) else enumerate(s_ref)
-
-    for key, value in iterator:
-        if key in del_item:
-            value_del = del_item[key]
-            if isinstance(value_del, (dict, list)):
-                del_nested(value, s_ret[key], value_del)  # type: ignore
-            else:
-                del s_ret[key]
-
-        if value == empty:  # An empty (leftover) Settings instance: delete it
-            del s_ret[key]
 
 
 def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:

@@ -4,13 +4,11 @@ Index
 -----
 .. currentmodule:: dataCAT.context_managers
 .. autosummary::
-    OpenYaml
     OpenLig
     OpenQD
 
 API
 ---
-.. autoclass:: OpenYaml
 .. autoclass:: OpenLig
 .. autoclass:: OpenQD
 
@@ -24,10 +22,8 @@ from typing import (
 )
 
 import sys
-import yaml
 import pandas as pd
 
-from scm.plams import Settings
 from nanoutils import final
 
 from .df_proxy import DFProxy
@@ -35,7 +31,7 @@ from .df_proxy import DFProxy
 if TYPE_CHECKING:
     from os import PathLike  # noqa: F401
 
-__all__ = ['OpenYaml', 'OpenLig', 'OpenQD']
+__all__ = ['OpenLig', 'OpenQD']
 
 T = TypeVar('T')
 ST = TypeVar('ST', bound='FileManagerABC')
@@ -123,26 +119,6 @@ class FileManagerABC(Generic[AnyStr, T], metaclass=ABCMeta):
                  traceback: Optional[TracebackType]) -> None:
         """Exit the context manager; close and, optionally, write the database."""
         raise NotImplementedError("Trying to call an abstract method")
-        del self._db
-
-
-class OpenYaml(FileManagerABC[AnyStr, Settings]):
-    """Context manager for opening and closing job settings (:attr:`.Database.yaml`)."""
-
-    def __enter__(self) -> Settings:
-        """Open the :class:`.OpenYaml` context manager, importing :attr:`.settings`."""
-        with open(self.filename, 'r', encoding='utf-8') as f:
-            self._db = Settings(yaml.load(f, Loader=yaml.FullLoader))
-        return self._db
-
-    def __exit__(self, exc_type: Optional[Type[BaseException]],
-                 exc_value: Optional[BaseException],
-                 traceback: Optional[TracebackType]) -> None:
-        """Close the :class:`.OpenYaml` context manager, exporting :attr:`.settings`."""
-        if self.write:
-            yml_dict = self._db.as_dict()
-            with open(self.filename, 'w', encoding='utf-8') as f:
-                f.write(yaml.dump(yml_dict, default_flow_style=False, indent=4))
         del self._db
 
 

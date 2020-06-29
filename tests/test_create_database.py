@@ -2,7 +2,6 @@
 
 from os.path import join
 
-import yaml
 import h5py
 import numpy as np
 import pandas as pd
@@ -10,24 +9,23 @@ import pandas as pd
 from assertionlib import assertion
 from nanoutils import delete_finally
 
-from dataCAT.create_database import _create_csv, _create_hdf5, _create_yaml
+from dataCAT.create_database import create_csv, create_hdf5
 
 PATH = join('tests', 'test_files')
 
 LIGAND_PATH = join(PATH, 'ligand_database.csv')
 QD_PATH = join(PATH, 'qd_database.csv')
 HDF5_PATH = join(PATH, 'structures.hdf5')
-YAML_PATH = join(PATH, 'job_settings.yaml')
 
 
 @delete_finally(LIGAND_PATH, QD_PATH)
 def test_create_csv() -> None:
-    """Test :func:`dataCAT.create_database._create_csv`."""
+    """Test :func:`dataCAT.create_database.create_csv`."""
     dtype1 = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
     dtype2 = {'hdf5 index': int, 'settings': str, 'opt': bool}
 
-    filename1 = _create_csv(PATH, 'ligand')
-    filename2 = _create_csv(PATH, 'qd')
+    filename1 = create_csv(PATH, 'ligand')
+    filename2 = create_csv(PATH, 'qd')
     assertion.eq(filename1, LIGAND_PATH)
     assertion.eq(filename2, QD_PATH)
     df1 = pd.read_csv(LIGAND_PATH, index_col=[0, 1], header=[0, 1], dtype=dtype1)
@@ -49,16 +47,16 @@ def test_create_csv() -> None:
         df2.values, np.array([[-1, -1, False, 'str', 'str']], dtype=object)
     )
 
-    assertion.assert_(_create_csv, PATH, 'bob', exception=ValueError)
+    assertion.assert_(create_csv, PATH, 'bob', exception=ValueError)
 
 
 @delete_finally(HDF5_PATH)
 def test_create_hdf5() -> None:
-    """Test :func:`dataCAT.create_database._create_hdf5`."""
+    """Test :func:`dataCAT.create_database.create_hdf5`."""
     ref_keys1 = ('qd', 'qd_no_opt', 'core', 'core_no_opt', 'ligand', 'ligand_no_opt')
     ref_keys2 = ('job_settings_BDE', 'job_settings_qd_opt', 'job_settings_crs')
 
-    filename = _create_hdf5(PATH)
+    filename = create_hdf5(PATH)
     assertion.eq(filename, HDF5_PATH)
     with h5py.File(HDF5_PATH, 'r', libver='latest') as f:
         for item in ref_keys1:
@@ -66,13 +64,3 @@ def test_create_hdf5() -> None:
         for item in ref_keys2:
             assertion.contains(f.keys(), item)
             assertion.eq(f[item].ndim, 3)
-
-
-@delete_finally(YAML_PATH)
-def test_create_yaml() -> None:
-    """Test :func:`dataCAT.create_database._create_yaml`."""
-    filename = _create_yaml(PATH)
-    assertion.eq(filename, YAML_PATH)
-    with open(YAML_PATH, 'r') as f:
-        out = yaml.load(f, Loader=yaml.FullLoader)
-    assertion.eq(out, {None: [None]})

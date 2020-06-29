@@ -15,14 +15,14 @@ API
 
 import reprlib
 import textwrap
+import warnings
 from os import getcwd, PathLike
 from os.path import abspath
 from types import MappingProxyType
 from functools import partial
-from itertools import count
 from typing import (
     Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, Tuple, Type, Iterable
+    overload, Tuple, Type, Iterable, TYPE_CHECKING
 )
 
 import h5py
@@ -32,22 +32,30 @@ from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
 from rdkit.Chem import Mol
-from scm.plams import Settings, Molecule
-from nanoutils import PathType, TypedDict
-from CAT.mol_utils import from_rdmol  # noqa: F401
+from scm.plams import Settings, Molecule, from_rdmol
+from nanoutils import TypedDict
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
-from .create_database import (_create_csv, _create_yaml, _create_hdf5, _create_mongodb,
-                              QD, Ligand, IDX_DTYPE)
-from .context_managers import OpenYaml, OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, sanitize_yaml_settings, hdf5_availability
+from .create_database import create_csv, create_hdf5, create_mongodb, QD, Ligand, IDX_DTYPE
+from .context_managers import OpenLig, OpenQD
+from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
+from .dtype import QD_IDX_DTYPE
+from ._parse_settings import _update_hdf5_settings
+
+if TYPE_CHECKING:
+    from .df_proxy import DFProxy
+    from numpy.typing import DtypeLike
+else:
+    DFProxy = 'dataCAT.DFProxy'
+    DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = ['Database']
 
 KT = TypeVar('KT')
 ST = TypeVar('ST', bound='Database')
+MIT = TypeVar('MIT', bound=pd.MultiIndex)
 
 
 class JobRecipe(TypedDict):
@@ -60,8 +68,7 @@ class JobRecipe(TypedDict):
 class Database:
     """The Database class."""
 
-    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_yaml',
-                 '_hdf5', '_mongodb', '_hash')
+    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_hdf5', '_mongodb', '_hash')
 
     @property
     def dirname(self) -> str:
@@ -77,11 +84,6 @@ class Database:
     def csv_qd(self) -> 'partial[OpenQD]':
         """:data:`Callable[..., dataCAT.OpenQD]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenQD` context manager."""  # noqa: E501
         return self._csv_qd
-
-    @property
-    def yaml(self) -> 'partial[OpenYaml]':
-        """:data:`Callable[..., dataCAT.OpenYaml]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenYaml` context manager."""  # noqa: E501
-        return self._yaml
 
     @property
     def hdf5(self) -> 'partial[h5py.File]':
@@ -122,28 +124,26 @@ class Database:
         self._dirname: str = abspath(path) if path is not None else getcwd()
 
         # Create the database components and return the filename
-        lig_path = _create_csv(self.dirname, database='ligand')
-        qd_path = _create_csv(self.dirname, database='qd')
-        yaml_path = _create_yaml(self.dirname)
-        hdf5_path = _create_hdf5(self.dirname)
+        lig_path = create_csv(self.dirname, database='ligand')
+        qd_path = create_csv(self.dirname, database='qd')
+        hdf5_path = create_hdf5(self.dirname)
 
         # Populate attributes with MetaManager instances
         self._csv_lig = partial(OpenLig, filename=lig_path)
         self._csv_qd = partial(OpenQD, filename=qd_path)
-        self._yaml = partial(OpenYaml, filename=yaml_path)
         self._hdf5 = partial(h5py.File, hdf5_path, libver='latest')
 
         # Try to create or access the mongodb database
         try:
             self._mongodb: Optional[Mapping[str, Any]] = MappingProxyType(
-                _create_mongodb(host, port, **kwargs)
+                create_mongodb(host, port, **kwargs)
             )
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'yaml', 'hdf5', 'mongodb')
+        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'hdf5', 'mongodb')
         attr_max = max(len(i) for i in attr_tup)
 
         iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
@@ -162,11 +162,10 @@ class Database:
         if not ret:
             return False
 
-        partial_names = ('csv_lig', 'csv_qd', 'yaml', 'hdf5')
+        partial_names = ('csv_lig', 'csv_qd', 'hdf5')
         iterator = ((getattr(self, name), getattr(value, name)) for name in partial_names)
-        for func1, func2 in iterator:
-            ret &= func1.args == func2.args and func1.keywords == func2.keywords and func1.func is func2.func  # noqa: E501
-        return ret
+        return all(func1.args == func2.args and func1.keywords == func2.keywords and
+                   func1.func is func2.func for func1, func2 in iterator)
 
     def __hash__(self) -> int:
         """Implement :func:`hash(self)<hash>`."""
@@ -192,7 +191,7 @@ class Database:
             return
 
         try:
-            self._mongodb = MappingProxyType(_create_mongodb(**state))
+            self._mongodb = MappingProxyType(create_mongodb(**state))
         except ServerSelectionTimeoutError:
             self._mongodb = None
 
@@ -214,9 +213,9 @@ class Database:
         ...
     def _parse_database(self, database):  # noqa: E301
         """Operate on either the ligand or quantum dot database."""
-        if database in ('ligand', 'ligand_no_opt'):
+        if database in {'ligand', 'ligand_no_opt'}:
             return self.csv_lig
-        elif database in ('qd', 'qd_no_opt'):
+        elif database in {'qd', 'qd_no_opt'}:
             return self.csv_qd
         raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
 
@@ -305,7 +304,7 @@ class Database:
                    database: Union[Ligand, QD] = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
-                   job_recipe: Optional[Settings] = None,
+                   job_recipe: None = None,
                    status: Optional[str] = None) -> None:
         """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
@@ -322,8 +321,6 @@ class Database:
             If :data:`None` Add all columns.
         overwrite : :class:`bool`
             Whether or not previous entries can be overwritten or not.
-        job_recipe : :class:`plams.Settings<scm.plams.core.settings.Settings>`
-            Optional: A Settings instance with settings specific to a job.
         status : :class:`str`, optional
             A descriptor of the status of the moleculair structures.
             Set to ``"optimized"`` to treat them as optimized geometries.
@@ -335,12 +332,8 @@ class Database:
         # Operate on either the ligand or quantum dot database
         manager = self._parse_database(database)
 
-        # Update **self.yaml**
         if job_recipe is not None:
-            job_settings = self.update_yaml(job_recipe)
-            for key, value in job_settings.items():
-                key = ('settings', ) + key
-                df[key] = value
+            warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
         with manager(write=True) as db:
             # Update **db.index**
@@ -352,20 +345,13 @@ class Database:
             else:
                 df_columns = pd.Index(columns)
 
+            # Remove columns with the (now deprecated) `settings` key
+            if isinstance(df_columns, pd.MultiIndex):
+                df_columns = pd.Index([(i, j) for i, j in df_columns if i != 'settings'])
+
             # Update **db.columns**
             bool_ar = df_columns.isin(db.columns)
-            drop_idx = []
-            for i in df_columns[~bool_ar]:
-                if 'job_settings' in i[0]:
-                    self._update_hdf5_settings(df, i[0])
-                    del df[i]
-                    drop_idx.append(i)
-                    continue
-                try:
-                    db[i] = np.array((None), dtype=df[i].dtype)
-                except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
-                    db[i] = -1
-            df_columns = df_columns.drop(drop_idx)
+            df_columns = self._even_df_columns(df, db, df_columns, ~bool_ar)
 
             # Update **self.hdf5**; returns a new series of indices
             hdf5_series = self.update_hdf5(
@@ -379,60 +365,24 @@ class Database:
             if status == 'optimized':
                 db.update(df[OPT], overwrite=True)
 
-    def update_yaml(self, job_recipe: Mapping[KT, JobRecipe]) -> Dict[KT, str]:
-        """Update :attr:`Database.yaml` with (potentially) new user provided settings.
+    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
+                         columns: MIT, subset: np.ndarray) -> MIT:
+        """Even the columns of **df** and **db**."""
+        drop_idx = []
+        for i in columns[subset]:
+            # Check for job settings
+            if 'job_settings' in i[0]:
+                self._update_hdf5_settings(df, i[0])
+                del df[i]
+                drop_idx.append(i)
+                continue
 
-        Examples
-        --------
-        .. code:: python
-
-            >>> from dataCAT import Database
-
-            >>> db = Database(...)  # doctest: +SKIP
-            >>> job_recipe = {
-            ...     'job1': {'key': 'ADFJob', 'value': ...},
-            ...     'job2': {'key': 'AMSJob', 'value': ...}
-            ... }
-
-            >>> db.update_yaml(job_recipe)  # doctest: +SKIP
-
-
-        Parameters
-        ----------
-        job_recipe : :class:`~collections.abc.Mapping`
-            A mapping with the settings of one or more jobs.
-
-        Returns
-        -------
-        :class:`Dict[str, str]<typing.Dict>`
-            A dictionary with the column names as keys and the key for :attr:`Database.yaml`
-            as matching values.
-
-        """
-        ret = {}
-        with self.yaml() as db:
-            for item, v in job_recipe.items():
-                # Unpack and sanitize keys
-                key = v['key']
-                if isinstance(key, type):
-                    key = key.__name__
-
-                # Unpack and sanitize values
-                value = v['value']
-                if isinstance(value, dict):
-                    value = sanitize_yaml_settings(value, key)
-
-                # Check if the appropiate key is available in **self.yaml**
-                if key not in db:
-                    db[key] = []
-
-                # Check if the appropiate value is available in **self.yaml**
-                if value in db[key]:
-                    ret[item] = f'{key} {db[key].index(value)}'
-                else:
-                    db[key].append(value)
-                    ret[item] = f'{key} {len(db[key]) - 1}'
-        return ret
+            # Ensure that **db** has the same keys as **df**
+            try:
+                db[i] = np.array((None), dtype=df[i].dtype)
+            except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
+                db[i] = -1
+        return columns.drop(drop_idx)  # type: ignore
 
     def update_hdf5(self, df: pd.DataFrame,
                     database: Union[Ligand, QD] = 'ligand',
@@ -470,99 +420,75 @@ class Database:
             old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
             opt = False
 
-        idx_dtype = IDX_DTYPE[database]
-
         # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
             group = f[database]
+            dtype = IDX_DTYPE[database]
+
             if new.any():
-                mol_series = df.loc[new.index, MOL]
-
-                index = new.index.values.astype(idx_dtype)
-                if database in {'qd', 'qd_no_opt'}:
-                    # TODO: Fix the messy MultiIndex
-                    core_anchor = index['core anchor']
-                    for i, j in enumerate(core_anchor):
-                        j_split = j.split()
-                        core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=np.int32)
-
-                pdb_new = PDBContainer.from_molecules(mol_series, index=index.view(np.recarray))
-                pdb_new.to_hdf5(group, mode='append')
-
-                j = len(group['atoms'])
-                i = j - len(mol_series)
-                ret = pd.Series(np.arange(i, j), index=new.index, name=HDF5_INDEX)
-
-                update_hdf5_log(group, idx=ret.values, message='append')
-                df.update(ret, overwrite=True)
-                if opt:
-                    df.loc[new.index, OPT] = True
+                ret = self._write_hdf5(group, df, new.index, dtype, database, opt=opt)
             else:
                 ret = pd.Series(name=HDF5_INDEX, dtype=int)
 
             # If **overwrite** is *True*
             if overwrite and old.any():
-                old.sort_values(inplace=True)
-                mol_series = df.loc[old.index, MOL]
+                self._overwrite_hdf5(group, old, df, dtype, opt=opt)
+        return ret
 
-                index = mol_series.index.values.astype(idx_dtype).view(np.recarray)
-                pdb_old = PDBContainer.from_molecules(mol_series, index=index)
-                pdb_old.to_hdf5(group, mode='update', idx=old.values)
-                update_hdf5_log(group, idx=old.values, message='update')
-                if opt:
-                    df.loc[old.index, OPT] = True
+    @classmethod
+    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, new_index: pd.Index,
+                    dtype: DtypeLike, database: Union[Ligand, QD] = 'ligand',
+                    opt: bool = False) -> pd.Index:
+        """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
+        mol_series = df.loc[new_index, MOL]
+
+        index = cls._sanitize_multi_idx(new_index, dtype, database)
+        pdb_new = PDBContainer.from_molecules(mol_series, index=index)
+        pdb_new.to_hdf5(group, mode='append')
+
+        j = len(group['atoms'])
+        i = j - len(mol_series)
+        ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
+
+        update_hdf5_log(group, idx=ret.values, message='append')
+        df.update(ret, overwrite=True)
+        if opt:
+            df.loc[new_index, OPT] = True
+        return ret
+
+    @staticmethod
+    def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
+                        dtype: DtypeLike, opt: bool = False) -> None:
+        """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
+        old.sort_values(inplace=True)
+        mol_series = df.loc[old.index, MOL]
+
+        index = mol_series.index.values.astype(dtype)
+        pdb_old = PDBContainer.from_molecules(mol_series, index=index)
+        pdb_old.to_hdf5(group, mode='update', idx=old.values)
+        update_hdf5_log(group, idx=old.values, message='update')
+        if opt:
+            df.loc[old.index, OPT] = True
+
+    @staticmethod
+    def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
+        """Parse and sanitize the passed MultiIndex."""
+        # TODO: Fix the messy MultiIndex
+        ret: MIT = index.values.astype(dtype)
+        if database in {'qd', 'qd_no_opt'}:
+            core_anchor = ret['core anchor']
+            anchor_dtype = h5py.check_vlen_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
+            for i, j in enumerate(core_anchor):
+                j_split = j.split()
+                core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=anchor_dtype)
         return ret
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
-        # Add new entries to the database
         self.hdf5_availability()
         with self.hdf5('r+') as f:
-            i, j, k = f[column].shape
-
-            # Create a 3D array of input files
-            try:
-                job_ar = self._read_inp(df[column], j, k)
-            except ValueError:  # df[column] consists of empty lists, abort
-                return None
-
-            # Reshape **self.hdf5**
-            k = max(i, 1 + int(df[HDF5_INDEX].max()))
-            f[column].shape = k, job_ar.shape[1], job_ar.shape[2]
-
-            # Update the hdf5 dataset
-            idx = df[HDF5_INDEX].astype(int, copy=False)
-            idx_argsort = np.argsort(idx)
-            f[column][idx[idx_argsort]] = job_ar[idx_argsort]
-        return None
-
-    @staticmethod
-    def _read_inp(job_paths: Sequence[str],
-                  ax2: int = 0, ax3: int = 0) -> np.ndarray:
-        """Convert all files in **job_paths** (nested sequence of filenames) into a 3D array."""
-        # Determine the minimum size of the to-be returned 3D array
-        line_count = [[Database._get_line_count(j) for j in i] for i in job_paths]
-        ax1 = len(line_count)
-        ax2 = max(ax2, max(len(i) for i in line_count))
-        ax3 = max(ax3, max(j for i in line_count for j in i))
-
-        # Create and return a padded 3D array of strings
-        ret = np.zeros((ax1, ax2, ax3), dtype='S120')
-        for i, list1, list2 in zip(count(), line_count, job_paths):
-            for j, k, filename in zip(count(), list1, list2):
-                ret[i, j, :k] = np.loadtxt(filename, dtype='S120', comments=None, delimiter='\n')
-        return ret
-
-    @staticmethod
-    def _get_line_count(filename: PathType) -> int:
-        """Return the total number of lines in **filename**."""
-        substract = 0
-        with open(filename, 'r') as f:
-            for i, j in enumerate(f, 1):
-                if j == '\n':
-                    substract += 1
-        return i - substract
+            _update_hdf5_settings(f, df, column)
 
     """ ########################  Pulling results from the database ########################### """
 

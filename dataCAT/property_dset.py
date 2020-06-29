@@ -7,12 +7,14 @@ Index
     create_prop_group
     create_prop_dset
     update_prop_dset
+    validate_prop_group
 
 API
 ---
 .. autofunction:: create_prop_group
 .. autofunction:: create_prop_dset
 .. autofunction:: update_prop_dset
+.. autofunction:: validate_prop_group
 
 """
 
@@ -21,12 +23,14 @@ from typing import Union, Sequence, Any, Optional, TYPE_CHECKING
 import h5py
 import numpy as np
 
+from assertionlib import assertion
+
 if TYPE_CHECKING:
     from numpy.typing import DtypeLike
 else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
-__all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset']
+__all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset', 'validate_prop_group']
 
 PROPERTY_DOC = r"""A h5py Group containing an arbitrary number of quantum-mechanical properties.
 
@@ -228,7 +232,39 @@ def update_prop_dset(dset: h5py.Dataset, data: np.ndarray,
     :rtype: :data:`None`
 
     """
-    _resize_prop_dset(dset)
-
     idx = slice(None) if index is None else index
-    dset[idx] = data
+
+    try:
+        _resize_prop_dset(dset)
+        dset[idx] = data
+    except Exception as ex:
+        validate_prop_group(dset.group)
+        raise ex
+
+
+def validate_prop_group(group: h5py.Group) -> None:
+    """Validate the passed hdf5 **group**, ensuring it is compatible with :func:`create_prop_group` and :func:`create_prop_group`.
+
+    This method is called automatically when an exception is raised by :func:`update_prop_dset`.
+
+    Parameters
+    ----------
+    group : :class:`h5py.Group`
+        The to-be validated hdf5 Group.
+
+    Raises
+    ------
+    :exc:`AssertionError`
+        Raised if the validation process fails.
+
+    """  # noqa: E501
+    assertion.isinstance(group, h5py.Group)
+
+    index_ref = group.attrs['index']
+    index = group.file[index_ref]
+
+    iterator = ((k, v) for k, v in group.items() if k != 'index' and not k.endswith('_names'))
+    for name, dset in iterator:
+        assertion.le(len(dset), len(index), message=f'{name!r} invalid dataset length')
+        assertion.contains(dset.dims[0].keys(), 'index', message=f'{name!r} missing dataset scale')
+        assertion.eq(dset.dims[0]['index'], index, message=f'{name!r} invalid dataset scale')
