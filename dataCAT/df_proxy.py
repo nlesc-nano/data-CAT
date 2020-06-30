@@ -109,7 +109,7 @@ class DFProxy(metaclass=_DFMeta):
     __slots__ = ('__weakref__', 'ndframe')
 
     #: The type of :class:`~pandas.core.generic.NDFrame` subclass contained within this class.
-    NDTYPE: ClassVar[Type[NDFrame]] = pd.DataFrame
+    NDTYPE: ClassVar[Type[pd.DataFrame]] = pd.DataFrame
 
     #: The embedded DataFrame.
     ndframe: pd.DataFrame
