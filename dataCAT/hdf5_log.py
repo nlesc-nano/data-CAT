@@ -206,7 +206,7 @@ def create_hdf5_log(file: h5py.Group,
     return grp
 
 
-def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
+def update_hdf5_log(group: h5py.Group, idx: ArrayLike,
                     message: Optional[str] = None,
                     version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> None:
     r"""Add a new entry to the hdf5 logger in **file**.
@@ -233,15 +233,15 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
         >>> hdf5_file = str(...)  # doctest: +SKIP
 
         >>> with h5py.File(hdf5_file, 'r+') as f:
-        ...     group = f['ligand']
+        ...     group = f['ligand/logger']
         ...
-        ...     n = group['logger'].attrs['n']
-        ...     date_before = group['logger/date'][n]
-        ...     index_before = group['logger/index'][n]
+        ...     n = group.attrs['n']
+        ...     date_before = group['date'][n]
+        ...     index_before = group['index'][n]
         ...
         ...     update_hdf5_log(group, idx=[0, 1, 2, 3], message='append')
-        ...     date_after = group['logger/date'][n]
-        ...     index_after = group['logger/index'][n]
+        ...     date_after = group['date'][n]
+        ...     index_after = group['index'][n]
 
         >>> print(index_before, index_after, sep='\n')
         []
@@ -258,9 +258,8 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
 
     Parameters
     ----------
-    file : :class:`h5py.File` or :class:`h5py.Group`
-        The h5py Group or Dataset containing the logger.
-        The logger *must* be stored under the ``"logger"`` key.
+    group : :class:`h5py.Group`
+        The ``logger`` Group.
     idx : :class:`numpy.ndarray`
         A numpy array with the indices of (to-be logged) updated elements.
     version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
@@ -270,17 +269,14 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
     :rtype: :data:`None`
 
     """
-    group = file['logger']
-
     n = group.attrs['n']
     n_max = len(group['date'])
 
     # Increase the size of the datasets by *n_step*
     if n >= n_max:
         if group.attrs['clear_when_full']:
-            reset_hdf5_log(file, version_values)
+            group = reset_hdf5_log(group, version_values)
             n = 0
-            group = file['logger']
         else:
             n_max += group.attrs['n_step']
             group['date'].resize(n_max, axis=0)
@@ -313,9 +309,9 @@ def update_hdf5_log(file: Union[h5py.Group, h5py.File], idx: ArrayLike,
     group.attrs['n'] += 1
 
 
-def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
+def reset_hdf5_log(group: h5py.Group,
                    version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> h5py.Group:
-    r"""Clear and reset the :code:`file["logger"]` group in the passed **file**.
+    r"""Clear and reset the passed ``logger`` Group.
 
     Examples
     --------
@@ -337,13 +333,13 @@ def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
         >>> hdf5_file = str(...)  # doctest: +SKIP
 
         >>> with h5py.File(hdf5_file, 'r+') as f:
-        ...     group = f['ligand']
+        ...     group = f['ligand/logger']
         ...     print('before:')
-        ...     print(group['logger'].attrs['n'])
+        ...     print(group.attrs['n'])
         ...
-        ...     _ = reset_hdf5_log(group)
+        ...     group = reset_hdf5_log(group)
         ...     print('\nafter:')
-        ...     print(group['logger'].attrs['n'])
+        ...     print(group.attrs['n'])
         before:
         2
         <BLANKLINE>
@@ -357,9 +353,8 @@ def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
 
     Parameters
     ----------
-    file : :class:`h5py.File` or :class:`h5py.Group`
-        The h5py Group or Dataset containing the logger.
-        The logger *must* be stored under the ``"logger"`` key.
+    group : :class:`h5py.File` or :class:`h5py.Group`
+        The ``logger`` Group.
     version_values : :class:`Sequence[Tuple[int, int, int]]<typing.Sequence>`
         A sequence with 3-tuples representing to-be updated package versions.
 
@@ -369,17 +364,18 @@ def reset_hdf5_log(file: Union[h5py.Group, h5py.File],
         The newly (re-)created ``"logger"`` group.
 
     """
-    group = file['logger']
-
     version_names = group['version_names'][:]
     n_entries = group.attrs['n_step']
     clear_when_full = group.attrs['clear_when_full']
 
-    del file['logger']
-    return create_hdf5_log(file, n_entries, clear_when_full, version_names, version_values)
+    parent = group.parent
+    file = group.file
+    del file[group.name]
+
+    return create_hdf5_log(parent, n_entries, clear_when_full, version_names, version_values)
 
 
-def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
+def log_to_dataframe(group: h5py.Group) -> pd.DataFrame:
     """Export the log embedded within **file** to a Pandas DataFrame.
 
     Examples
@@ -396,7 +392,7 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
         >>> hdf5_file = str(...)  # doctest: +SKIP
 
         >>> with h5py.File(hdf5_file, 'r') as f:
-        ...     group = f['ligand']
+        ...     group = f['ligand/logger']
         ...     df = log_to_dataframe(group)
         ...     print(df)  # doctest: +NORMALIZE_WHITESPACE
                                      CAT              ... Data-CAT message               index
@@ -409,9 +405,8 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
 
     Parameters
     ----------
-    file : :class:`h5py.File` or :class:`h5py.Group`
-        The h5py Group or Dataset containing the logger.
-        The logger *must* be stored under the ``"logger"`` key.
+    group : :class:`h5py.Group`
+        The ``logger`` Group.
 
     Returns
     -------
@@ -419,12 +414,11 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
         A DataFrame containing the content of :code:`file["logger"]`.
 
     """  # noqa: E501
-    grp = file['logger']
-    n = grp.attrs['n']
+    n = group.attrs['n']
 
     # Prepare the columns
-    _columns = grp['version_names'][:].astype(str)
-    columns = pd.MultiIndex.from_product([_columns, grp['version'].dtype.names])
+    _columns = group['version_names'][:].astype(str)
+    columns = pd.MultiIndex.from_product([_columns, group['version'].dtype.names])
 
     # In case the datasets are empty
     if not n:
@@ -435,13 +429,13 @@ def log_to_dataframe(file: Union[h5py.Group, h5py.File]) -> pd.DataFrame:
         return df
 
     # Prepare the index
-    date = grp['date'][:n]
+    date = group['date'][:n]
     _index = np.fromiter((datetime(*i) for i in date), count=len(date), dtype='datetime64[us]')
     index = pd.Index(_index, dtype='datetime64[ns]', name='date')
 
     # Construct and return the DataFrame
-    data = grp['version'][:n].view('int8')
+    data = group['version'][:n].view('int8')
     df = pd.DataFrame(data, index=index, columns=columns)
-    df[('message', '')] = grp['message'][:n].astype(str)
-    df[('index', '')] = grp['index'][:n]
+    df[('message', '')] = group['message'][:n].astype(str)
+    df[('index', '')] = group['index'][:n]
     return df
