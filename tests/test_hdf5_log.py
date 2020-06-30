@@ -18,20 +18,19 @@ def test_update_hdf5_log1() -> None:
     copyfile(HDF5_READ, HDF5_TMP)
 
     with h5py.File(HDF5_TMP, 'r+', libver='latest') as f:
-        group = f['ligand']
-        log = f['ligand/logger']
+        group = f['ligand/logger']
 
-        i = len(log['date'])
-        n0 = log.attrs['n']
+        i = len(group['date'])
+        n0 = group.attrs['n']
         assertion.truth(n0)
 
-        i += log.attrs['n_step']
-        log.attrs['n'] = 100
+        i += group.attrs['n_step']
+        group.attrs['n'] = 100
         update_hdf5_log(group, idx=[0])
 
-        n1 = log.attrs['n']
+        n1 = group.attrs['n']
         assertion.eq(n1, 101)
-        for name, dset in log.items():
+        for name, dset in group.items():
             if name != 'version_names':
                 assertion.len_eq(dset, i)
 
@@ -42,19 +41,20 @@ def test_update_hdf5_log2() -> None:
     copyfile(HDF5_READ, HDF5_TMP)
 
     with h5py.File(HDF5_TMP, 'r+', libver='latest') as f:
-        group = f['ligand']
-        group['logger'].attrs['clear_when_full'] = True
+        group = f['ligand/logger']
+        group.attrs['clear_when_full'] = True
 
-        i = len(group['logger/date'])
-        n0 = group['logger'].attrs['n']
+        i = len(group['date'])
+        n0 = group.attrs['n']
         assertion.truth(n0)
 
-        group['logger'].attrs['n'] = 100
+        group.attrs['n'] = 100
         update_hdf5_log(group, idx=[0])
+        group_new = f['ligand/logger']
 
-        n1 = group['logger'].attrs['n']
+        n1 = group_new.attrs['n']
         assertion.eq(n1, 1)
-        for name, dset in group['logger'].items():
+        for name, dset in group_new.items():
             if name != 'version_names':
                 assertion.len_eq(dset, i)
 
@@ -80,7 +80,8 @@ def test_log_to_dataframe() -> None:
     copyfile(HDF5_READ, HDF5_TMP)
 
     with h5py.File(HDF5_TMP, 'r+', libver='latest') as f:
-        reset_hdf5_log(f['ligand'])
-        df = log_to_dataframe(f['ligand'])
+        group = f['ligand/logger']
+        reset_hdf5_log(group)
+        df = log_to_dataframe(group)
         dct = {k: v.dtype for k, v in df.items()}
         assertion.eq(dct, REF_COLUMNS)

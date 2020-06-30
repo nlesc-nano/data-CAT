@@ -12,6 +12,7 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Added a function for validating property Groups.
 * Cleaned up the `Database` class.
 * Ensure that all content written to the .csv files is also written to the .hdf5 file.
+* Pass the `"logger"` group directly to the `hdf5_log` functions.
 
 
 0.4.0

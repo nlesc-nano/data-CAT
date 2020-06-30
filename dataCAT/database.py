@@ -370,8 +370,8 @@ class Database:
         # Update the hdf5 file
         with self.hdf5('r+') as f:
             # Get the appropiate group
-            name = 'ligand/properties' if manager == self.csv_lig else 'qd/properties'
-            group = f[name]
+            name = 'ligand' if manager == self.csv_lig else 'qd'
+            group = f[f'{name}/properties']
 
             # Define the indices
             index = slice(None) if overwrite else hdf5_series.index
@@ -380,16 +380,16 @@ class Database:
             # Define the properties
             lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
-            for name, name_seq in dct.items():
-                data = df.loc[index, name].values
+            for n, name_seq in dct.items():
+                data = df.loc[index, n].values
 
                 # Get the dataset
                 try:
-                    dset = group[name]
+                    dset = group[n]
                 except KeyError:
                     if len(name_seq) == 1:
                         name_seq = None
-                    dset = create_prop_dset(group, name, data.dtype, name_seq)
+                    dset = create_prop_dset(group, n, data.dtype, name_seq)
 
                 # Update the dataset
                 update_prop_dset(dset, data, hdf5_index)
@@ -397,7 +397,7 @@ class Database:
             # Add an entry to the logger
             names = [group[k].name for k in dct]
             message = f'datasets={names!r}; overwrite={overwrite!r}'
-            update_hdf5_log(f['ligand'], hdf5_index, message=message)
+            update_hdf5_log(f[f'{name}/logger'], hdf5_index, message=message)
 
     def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
                          columns: MIT, subset: np.ndarray) -> MIT:
@@ -487,7 +487,7 @@ class Database:
 
         names = ('atoms', 'bonds', 'atom_count', 'bond_count')
         message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
-        update_hdf5_log(group, idx=ret.values, message=message)
+        update_hdf5_log(group['logger'], idx=ret.values, message=message)
         df.update(ret, overwrite=True)
         if opt:
             df.loc[new_index, OPT] = True
@@ -505,7 +505,7 @@ class Database:
 
         names = ('atoms', 'bonds', 'atom_count', 'bond_count')
         message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
-        update_hdf5_log(group, idx=old.values, message=message)
+        update_hdf5_log(group['logger'], idx=old.values, message=message)
         if opt:
             df.loc[old.index, OPT] = True
 
