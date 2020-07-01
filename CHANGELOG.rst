@@ -13,6 +13,10 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 * Cleaned up the `Database` class.
 * Ensure that all content written to the .csv files is also written to the .hdf5 file.
 * Pass the `"logger"` group directly to the `hdf5_log` functions.
+* Added `prop_to_dataframe()`, a function for converting property Datasets into DataFrames.
+* Added set-based methods to `PDBContainer`: `.union()`, `.intersection()`,
+  `.difference()` & `.symmetric_difference()`.
+* Added `PDBContainer.concatenate()`.
 
 
 0.4.0

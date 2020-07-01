@@ -7,7 +7,8 @@ import numpy as np
 
 from nanoutils import delete_finally
 from assertionlib import assertion
-from dataCAT import update_prop_dset, validate_prop_group, create_prop_group, create_prop_dset
+from dataCAT import (update_prop_dset, validate_prop_group, create_prop_group,
+                     create_prop_dset, prop_to_dataframe)
 from dataCAT.testing_utils import HDF5_TMP, HDF5_READ
 
 
@@ -81,3 +82,25 @@ def test_validate_prop_group() -> None:
         del group['test3']
         create_prop_dset(group, 'test4')
         validate_prop_group(group)
+
+
+def test_prop_to_dataframe() -> None:
+    """Test :func:`dataCAT.prop_to_dataframe`."""
+    with h5py.File(HDF5_READ, 'r') as f:
+        dset = f['qd/properties/test']
+        df = prop_to_dataframe(dset)
+
+        ref_data = [[0.5255945, 0.9012043]]
+        np.testing.assert_allclose(df.T, ref_data)
+
+        ref_columns = ['test']
+        np.testing.assert_array_equal(df.columns, ref_columns)
+
+        idx_tup = (124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149)  # noqa: E501
+        ref_index = np.empty(2, dtype=object)
+        ref_index[0] = ('Cd68Cl26Se55', idx_tup, 'CCC[O-]', 'O4')
+        ref_index[1] = ('Cd68Cl26Se55', idx_tup, 'CC[O-]', 'O3')
+        np.testing.assert_array_equal(df.index, ref_index)
+
+        df2 = prop_to_dataframe(dset, dtype=str)
+        np.testing.assert_array_equal(df2.T, np.array(ref_data, dtype=str))
