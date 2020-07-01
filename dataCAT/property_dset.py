@@ -8,6 +8,7 @@ Index
     create_prop_dset
     update_prop_dset
     validate_prop_group
+    prop_to_dataframe
 
 API
 ---
@@ -15,13 +16,15 @@ API
 .. autofunction:: create_prop_dset
 .. autofunction:: update_prop_dset
 .. autofunction:: validate_prop_group
+.. autofunction:: prop_to_dataframe
 
 """
 
-from typing import Union, Sequence, Any, Optional, TYPE_CHECKING
+from typing import Union, Sequence, Any, Optional, Dict, TYPE_CHECKING
 
 import h5py
 import numpy as np
+import pandas as pd
 
 from assertionlib import assertion
 
@@ -30,7 +33,8 @@ if TYPE_CHECKING:
 else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
-__all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset', 'validate_prop_group']
+__all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset',
+           'validate_prop_group', 'prop_to_dataframe']
 
 PROPERTY_DOC = r"""A h5py Group containing an arbitrary number of quantum-mechanical properties.
 
@@ -268,3 +272,125 @@ def validate_prop_group(group: h5py.Group) -> None:
         assertion.le(len(dset), len(index), message=f'{name!r} invalid dataset length')
         assertion.contains(dset.dims[0].keys(), 'index', message=f'{name!r} missing dataset scale')
         assertion.eq(dset.dims[0]['index'], index, message=f'{name!r} invalid dataset scale')
+
+
+def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFrame:
+    """Convert the passed property Dataset into a DataFrame.
+
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> from dataCAT.testing_utils import HDF5_READ as hdf5_file
+
+    .. code:: python
+
+        >>> import h5py
+        >>> from dataCAT import prop_to_dataframe
+
+        >>> hdf5_file = str(...)  # doctest: +SKIP
+
+        >>> with h5py.File(hdf5_file, 'r') as f:
+        ...     dset = f['ligand/properties/E_solv']
+        ...     df = prop_to_dataframe(dset)
+        ...     print(df)  # doctest: +NORMALIZE_WHITESPACE
+        E_solv_names             water  methanol   ethanol
+        ligand ligand anchor
+        O=C=O  O1            -0.918837 -0.151129 -0.177396
+               O3            -0.221182 -0.261591 -0.712906
+        CCCO   O4            -0.314799 -0.784353 -0.190898
+
+    Parameters
+    ----------
+    dset : :class:`h5py.Dataset`
+        The property-containing Dataset of interest.
+    dtype : dtype-like, optional
+        The data type of the to-be returned DataFrame.
+        Use :data:`None` to default to the data type of **dset**.
+
+    Returns
+    -------
+    :class:`pandas.DataFrame`
+        A DataFrame constructed from the passed **dset**.
+
+    """  # noqa: E501
+    # Construct the index
+    dim0 = dset.dims[0]
+    scale0 = dim0[0]
+    index = _dset_to_index(scale0)
+
+    # Construct the columns
+    if dset.ndim == 1:
+        full_name = dset.name
+        name = full_name.rsplit('/', 1)[1]
+        columns = pd.Index([name])
+
+    else:
+        dim1 = dset.dims[1]
+        scale1 = dim1[0]
+        columns = pd.Index(scale1[:].astype(str), name=dim1.label)
+
+    # Create and return the dataframe
+    if dtype is None:
+        return pd.DataFrame(dset[:], index=index, columns=columns)
+
+    # If possible, let h5py handle the datatype conversion
+    # This will often fail when dset.dtype consists of variable-length bytes-strings
+    try:
+        with dset.astype(dtype):
+            return pd.DataFrame(dset[:], index=index, columns=columns)
+    except (ValueError, TypeError):
+        return pd.DataFrame(dset[:].astype(dtype), index=index, columns=columns)
+
+
+def _dset_to_index(index: h5py.Dataset) -> pd.Index:
+    """Construct an Index from the passed **index** Dataset.
+
+    Returns a :class:`pandas.Index` if the **index** dtype lacks any fields;
+    a :class:`pandas.MultiIndex` is returned otherwise.
+
+    """
+    # Create an Index
+    if index.dtype.fields is None:
+        if h5py.check_string_dtype(index.dtype):
+            _index = index[:].astype(str)
+        else:
+            _index = index[:]
+        return pd.Index(_index, name=index.label)
+
+    # It's a structured array; create a MultiIndex
+    fields = []
+    field_names = []
+    index_ar = index[:]
+    dtype = index.dtype
+
+    for name, (field_dtype, *_) in dtype.fields.items():
+        # It's a bytes-string; decode it
+        if h5py.check_string_dtype(field_dtype):
+            ar = index_ar[name].astype(str)
+
+        # It's a h5py `vlen` dtype; convert it into a list of tuples
+        elif h5py.check_vlen_dtype(field_dtype):
+            ar = _vlen_to_tuples(index_ar[name])
+
+        else:
+            ar = index_ar[name]
+
+        fields.append(ar)
+        field_names.append(name)
+    return pd.MultiIndex.from_arrays(fields, names=field_names)
+
+
+def _vlen_to_tuples(array: np.ndarray) -> np.ndarray:
+    """Convert an (object) array consisting of arrays into an (object) array of tuples."""
+    cache: Dict[bytes, tuple] = {}
+    ret = np.empty_like(array, dtype=object)
+
+    for i, ar in enumerate(array):
+        byte = ar.tobytes()
+        try:
+            tup = cache[byte]
+        except KeyError:
+            cache[byte] = tup = tuple(ar)
+        ret[i] = tup
+    return ret
