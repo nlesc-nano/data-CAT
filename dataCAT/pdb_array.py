@@ -5,17 +5,71 @@ Index
 .. currentmodule:: dataCAT
 .. autosummary::
     PDBContainer
+    PDBContainer.atoms
+    PDBContainer.bonds
+    PDBContainer.atom_count
+    PDBContainer.bond_count
+    PDBContainer.index
+
+.. autosummary::
+    PDBContainer.__init__
+    PDBContainer.__getitem__
+    PDBContainer.__len__
+    PDBContainer.keys
+    PDBContainer.values
+    PDBContainer.items
+    PDBContainer.concatenate
+
+.. autosummary::
+    PDBContainer.from_molecules
+    PDBContainer.to_molecules
+    PDBContainer.create_hdf5_group
+    PDBContainer.validate_hdf5
+    PDBContainer.from_hdf5
+    PDBContainer.to_hdf5
+
+.. autosummary::
+    PDBContainer.intersection
+    PDBContainer.difference
+    PDBContainer.symmetric_difference
+    PDBContainer.union
+
 
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, index, __getitem__, __len__, keys, values, items, from_molecules, to_molecules, create_hdf5_group, from_hdf5, to_hdf5
+    :members: atoms, bonds, atom_count, bond_count, index, __init__
+
+API: Miscellaneous Methods
+--------------------------
+.. automethod:: PDBContainer.__getitem__
+.. automethod:: PDBContainer.__len__
+.. automethod:: PDBContainer.keys
+.. automethod:: PDBContainer.values
+.. automethod:: PDBContainer.items
+.. automethod:: PDBContainer.concatenate
+
+API: Object Interconversion
+---------------------------
+.. automethod:: PDBContainer.from_molecules
+.. automethod:: PDBContainer.to_molecules
+.. automethod:: PDBContainer.create_hdf5_group
+.. automethod:: PDBContainer.validate_hdf5
+.. automethod:: PDBContainer.from_hdf5
+.. automethod:: PDBContainer.to_hdf5
+
+API: Set Operations
+-------------------
+.. automethod:: PDBContainer.intersection
+.. automethod:: PDBContainer.difference
+.. automethod:: PDBContainer.symmetric_difference
+.. automethod:: PDBContainer.union
 
 """  # noqa: E501
 
 import textwrap
 from types import MappingProxyType
-from itertools import repeat
+from itertools import repeat, chain
 from typing import (
     List, Iterable, Union, Type, TypeVar, Optional, Dict, Any,
     overload, Sequence, Mapping, Tuple, Generator, ClassVar, TYPE_CHECKING
@@ -641,6 +695,84 @@ class PDBContainer:
         """
         return ((n, getattr(self, n)) for n in self.keys())
 
+    def concatenate(self: ST, *args: ST) -> ST:
+        r"""Concatenate :math:`n` PDBContainers into a single new instance.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> from dataCAT.testing_utils import PDB as pdb1
+
+            >>> pdb2 = pdb3 = pdb1
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb1 = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb2 = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb3 = PDBContainer(...)  # doctest: +SKIP
+            >>> print(len(pdb1), len(pdb2), len(pdb3))
+            23 23 23
+
+            >>> pdb_new = pdb1.concatenate(pdb2, pdb3)
+            >>> print(pdb_new)
+            PDBContainer(
+                atoms      = numpy.recarray(..., shape=(69, 76), dtype=...),
+                bonds      = numpy.recarray(..., shape=(69, 75), dtype=...),
+                atom_count = numpy.ndarray(..., shape=(69,), dtype=int32),
+                bond_count = numpy.ndarray(..., shape=(69,), dtype=int32),
+                index      = numpy.recarray(..., shape=(69,), dtype=...)
+            )
+
+        Parameters
+        ----------
+        \*args : :class:`PDBContainer`
+            One or more PDBContainers.
+
+        Returns
+        -------
+        :class:`PDBContainer`
+            A new PDBContainer cosntructed by concatenating **self** and **args**.
+
+        """
+        if not args:
+            return self
+
+        try:
+            attr_list = [(k, v, [getattr(a, k) for a in args]) for k, v in self.items()]
+        except AttributeError as ex:
+            raise TypeError("'*args' expected one or more PDBContainer instances") from ex
+
+        cls = type(self)
+        ret_list = []
+        for k, ar_self, ar_list in attr_list:
+            # 'index': a 1D recarray
+            if k == 'index':
+                dtype = ar_self.dtype
+                ar_list = [ar.astype(dtype, copy=False) for ar in ar_list]
+                ar_new = np.concatenate((ar_self, *ar_list)).view(np.recarray)
+
+            # 'atom_count' and 'bond_count': two normal 1d arrays
+            elif ar_self.ndim == 1:
+                ar_new = np.concatenate((ar_self, *ar_list))
+
+            # 'atoms' and 'bonds': two padded 2D recarrays
+            else:
+                ax0 = len(ar_self) + sum(len(ar) for ar in ar_list)
+                ax1 = max(ar_self.shape[1], *(ar.shape[1] for ar in ar_list))
+                ar_new = np.rec.array(None, dtype=cls.DTYPE[k], shape=(ax0, ax1))
+
+                i = 0
+                for ar in chain([ar_self], ar_list):
+                    j = i + len(ar)
+                    ar_new[i:j, :ar.shape[1]] = ar
+                    i = j
+
+            ret_list.append(ar_new)
+        return cls(*ret_list, validate=False)  # type: ignore
+
     @classmethod
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
                        min_atom: int = 0,
@@ -1038,3 +1170,208 @@ class PDBContainer:
         except Exception as ex:
             cls.validate_hdf5(group)
             raise ex
+
+    def intersection(self: ST, value: Union[ST, ArrayLike]) -> ST:
+        """Construct a new PDBContainer by the intersection of **self** and **value**.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> from dataCAT.testing_utils import PDB as pdb
+
+        An example where one or more new molecules are created.
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> print(pdb.index)
+            [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
+
+            >>> pdb_new = pdb.intersection(range(4))
+            >>> print(pdb_new.index)
+            [0 1 2 3]
+
+        Parameters
+        ----------
+        value : :class:`PDBContainer` or array-like
+            Another PDBContainer or an array-like object representing :attr:`PDBContainer.index`.
+            Note that both **value** and **self.index** should consist of unique elements.
+
+        Returns
+        -------
+        :class:`PDBContainer`
+            A new instance by intersecting :attr:`self.index<PDBContainer.index>` and **value**.
+
+        See Also
+        --------
+        :meth:`set.intersection<frozenset.intersection>`
+            Return the intersection of two sets as a new set.
+
+        """
+        idx1, idx2 = self._get_index(value)
+        _, i, _ = np.intersect1d(idx1, idx2, assume_unique=True, return_indices=True)
+        return self[i]
+
+    def difference(self: ST, value: Union[ST, ArrayLike]) -> ST:
+        """Construct a new PDBContainer by the difference of **self** and **value**.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> from dataCAT.testing_utils import PDB as pdb
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> print(pdb.index)
+            [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
+
+            >>> pdb_new = pdb.difference(range(10, 30))
+            >>> print(pdb_new.index)
+            [0 1 2 3 4 5 6 7 8 9]
+
+        Parameters
+        ----------
+        value : :class:`PDBContainer` or array-like
+            Another PDBContainer or an array-like object representing :attr:`PDBContainer.index`.
+            Note that both **value** and **self.index** should consist of unique elements.
+
+        Returns
+        -------
+        :class:`PDBContainer`
+            A new instance as the difference of :attr:`self.index<PDBContainer.index>`
+            and **value**.
+
+        See Also
+        --------
+        :meth:`set.difference<frozenset.difference>`
+            Return the difference of two or more sets as a new set.
+
+        """
+        idx1, idx2 = self._get_index(value)
+        i = np.in1d(idx1, idx2, assume_unique=True, invert=True)
+        return self[i]
+
+    def symmetric_difference(self: ST, value: ST) -> ST:
+        """Construct a new PDBContainer by the symmetric difference of **self** and **value**.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import numpy as np
+            >>> from dataCAT.testing_utils import PDB as pdb
+            >>> from dataCAT import PDBContainer
+
+            >>> a = np.arange(10, 30)
+            >>> b = a.reshape(len(a), 1)
+            >>> pdb2 = PDBContainer(b, b, a, a, a, validate=False)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb2 = PDBContainer(..., index=range(10, 30))  # doctest: +SKIP
+
+            >>> print(pdb.index)
+            [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
+
+            >>> pdb_new = pdb.symmetric_difference(pdb2)
+            >>> print(pdb_new.index)
+            [ 0  1  2  3  4  5  6  7  8  9 23 24 25 26 27 28 29]
+
+        Parameters
+        ----------
+        value : :class:`PDBContainer`
+            Another PDBContainer.
+            Note that both **value.index** and **self.index** should consist of unique elements.
+
+        Returns
+        -------
+        :class:`PDBContainer`
+            A new instance as the symmetric difference of :attr:`self.index<PDBContainer.index>`
+            and **value**.
+
+        See Also
+        --------
+        :meth:`set.symmetric_difference<frozenset.symmetric_difference>`
+            Return the symmetric difference of two sets as a new set.
+
+        """
+        pdb1 = self.difference(value)
+        pdb2 = value.difference(self)
+        return pdb1.concatenate(pdb2)
+
+    def union(self: ST, value: ST) -> ST:
+        """Construct a new PDBContainer by the union of **self** and **value**.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> import numpy as np
+            >>> from dataCAT.testing_utils import PDB as pdb
+            >>> from dataCAT import PDBContainer
+
+            >>> a = np.arange(10, 30)
+            >>> b = a.reshape(len(a), 1)
+            >>> pdb2 = PDBContainer(b, b, a, a, a, validate=False)
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+            >>> pdb2 = PDBContainer(..., index=range(10, 30))  # doctest: +SKIP
+
+            >>> print(pdb.index)
+            [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
+
+            >>> pdb_new = pdb.union(pdb2)
+            >>> print(pdb_new.index)
+            [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
+             24 25 26 27 28 29]
+
+        Parameters
+        ----------
+        value : :class:`PDBContainer`
+            Another PDBContainer.
+            Note that both **value** and **self.index** should consist of unique elements.
+
+        Returns
+        -------
+        :class:`PDBContainer`
+            A new instance as the union of :attr:`self.index<PDBContainer.index>` and **value**.
+
+        See Also
+        --------
+        :meth:`set.union<frozenset.union>`
+            Return the union of sets as a new set.
+
+        """
+        cls = type(self)
+        if not isinstance(value, cls):
+            raise TypeError(f"'value' expected a {cls.__name__} instance; "
+                            f"observed type: {value.__class__.__name__}")
+
+        idx1 = self.index
+        idx2 = value.index.astype(idx1.dtype, copy=False)
+        i = np.in1d(idx2, idx1, assume_unique=True, invert=True)
+
+        ret = value[i]
+        return self.concatenate(ret)
+
+    def _get_index(self: ST, value: Union[ST, ArrayLike]) -> Tuple[np.recarray, np.ndarray]:
+        """Parse and return the :attr:`~PDBContainer.index` of **self** and **value**."""
+        cls = type(self)
+        index1 = self.index
+        _index2 = value.index if isinstance(value, cls) else value
+        index2 = np.asarray(_index2, dtype=index1.dtype)
+        return index1, index2
