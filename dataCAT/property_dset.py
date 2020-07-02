@@ -20,13 +20,15 @@ API
 
 """
 
-from typing import Union, Sequence, Any, Optional, Dict, TYPE_CHECKING
+from typing import Union, Sequence, Any, Optional, TYPE_CHECKING
 
 import h5py
 import numpy as np
 import pandas as pd
 
 from assertionlib import assertion
+
+from .functions import scale_to_index
 
 if TYPE_CHECKING:
     from numpy.typing import DtypeLike
@@ -317,7 +319,7 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFra
     # Construct the index
     dim0 = dset.dims[0]
     scale0 = dim0[0]
-    index = _dset_to_index(scale0)
+    index = scale_to_index(scale0)
 
     # Construct the columns
     if dset.ndim == 1:
@@ -328,7 +330,7 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFra
     else:
         dim1 = dset.dims[1]
         scale1 = dim1[0]
-        columns = pd.Index(scale1[:].astype(str), name=dim1.label)
+        columns = scale_to_index(scale1)
 
     # Create and return the dataframe
     if dtype is None:
@@ -341,56 +343,3 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFra
             return pd.DataFrame(dset[:], index=index, columns=columns)
     except (ValueError, TypeError):
         return pd.DataFrame(dset[:].astype(dtype), index=index, columns=columns)
-
-
-def _dset_to_index(index: h5py.Dataset) -> pd.Index:
-    """Construct an Index from the passed **index** Dataset.
-
-    Returns a :class:`pandas.Index` if the **index** dtype lacks any fields;
-    a :class:`pandas.MultiIndex` is returned otherwise.
-
-    """
-    # Create an Index
-    if index.dtype.fields is None:
-        if h5py.check_string_dtype(index.dtype):
-            _index = index[:].astype(str)
-        else:
-            _index = index[:]
-        return pd.Index(_index, name=index.label)
-
-    # It's a structured array; create a MultiIndex
-    fields = []
-    field_names = []
-    index_ar = index[:]
-    dtype = index.dtype
-
-    for name, (field_dtype, *_) in dtype.fields.items():
-        # It's a bytes-string; decode it
-        if h5py.check_string_dtype(field_dtype):
-            ar = index_ar[name].astype(str)
-
-        # It's a h5py `vlen` dtype; convert it into a list of tuples
-        elif h5py.check_vlen_dtype(field_dtype):
-            ar = _vlen_to_tuples(index_ar[name])
-
-        else:
-            ar = index_ar[name]
-
-        fields.append(ar)
-        field_names.append(name)
-    return pd.MultiIndex.from_arrays(fields, names=field_names)
-
-
-def _vlen_to_tuples(array: np.ndarray) -> np.ndarray:
-    """Convert an (object) array consisting of arrays into an (object) array of tuples."""
-    cache: Dict[bytes, tuple] = {}
-    ret = np.empty_like(array, dtype=object)
-
-    for i, ar in enumerate(array):
-        byte = ar.tobytes()
-        try:
-            tup = cache[byte]
-        except KeyError:
-            cache[byte] = tup = tuple(ar)
-        ret[i] = tup
-    return ret

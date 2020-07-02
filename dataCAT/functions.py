@@ -11,6 +11,7 @@ Index
     update_pdb_values
     append_pdb_values
     hdf5_availability
+    scale_to_index
 
 API
 ---
@@ -21,6 +22,7 @@ API
 .. autofunction:: update_pdb_values
 .. autofunction:: append_pdb_values
 .. autofunction:: hdf5_availability
+.. autofunction:: scale_to_index
 
 """
 
@@ -29,7 +31,7 @@ from time import sleep
 from types import MappingProxyType
 from typing import (
     Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
-    Hashable, Optional, Type, TYPE_CHECKING
+    Hashable, Optional, Type, Dict, TYPE_CHECKING
 )
 
 import h5py
@@ -54,7 +56,7 @@ else:
 __all__ = [
     'df_to_mongo_dict', 'get_nan_row', 'even_index',
     'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
-    'hdf5_availability'
+    'hdf5_availability', 'scale_to_index'
 ]
 
 
@@ -445,6 +447,70 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
         i -= 1
 
     raise exception
+
+
+def scale_to_index(scale: h5py.Dataset) -> pd.Index:
+    """Construct a pandas Index from the passed **scale** Dataset.
+
+    Returns a :class:`pandas.Index` if the **scale** dtype lacks any fields;
+    a :class:`pandas.MultiIndex` is returned otherwise.
+
+    Parameters
+    ----------
+    scale : :class:`h5py.Dataset`
+        The to-be converted 1D Dataset.
+
+    Returns
+    -------
+    :class:`pandas.Index` or :class:`pandas.MultiIndex`
+        An MultiIndex or Index, depending on whether or not **scale** has a structured dtype.
+
+    """
+    # Create an Index
+    if scale.dtype.fields is None:
+        if h5py.check_string_dtype(scale.dtype):
+            data = scale[:].astype(str)
+        else:
+            data = scale[:]
+        name = scale.name.rsplit('/', 1)[1]
+        return pd.Index(data, name=name)
+
+    # It's a structured array; create a MultiIndex
+    fields = []
+    field_names = []
+    data_ar = scale[:]
+    dtype = scale.dtype
+
+    for name, (field_dtype, *_) in dtype.fields.items():
+        # It's a bytes-string; decode it
+        if h5py.check_string_dtype(field_dtype):
+            ar = data_ar[name].astype(str)
+
+        # It's a h5py `vlen` dtype; convert it into a list of tuples
+        elif h5py.check_vlen_dtype(field_dtype):
+            ar = _vlen_to_tuples(data_ar[name])
+
+        else:
+            ar = data_ar[name]
+
+        fields.append(ar)
+        field_names.append(name)
+    return pd.MultiIndex.from_arrays(fields, names=field_names)
+
+
+def _vlen_to_tuples(array: np.ndarray) -> np.ndarray:
+    """Convert an (object) array consisting of arrays into an (object) array of tuples."""
+    cache: Dict[bytes, tuple] = {}
+    ret = np.empty_like(array, dtype=object)
+
+    for i, ar in enumerate(array):
+        byte = ar.tobytes()
+        try:
+            tup = cache[byte]
+        except KeyError:
+            cache[byte] = tup = tuple(ar)
+        ret[i] = tup
+    return ret
 
 
 def _set_index(cls: Type[PDBContainer], group: h5py.Group,
