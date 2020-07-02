@@ -64,7 +64,7 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
     # Fill the DataFrame with other optional properties
     _insert_properties(df, prop_dset, i)
 
-    # Append rows
+    # Append empty rows
     if len(j) == len(index_):
         return df
     else:
@@ -79,6 +79,7 @@ def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: n
         _resize_prop_dset(dset)
         name = dset.name.rsplit('/', 1)[-1]
 
+        # It's not a 2D Dataset
         if dset.ndim == 1:
             df[(name, '')] = dset[i]
             continue
@@ -95,10 +96,12 @@ def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: n
 
 def _append_rows(df: pd.DataFrame, index: np.ndarray, j: np.ndarray) -> pd.DataFrame:
     """Append **df** with all (previously missing) indices from **index**."""
+    # Invert the indices in `j`
     bool_ar = np.full_like(index, dtype=bool)
     bool_ar[j] = False
     multi_index2 = array_to_index(index[bool_ar], name=df.index.name)
 
+    # Construct the to-be appended dataframe
     data_list = get_nan_row(df)
     df_append = pd.DataFrame(index=multi_index2)
     for k, data in zip(df.columns, data_list):
