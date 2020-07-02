@@ -12,6 +12,7 @@ Index
     append_pdb_values
     hdf5_availability
     scale_to_index
+    array_to_index
 
 API
 ---
@@ -23,6 +24,7 @@ API
 .. autofunction:: append_pdb_values
 .. autofunction:: hdf5_availability
 .. autofunction:: scale_to_index
+.. autofunction:: array_to_index
 
 """
 
@@ -47,16 +49,17 @@ from nanoutils import SupportsIndex, PathType
 
 if TYPE_CHECKING:
     from .pdb_array import PDBContainer, IndexLike
-    from numpy.typing import DtypeLike
+    from numpy.typing import DtypeLike, ArrayLike
 else:
     PDBContainer = 'dataCAT.PDBContainer'
     IndexLike = 'dataCAT.pdb_array.IndexLike'
     DtypeLike = 'numpy.typing.DtypeLike'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = [
     'df_to_mongo_dict', 'get_nan_row', 'even_index',
     'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
-    'hdf5_availability', 'scale_to_index'
+    'hdf5_availability', 'scale_to_index', 'array_to_index'
 ]
 
 
@@ -449,7 +452,7 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
     raise exception
 
 
-def scale_to_index(scale: h5py.Dataset) -> pd.Index:
+def scale_to_index(scale: h5py.Dataset, index: Optional[IndexLike] = None) -> pd.Index:
     """Construct a pandas Index from the passed **scale** Dataset.
 
     Returns a :class:`pandas.Index` if the **scale** dtype lacks any fields;
@@ -459,6 +462,9 @@ def scale_to_index(scale: h5py.Dataset) -> pd.Index:
     ----------
     scale : :class:`h5py.Dataset`
         The to-be converted 1D Dataset.
+    index : :class:`int`, 'Sequence[int]<typing.Sequence>' or :class:`slice`, optional
+        The indices of the dataset elements of interest.
+        Set to :data:`None` to use the entire dataset.
 
     Returns
     -------
@@ -466,21 +472,29 @@ def scale_to_index(scale: h5py.Dataset) -> pd.Index:
         An MultiIndex or Index, depending on whether or not **scale** has a structured dtype.
 
     """
+    i = index if index is not None else slice(None)
+    array = scale[i]
+
+    name = scale.name.rsplit('/', 1)[1]
+    return array_to_index(array, name)
+
+
+def array_to_index(array: ArrayLike, name: Optional[str] = None) -> pd.Index:
+    """See :func:`scale_to_index`."""
+    data_ar = np.asanyarray(array)
+    dtype = data_ar.dtype
+
     # Create an Index
-    if scale.dtype.fields is None:
-        if h5py.check_string_dtype(scale.dtype):
-            data = scale[:].astype(str)
+    if data_ar.dtype.fields is None:
+        if h5py.check_string_dtype(dtype):
+            data = data_ar.astype(str)
         else:
-            data = scale[:]
-        name = scale.name.rsplit('/', 1)[1]
+            data = data_ar
         return pd.Index(data, name=name)
 
     # It's a structured array; create a MultiIndex
     fields = []
     field_names = []
-    data_ar = scale[:]
-    dtype = scale.dtype
-
     for name, (field_dtype, *_) in dtype.fields.items():
         # It's a bytes-string; decode it
         if h5py.check_string_dtype(field_dtype):
