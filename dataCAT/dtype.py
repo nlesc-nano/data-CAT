@@ -137,8 +137,8 @@ API
         >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['core'][0])
         string_info(encoding='ascii', length=None)
 
-        >>> h5py.check_vlen_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
-        dtype('int32')
+        >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
+        string_info(encoding='ascii', length=None)
 
         >>> h5py.check_string_dtype(QD_IDX_DTYPE.fields['ligand'][0])
         string_info(encoding='ascii', length=None)
@@ -351,7 +351,7 @@ LIG_IDX_DTYPE = np.dtype(list(_LIG_IDX_MAPPING.items()))
 
 _QD_IDX_MAPPING = {
     'core': h5py.string_dtype(encoding='ascii'),
-    'core anchor': h5py.vlen_dtype(np.dtype('int32')),
+    'core anchor': h5py.string_dtype(encoding='ascii'),
     'ligand': h5py.string_dtype(encoding='ascii'),
     'ligand anchor': h5py.string_dtype(encoding='ascii')
 }

@@ -41,7 +41,6 @@ from .context_managers import OpenLig, OpenQD
 from .functions import df_to_mongo_dict, even_index, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
-from .dtype import QD_IDX_DTYPE
 from .property_dset import create_prop_dset, update_prop_dset
 from ._parse_settings import _update_hdf5_settings
 
@@ -512,15 +511,7 @@ class Database:
     @staticmethod
     def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
         """Parse and sanitize the passed MultiIndex."""
-        # TODO: Fix the messy MultiIndex
-        ret: MIT = index.values.astype(dtype)
-        if database in {'qd', 'qd_no_opt'}:
-            core_anchor = ret['core anchor']
-            anchor_dtype = h5py.check_vlen_dtype(QD_IDX_DTYPE.fields['core anchor'][0])
-            for i, j in enumerate(core_anchor):
-                j_split = j.split()
-                core_anchor[i] = np.fromiter(j_split, count=len(j_split), dtype=anchor_dtype)
-        return ret
+        return index.values.astype(dtype)  # type: ignore
 
     def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
         """Export all files in **df[column]** to hdf5 dataset **column**."""
