@@ -123,14 +123,8 @@ class Database:
         """  # noqa: E501
         self._dirname: str = abspath(path) if path is not None else getcwd()
 
-        # Create the database components and return the filename
-        lig_path = create_csv(self.dirname, database='ligand')
-        qd_path = create_csv(self.dirname, database='qd')
-        hdf5_path = create_hdf5(self.dirname)
-
         # Populate attributes with MetaManager instances
-        self._csv_lig = partial(OpenLig, filename=lig_path)
-        self._csv_qd = partial(OpenQD, filename=qd_path)
+        hdf5_path = create_hdf5(self.dirname)
         self._hdf5 = partial(h5py.File, hdf5_path, libver='latest')
 
         # Try to create or access the mongodb database
@@ -162,10 +156,12 @@ class Database:
         if not ret:
             return False
 
-        partial_names = ('csv_lig', 'csv_qd', 'hdf5')
-        iterator = ((getattr(self, name), getattr(value, name)) for name in partial_names)
-        return all(func1.args == func2.args and func1.keywords == func2.keywords and
-                   func1.func is func2.func for func1, func2 in iterator)
+        self_hdf5 = self.hdf5
+        value_hdf5 = value.hdf5
+
+        return (self_hdf5.args == value_hdf5.args and
+                self_hdf5.keywords == value_hdf5.keywords and
+                self_hdf5.func is value_hdf5.func)
 
     def __hash__(self) -> int:
         """Implement :func:`hash(self)<hash>`."""
@@ -204,20 +200,6 @@ class Database:
         return self
 
     """ #################################  Updating the database ############################## """
-
-    @overload
-    def _parse_database(self, database: Ligand) -> 'partial[OpenLig]':
-        ...
-    @overload  # noqa: E301
-    def _parse_database(self, database: QD) -> 'partial[OpenQD]':
-        ...
-    def _parse_database(self, database):  # noqa: E301
-        """Operate on either the ligand or quantum dot database."""
-        if database in {'ligand', 'ligand_no_opt'}:
-            return self.csv_lig
-        elif database in {'qd', 'qd_no_opt'}:
-            return self.csv_qd
-        raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
 
     def update_mongodb(self, database: Union[str, Mapping[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
@@ -301,7 +283,7 @@ class Database:
                     collection.replace_one(filter_, item)
 
     def update_csv(self, df: pd.DataFrame,
-                   database: Union[Ligand, QD] = 'ligand',
+                   name: Union[Ligand, QD] = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
                    job_recipe: None = None,
@@ -312,7 +294,7 @@ class Database:
         ----------
         df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-        database : :class:`str`
+        name : :class:`str`
             The type of database; accepted values are ``"ligand"`` (:attr:`Database.csv_lig`)
             and ``"qd"`` (:attr:`Database.csv_qd`).
         columns : :class:`~collections.abc.Sequence`, optional
@@ -329,35 +311,14 @@ class Database:
         :rtype: :data:`None`
 
         """
-        # Operate on either the ligand or quantum dot database
-        manager = self._parse_database(database)
-
         if job_recipe is not None:
             warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
-        with manager(write=True) as db:
-            # Update **db.index**
-            df.sort_values(by=[HDF5_INDEX], inplace=True)
-            db.ndframe = even_index(db.ndframe, df)
-
-            # Filter columns
-            if columns is None:
-                df_columns = df.columns
-            else:
-                df_columns = pd.Index(columns)
-
-            # Remove columns with the (now deprecated) `settings` key
-            if isinstance(df_columns, pd.MultiIndex):
-                df_columns = pd.Index([(i, j) for i, j in df_columns if i != 'settings'])
-
-            # Update **db.columns**
-            bool_ar = df_columns.isin(db.columns)
-            df_columns = self._even_df_columns(df, db, df_columns, ~bool_ar)
+        with self.hdf5('r+') as f:
+            grp = f[name]
 
             # Update **self.hdf5**; returns a new series of indices
-            hdf5_series = self.update_hdf5(
-                df, database=database, overwrite=overwrite, status=status
-            )
+            hdf5_series = self.update_hdf5(df, grp, overwrite=overwrite, status=status)
 
             # Update **db.values**
             db.update(df[df_columns], overwrite=overwrite)
