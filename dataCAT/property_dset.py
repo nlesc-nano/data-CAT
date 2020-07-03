@@ -198,7 +198,14 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
 
     # Construct the new datasets
     m = len(name_array)
-    dset = group.create_dataset(name, shape=(n, m), maxshape=(None, m), dtype=dtype, **kwargs)
+    dset = group.create_dataset(
+        name,
+        shape=(n, m),
+        maxshape=(None, m),
+        dtype=dtype,
+        fillvalue=_null_value(dtype),
+        **kwargs
+    )
     scale = group.create_dataset(scale_name, data=name_array, shape=(m,), dtype=name_array.dtype)
     scale.make_scale(scale_name)
 
@@ -208,6 +215,19 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
     dset.dims[1].label = scale_name
     dset.dims[1].attach_scale(scale)
     return dset
+
+
+def _null_value(dtype: np.dtype) -> np.generic:
+    generic = dtype.type
+    if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
+        return generic(False)
+    elif not issubclass(generic, np.void):  # Strings, bytes & datetime64
+        return generic('')
+
+    # Structured dtypes
+    values = (v[0] for v in dtype.fields.values())
+    data = tuple(_null_value(field_dtype) for field_dtype in values)
+    return np.array(data, dtype=dtype).take(0)
 
 
 def _resize_prop_dset(dset: h5py.Dataset) -> None:
