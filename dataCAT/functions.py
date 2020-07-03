@@ -7,9 +7,6 @@ Index
     df_to_mongo_dict
     get_nan_row
     even_index
-    update_pdb_shape
-    update_pdb_values
-    append_pdb_values
     hdf5_availability
 
 API
@@ -17,9 +14,6 @@ API
 .. autofunction:: df_to_mongo_dict
 .. autofunction:: get_nan_row
 .. autofunction:: even_index
-.. autofunction:: update_pdb_shape
-.. autofunction:: update_pdb_values
-.. autofunction:: append_pdb_values
 .. autofunction:: hdf5_availability
 
 """
@@ -27,9 +21,10 @@ API
 import warnings
 from time import sleep
 from types import MappingProxyType
+from functools import wraps
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
-    Hashable, Optional, Type, TYPE_CHECKING
+    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, cast,
+    Hashable, Optional, Type, TypeVar, Callable, TYPE_CHECKING
 )
 
 import h5py
@@ -52,10 +47,11 @@ else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index',
-    'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
-    'hdf5_availability'
+    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability',
+    'if_exception'
 ]
+
+FT = TypeVar('FT', bound=Callable[..., Any])
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -269,82 +265,6 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     return df1.append(df_tmp, sort=True)
 
 
-def update_pdb_shape(group: h5py.Group, pdb: PDBContainer) -> None:
-    """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be reshape h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for updating **group**.
-
-    """
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        # Identify the new shape of all datasets
-        shape = np.fromiter(dataset.shape, dtype=int)
-        shape[0] += len(ar)
-        if ar.ndim == 2:
-            shape[1] = max(shape[1], ar.shape[1])
-
-        # Set the new shape
-        dataset.shape = shape
-
-
-def update_pdb_values(group: h5py.Group, pdb: PDBContainer, idx: Optional[IndexLike]) -> None:
-    """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
-
-    Follows the standard broadcasting rules as employed by h5py.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be updated h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for updating **group**.
-    idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
-        An object for slicing all datasets in **group**.
-        Note that, contrary to numpy, if a sequence of integers is provided
-        then they'll have to ordered.
-
-    """
-    index = slice(None) if idx is None else idx
-
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        if ar.ndim == 1:
-            dataset[index] = ar  # This is actually a dataset
-        else:
-            _, j = ar.shape
-            dataset[index, :j] = ar
-
-
-def append_pdb_values(group: h5py.Group, pdb: PDBContainer) -> None:
-    """Append all datasets in **group** positioned with its counterpart from **pdb**.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be appended h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for appending **group**.
-
-    """
-    update_pdb_shape(group, pdb)
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        if ar.ndim == 1:
-            i = len(ar)
-            dataset[-i:] = ar
-        else:
-            i, j = ar.shape
-            dataset[-i:, :j] = ar
-
-
 def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
     """Take an integer-like object and convert it into a :class:`slice`.
 
@@ -452,7 +372,7 @@ def _set_index(cls: Type[PDBContainer], group: h5py.Group,
     scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype, **kwargs)
     scale.make_scale('index')
 
-    iterator = (group[k] for k in cls.keys() if k != 'index')
+    iterator = (group[k] for k in cls.keys() if k != 'scale')
     for dset in iterator:
         dset.dims[0].label = 'index'
         dset.dims[0].attach_scale(scale)
@@ -460,3 +380,17 @@ def _set_index(cls: Type[PDBContainer], group: h5py.Group,
     group['atoms'].dims[1].label = 'atoms'
     group['bonds'].dims[1].label = 'bonds'
     return scale
+
+
+def if_exception(func: Callable[[Any, Any], None]) -> Callable[[FT], FT]:
+    """A decorator which executes **func** if the decorated instance-/class-method raises an exception."""  # noqa: E501
+    def decorator(meth: FT) -> FT:
+        @wraps(meth)
+        def wrapper(self, obj, *args, **kwargs):
+            try:
+                return meth(self, obj, *args, **kwargs)
+            except Exception as ex:
+                func(self, obj)
+                raise ex
+        return cast(FT, wrapper)
+    return decorator

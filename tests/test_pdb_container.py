@@ -3,6 +3,7 @@
 import os
 import copy
 import pickle
+from shutil import copyfile
 from pathlib import Path
 
 import h5py
@@ -11,13 +12,9 @@ from scm.plams import writepdb
 from assertionlib import assertion
 from nanoutils import delete_finally
 from dataCAT import PDBContainer
-from dataCAT.testing_utils import PDB
+from dataCAT.testing_utils import PDB, HDF5_READ, HDF5_TMP
 
-PATH = Path('tests') / 'test_files'
-
-HDF5_PATH = PATH / 'database' / 'structures.hdf5'
-HDF5_FAIL = PATH / '.tmp.hdf5'
-PDB_OUTPUT = PATH / '.pdb_files'
+PDB_OUTPUT = Path('tests') / 'test_files' / '.pdb_files'
 
 
 def test_pickle() -> None:
@@ -77,23 +74,45 @@ def test_to_molecules() -> None:
         writepdb(mol, filename)
 
 
-@delete_finally(HDF5_FAIL)
+@delete_finally(HDF5_TMP)
 def test_validate() -> None:
     """Test :meth:`PDBContainer.validate_hdf5`."""
-    with h5py.File(HDF5_FAIL, 'a', libver='latest') as f:
+    with h5py.File(HDF5_TMP, 'a', libver='latest') as f:
         group = f.create_group('test')
 
         try:
             PDB.from_hdf5(group)
         except AssertionError as ex:
             assertion.isinstance(ex.__context__, KeyError)
-            group.create_dataset('atoms', data=[1])
+            dset = group.create_dataset('atoms', data=[1])
         else:
             raise AssertionError("Failed to raise an AssertionError")
 
         try:
-            PDB.to_hdf5(group)
+            PDB.to_hdf5(group, None)
+        except AssertionError as ex:
+            assertion.isinstance(ex.__context__, RuntimeError)
+            scale = group.create_dataset('index', data=[1], maxshape=(None,))
+            scale.make_scale('index')
+            dset.dims[0].attach_scale(scale)
+        else:
+            raise AssertionError("Failed to raise an AssertionError")
+
+        try:
+            PDB.to_hdf5(group, None)
         except AssertionError as ex:
             assertion.isinstance(ex.__context__, IndexError)
         else:
             raise AssertionError("Failed to raise an AssertionError")
+
+
+@delete_finally(HDF5_TMP)
+def test_index_other() -> None:
+    """Test :func:`dataCAT.update_hdf5_log`."""
+    copyfile(HDF5_READ, HDF5_TMP)
+
+    with h5py.File(HDF5_TMP, 'r+') as f:
+        scale = f['ligand/index']
+        group = PDBContainer.create_hdf5_group(f, 'test', scale=scale)
+        dset = group['atoms']
+        assertion.eq(scale, dset.dims[0]['index'])

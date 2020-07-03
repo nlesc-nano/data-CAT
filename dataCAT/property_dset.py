@@ -179,14 +179,15 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
 
     """
     scale_name = f'{name}_names'
-    index_name = group.attrs['index']
-    index = group.file[index_name]
+    index_ref = group.attrs['index']
+    index = group.file[index_ref]
+    index_name = index.name.rsplit('/', 1)[-1]
     n = len(index)
 
     # If no prop_names are specified
     if prop_names is None:
         dset = group.create_dataset(name, shape=(n,), maxshape=(None,), dtype=dtype, **kwargs)
-        dset.dims[0].label = 'index'
+        dset.dims[0].label = index_name
         dset.dims[0].attach_scale(index)
         return dset
 
@@ -198,21 +199,43 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
 
     # Construct the new datasets
     m = len(name_array)
-    dset = group.create_dataset(name, shape=(n, m), maxshape=(None, m), dtype=dtype, **kwargs)
+    dset = group.create_dataset(
+        name,
+        shape=(n, m),
+        maxshape=(None, m),
+        dtype=dtype,
+        fillvalue=_null_value(dtype),
+        **kwargs
+    )
     scale = group.create_dataset(scale_name, data=name_array, shape=(m,), dtype=name_array.dtype)
     scale.make_scale(scale_name)
 
     # Set the dimensional scale
-    dset.dims[0].label = 'index'
+    dset.dims[0].label = index_name
     dset.dims[0].attach_scale(index)
     dset.dims[1].label = scale_name
     dset.dims[1].attach_scale(scale)
     return dset
 
 
+def _null_value(dtype_like: DtypeLike) -> np.generic:
+    dtype = np.dtype(dtype_like)
+    generic = dtype.type
+
+    if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
+        return generic(False)
+    elif not issubclass(generic, np.void):  # Strings, bytes & datetime64
+        return generic('')
+
+    # Structured dtypes
+    values = (v[0] for v in dtype.fields.values())
+    data = tuple(_null_value(field_dtype) for field_dtype in values)
+    return np.array(data, dtype=dtype).take(0)
+
+
 def _resize_prop_dset(dset: h5py.Dataset) -> None:
     """Ensure that **dset** is as long as its dimensional scale."""
-    scale = dset.dims[0]['index']
+    scale = dset.dims[0][0]
     n = len(scale)
     if n > len(dset):
         dset.resize(n, axis=0)
@@ -264,14 +287,14 @@ def validate_prop_group(group: h5py.Group) -> None:
     """  # noqa: E501
     assertion.isinstance(group, h5py.Group)
 
-    index_ref = group.attrs['index']
-    index = group.file[index_ref]
+    idx_ref = group.attrs['index']
+    idx = group.file[idx_ref]
 
-    iterator = ((k, v) for k, v in group.items() if k != 'index' and not k.endswith('_names'))
+    iterator = ((k, v) for k, v in group.items() if not k.endswith('_names'))
     for name, dset in iterator:
-        assertion.le(len(dset), len(index), message=f'{name!r} invalid dataset length')
+        assertion.le(len(dset), len(idx), message=f'{name!r} invalid dataset length')
         assertion.contains(dset.dims[0].keys(), 'index', message=f'{name!r} missing dataset scale')
-        assertion.eq(dset.dims[0]['index'], index, message=f'{name!r} invalid dataset scale')
+        assertion.eq(dset.dims[0]['index'], idx, message=f'{name!r} invalid dataset scale')
 
 
 def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFrame:
@@ -322,7 +345,7 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFra
     # Construct the columns
     if dset.ndim == 1:
         full_name = dset.name
-        name = full_name.rsplit('/', 1)[1]
+        name = full_name.rsplit('/', 1)[-1]
         columns = pd.Index([name])
 
     else:
