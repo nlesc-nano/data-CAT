@@ -217,8 +217,10 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
     return dset
 
 
-def _null_value(dtype: np.dtype) -> np.generic:
+def _null_value(dtype_like: DtypeLike) -> np.generic:
+    dtype = np.dtype(dtype_like)
     generic = dtype.type
+
     if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
         return generic(False)
     elif not issubclass(generic, np.void):  # Strings, bytes & datetime64
