@@ -7,9 +7,6 @@ Index
     df_to_mongo_dict
     get_nan_row
     even_index
-    update_pdb_shape
-    update_pdb_values
-    append_pdb_values
     hdf5_availability
 
 API
@@ -17,9 +14,6 @@ API
 .. autofunction:: df_to_mongo_dict
 .. autofunction:: get_nan_row
 .. autofunction:: even_index
-.. autofunction:: update_pdb_shape
-.. autofunction:: update_pdb_values
-.. autofunction:: append_pdb_values
 .. autofunction:: hdf5_availability
 
 """
@@ -52,9 +46,7 @@ else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index',
-    'update_pdb_shape', 'update_pdb_values', 'append_pdb_values', 'int_to_slice',
-    'hdf5_availability'
+    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability'
 ]
 
 
@@ -267,82 +259,6 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     idx = df2.index[~bool_ar]
     df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
     return df1.append(df_tmp, sort=True)
-
-
-def update_pdb_shape(group: h5py.Group, pdb: PDBContainer) -> None:
-    """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be reshape h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for updating **group**.
-
-    """
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        # Identify the new shape of all datasets
-        shape = np.fromiter(dataset.shape, dtype=int)
-        shape[0] += len(ar)
-        if ar.ndim == 2:
-            shape[1] = max(shape[1], ar.shape[1])
-
-        # Set the new shape
-        dataset.shape = shape
-
-
-def update_pdb_values(group: h5py.Group, pdb: PDBContainer, idx: Optional[IndexLike]) -> None:
-    """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
-
-    Follows the standard broadcasting rules as employed by h5py.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be updated h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for updating **group**.
-    idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
-        An object for slicing all datasets in **group**.
-        Note that, contrary to numpy, if a sequence of integers is provided
-        then they'll have to ordered.
-
-    """
-    index = slice(None) if idx is None else idx
-
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        if ar.ndim == 1:
-            dataset[index] = ar  # This is actually a dataset
-        else:
-            _, j = ar.shape
-            dataset[index, :j] = ar
-
-
-def append_pdb_values(group: h5py.Group, pdb: PDBContainer) -> None:
-    """Append all datasets in **group** positioned with its counterpart from **pdb**.
-
-    Parameters
-    ----------
-    group : :class:`h5py.Group`
-        The to-be appended h5py group.
-    pdb : :class:`dataCAT.PDBContainer`
-        The pdb container for appending **group**.
-
-    """
-    update_pdb_shape(group, pdb)
-    for name, ar in pdb.items():
-        dataset = group[name]
-
-        if ar.ndim == 1:
-            i = len(ar)
-            dataset[-i:] = ar
-        else:
-            i, j = ar.shape
-            dataset[-i:, :j] = ar
 
 
 def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
