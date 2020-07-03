@@ -476,13 +476,13 @@ class Database:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
         mol_series = df.loc[new_index, MOL]
 
-        index = cls._sanitize_multi_idx(new_index, dtype, database)
-        pdb_new = PDBContainer.from_molecules(mol_series, index=index)
-        pdb_new.append_hdf5(group)
-
-        j = len(group['atoms'])
-        i = j - len(mol_series)
+        i = len(group['atoms'])
+        j = i + len(mol_series)
         ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
+
+        scale = cls._sanitize_multi_idx(new_index, dtype, database)
+        pdb_new = PDBContainer.from_molecules(mol_series, scale=scale)
+        pdb_new.to_hdf5(group, index=np.s_[i:j], update_scale=not opt)
 
         names = ('atoms', 'bonds', 'atom_count', 'bond_count')
         message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
@@ -498,9 +498,9 @@ class Database:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
         mol_series = df.loc[old.index, MOL]
 
-        index = mol_series.index.values.astype(dtype)
-        pdb_old = PDBContainer.from_molecules(mol_series, index=index)
-        pdb_old.update_hdf5(group, index=old.values)
+        scale = mol_series.index.values.astype(dtype)
+        pdb_old = PDBContainer.from_molecules(mol_series, scale=scale)
+        pdb_old.to_hdf5(group, index=old.values)
 
         names = ('atoms', 'bonds', 'atom_count', 'bond_count')
         message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"

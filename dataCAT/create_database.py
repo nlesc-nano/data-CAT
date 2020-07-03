@@ -171,6 +171,7 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
     # Define arguments for 2D datasets
     dataset_names = ('core', 'core_no_opt', 'ligand', 'ligand_no_opt', 'qd', 'qd_no_opt')
+    scale_dict = {'core_no_opt': 'core', 'ligand_no_opt': 'ligand', 'qd_no_opt': 'qd'}
     kwargs = {'chunks': True, 'compression': 'gzip'}
 
     # Define arguments for 3D datasets
@@ -187,9 +188,13 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
             # Create a new group if it does not exist yet
             if grp_name not in f:
-                group = PDBContainer.create_hdf5_group(
-                    f, grp_name, index_dtype=IDX_DTYPE[grp_name], **kwargs
-                )
+                idx_grp = scale_dict.get(grp_name)
+                if idx_grp is not None:
+                    scale = f[f'{idx_grp}/{PDBContainer.SCALE_NAME}']
+                    group = PDBContainer.create_hdf5_group(f, grp_name, scale=scale, **kwargs)
+                else:
+                    dtype = IDX_DTYPE[grp_name]
+                    group = PDBContainer.create_hdf5_group(f, grp_name, scale_dtype=dtype, **kwargs)  # noqa: E501
             else:
                 group = f[grp_name]
 
@@ -197,7 +202,7 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             _update_index_dset(group, grp_name, logger)
 
             if pdb is not None:
-                pdb.append_hdf5(group)
+                pdb.to_hdf5(group, None)
 
             _update_property_dsets(group, grp_name)
 
@@ -226,8 +231,8 @@ def _update_pdb_dsets(file: h5py.File, name: str,
     del file[name]
 
     dtype = IDX_DTYPE[name]
-    index = np.rec.array(None, dtype=dtype, shape=(m,))
-    return PDBContainer.from_molecules(mol_list, index=index)
+    scale = np.rec.array(None, dtype=dtype, shape=(m,))
+    return PDBContainer.from_molecules(mol_list, scale=scale)
 
 
 def _update_index_dset(group: h5py.Group, name: str, logger: Optional[Logger] = None) -> None:

@@ -372,7 +372,7 @@ def _set_index(cls: Type[PDBContainer], group: h5py.Group,
     scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype, **kwargs)
     scale.make_scale('index')
 
-    iterator = (group[k] for k in cls.keys() if k != 'index')
+    iterator = (group[k] for k in cls.keys() if k != 'scale')
     for dset in iterator:
         dset.dims[0].label = 'index'
         dset.dims[0].attach_scale(scale)
