@@ -404,10 +404,10 @@ class PDBContainer:
         bond_count : :class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)`
             An ndarray for keeping track of the number of bonds in each molecule in **bonds**.
             See :attr:`PDBContainer.bond_count`.
-        index : :class:`numpy.recarray`, shape :math:`(n,)`, optional
+        scale : :class:`numpy.recarray`, shape :math:`(n,)`, optional
             A recarray representing an index.
             If :data:`None`, use a simple numerical index (*i.e.* :func:`numpy.arange`).
-            See :attr:`PDBContainer.index`.
+            See :attr:`PDBContainer.scale`.
 
         Keyword Arguments
         -----------------
@@ -1288,7 +1288,7 @@ class PDBContainer:
         Returns
         -------
         :class:`PDBContainer`
-            A new instance by intersecting :attr:`self.index<PDBContainer.scale>` and **value**.
+            A new instance by intersecting :attr:`self.scale<PDBContainer.scale>` and **value**.
 
         See Also
         --------
@@ -1454,9 +1454,9 @@ class PDBContainer:
         return self.concatenate(ret)
 
     def _get_index(self: ST, value: Union[ST, ArrayLike]) -> Tuple[np.recarray, np.ndarray]:
-        """Parse and return the :attr:`~PDBContainer.index` of **self** and **value**."""
+        """Parse and return the :attr:`~PDBContainer.scale` of **self** and **value**."""
         cls = type(self)
-        index1 = self.scale
-        _index2 = value.scale if isinstance(value, cls) else value
-        index2 = np.asarray(_index2, dtype=index1.dtype)
-        return index1, index2
+        scale1 = self.scale
+        _scale2 = value.scale if isinstance(value, cls) else value
+        scale2 = np.asarray(_scale2, dtype=scale1.dtype)
+        return scale1, scale2
