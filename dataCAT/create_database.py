@@ -187,7 +187,9 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
 
             # Create a new group if it does not exist yet
             if grp_name not in f:
-                group = PDBContainer.create_hdf5_group(f, grp_name, IDX_DTYPE[grp_name], **kwargs)
+                group = PDBContainer.create_hdf5_group(
+                    f, grp_name, index_dtype=IDX_DTYPE[grp_name], **kwargs
+                )
             else:
                 group = f[grp_name]
 
