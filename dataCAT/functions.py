@@ -147,9 +147,9 @@ def df_to_mongo_dict(df: pd.DataFrame,
 
 #: A dictionary with NumPy dtypes as keys and matching :data:`None`-esque items as values.
 DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
-    np.dtype(np.int64): -1,
-    np.dtype(np.float64): np.nan,
-    np.dtype(np.object_): None,
+    np.dtype(np.int64): 0,
+    np.dtype(np.float64): 0.0,
+    np.dtype(np.object_): '',
     np.dtype(np.bool_): False
 })
 

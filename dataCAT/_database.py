@@ -73,6 +73,10 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
         return ret
 
 
+def get_bool_df(df: pd.DataFrame) -> pd.DataFrame:
+    return df.astype(bool)
+
+
 def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: np.ndarray) -> None:
     """Add columns to **df** for the various properties in **prop_dset**."""
     for dset in prop_dset:
@@ -90,7 +94,8 @@ def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: n
         columns = pd.MultiIndex.from_product([[name], dim1])
 
         # Update **df**
-        df_tmp = pd.DataFrame(dset[i], index=df.index, columns=columns)
+        data = dset[i].astype(str) if h5py.check_string_dtype(dset.dtype) else dset[i]
+        df_tmp = pd.DataFrame(data, index=df.index, columns=columns)
         df[columns] = df_tmp
 
 

@@ -21,8 +21,8 @@ from os.path import abspath
 from types import MappingProxyType
 from functools import partial
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, Tuple, Type, Iterable, TYPE_CHECKING
+    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping, FrozenSet,
+    overload, Tuple, Type, Iterable, ClassVar, TYPE_CHECKING
 )
 
 import h5py
@@ -45,17 +45,18 @@ from .property_dset import create_prop_dset, update_prop_dset
 from ._parse_settings import _update_hdf5_settings
 
 if TYPE_CHECKING:
-    from .df_proxy import DFProxy
-    from numpy.typing import DtypeLike
+    from numpy.typing import DtypeLike, ArrayLike
 else:
-    DFProxy = 'dataCAT.DFProxy'
     DtypeLike = 'numpy.typing.DtypeLike'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = ['Database']
 
 KT = TypeVar('KT')
 ST = TypeVar('ST', bound='Database')
 MIT = TypeVar('MIT', bound=pd.MultiIndex)
+
+Name = Union[Ligand, QD]
 
 
 class JobRecipe(TypedDict):
@@ -68,22 +69,12 @@ class JobRecipe(TypedDict):
 class Database:
     """The Database class."""
 
-    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_hdf5', '_mongodb', '_hash')
+    __slots__ = ('__weakref__', '_dirname', '_hdf5', '_mongodb', '_hash')
 
     @property
     def dirname(self) -> str:
         """Get the path+filename of the directory containing all database components."""
         return self._dirname
-
-    @property
-    def csv_lig(self) -> 'partial[OpenLig]':
-        """:data:`Callable[..., dataCAT.OpenLig]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenLig` context manager."""  # noqa: E501
-        return self._csv_lig
-
-    @property
-    def csv_qd(self) -> 'partial[OpenQD]':
-        """:data:`Callable[..., dataCAT.OpenQD]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenQD` context manager."""  # noqa: E501
-        return self._csv_qd
 
     @property
     def hdf5(self) -> 'partial[h5py.File]':
@@ -282,12 +273,12 @@ class Database:
                     filter_ = {i: item[i] for i in idx_keys}
                     collection.replace_one(filter_, item)
 
-    def update_csv(self, df: pd.DataFrame,
-                   name: Union[Ligand, QD] = 'ligand',
-                   columns: Optional[Sequence] = None,
+    def update_csv(self, df: pd.DataFrame, df_bool: pd.DataFrame,
+                   name: Name = 'ligand',
+                   columns: Optional[ArrayLike] = None,
                    overwrite: bool = False,
-                   job_recipe: None = None,
-                   status: Optional[str] = None) -> None:
+                   status: Optional[str] = None,
+                   ) -> None:
         """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
         Parameters
@@ -311,77 +302,67 @@ class Database:
         :rtype: :data:`None`
 
         """
-        if job_recipe is not None:
-            warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
-
+        df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
+        self.hdf5_availability()
         with self.hdf5('r+') as f:
+            # Update molecules
             grp = f[name]
+            self.update_hdf5(df, df_bool, grp, overwrite=overwrite, status=status)
 
-            # Update **self.hdf5**; returns a new series of indices
-            hdf5_series = self.update_hdf5(df, grp, overwrite=overwrite, status=status)
+            # Update properties
+            prop_grp = grp['properties']
+            self._update_properties(prop_grp, df, df_bool, df_columns, overwrite=overwrite)
 
-            # Update **db.values**
-            db.update(df[df_columns], overwrite=overwrite)
-            db.update(hdf5_series, overwrite=True)
-            df.update(hdf5_series, overwrite=True)
-            if status == 'optimized':
-                db.update(df[OPT], overwrite=True)
+            # Update the job settings
+            job_settings = (i for i, _ in df_columns if 'job_settings' == i)
+            self._update_job_settings(f, df, job_settings)
 
-        # Update the hdf5 file
-        with self.hdf5('r+') as f:
-            # Get the appropiate group
-            name = 'ligand' if manager == self.csv_lig else 'qd'
-            group = f[f'{name}/properties']
+    PORPERTY_BLACKLIST: ClassVar[Frozenset[str]] = frozenset({
+        MOL[0], OPT[0], HDF5_INDEX[0], 'job_settings'
+    })
 
-            # Define the indices
-            index = slice(None) if overwrite else hdf5_series.index
-            hdf5_index = df[HDF5_INDEX].values if overwrite else hdf5_series.values
+    @classmethod
+    def _update_properties(cls, group: h5py.Group, df: pd.DataFrame, df_bool: pd.DataFrame,
+                           columns: pd.MultiIndex, overwrite: bool = False) -> None:
+        # Identify the property-containing columns
+        lvl0 = set(df.levels[0]).difference(cls.PORPERTY_BLACKLIST)
+        column_iterator = ((k, columns.get_loc_level(k)[1]) for k in lvl0)
 
-            # Define the properties
-            lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
-            dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
-            for n, name_seq in dct.items():
-                data = df.loc[index, n].values
+        parent = group.parent
+        for n, name_seq in column_iterator:
+            # Define slices
+            index = df_bool[n] if not overwrite else slice(None)
+            data = df.loc[index, n].values
+            hdf5_index = df.loc[index, HDF5_INDEX].values
 
-                # Get the dataset
-                try:
-                    dset = group[n]
-                except KeyError:
-                    if len(name_seq) == 1:
-                        name_seq = None
-                    dset = create_prop_dset(group, n, data.dtype, name_seq)
+            # Get (or set) the dataset
+            try:
+                dset = group[n]
+            except KeyError:
+                if len(name_seq) == 1:
+                    name_seq = None
+                dset = create_prop_dset(group, n, data.dtype, name_seq)
 
-                # Update the dataset
-                update_prop_dset(dset, data, hdf5_index)
+            # Update the dataset
+            update_prop_dset(dset, data, hdf5_index)
+            del df[n]
 
             # Add an entry to the logger
-            names = [group[k].name for k in dct]
-            message = f'datasets={names!r}; overwrite={overwrite!r}'
-            update_hdf5_log(f[f'{name}/logger'], hdf5_index, message=message)
+            message = f'datasets={[dset.name]!r}; overwrite={overwrite!r}'
+            update_hdf5_log(parent['logger'], hdf5_index, message=message)
 
-    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
-                         columns: MIT, subset: np.ndarray) -> MIT:
+    def _update_job_settings(self, f: h5py.File, df: pd.DataFrame, columns: Iterable[str]) -> None:
         """Even the columns of **df** and **db**."""
-        drop_idx = []
-        for i in columns[subset]:
-            # Check for job settings
-            if 'job_settings' in i[0]:
-                self._update_hdf5_settings(df, i[0])
-                del df[i]
-                drop_idx.append(i)
-                continue
+        column_set = set(columns)
+        while column_set:
+            name = column_set.pop()
+            _update_hdf5_settings(f, df, name)
+            del df[name]
 
-            # Ensure that **db** has the same keys as **df**
-            try:
-                db[i] = np.array((None), dtype=df[i].dtype)
-            except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
-                db[i] = -1
-        return columns.drop(drop_idx)  # type: ignore
-
-    def update_hdf5(self, df: pd.DataFrame,
-                    database: Union[Ligand, QD] = 'ligand',
+    def update_hdf5(self, df: pd.DataFrame, df_bool: pd.DataFrame,
+                    group: h5py.Group,
                     overwrite: bool = False,
-                    status: Optional[str] = None) -> pd.Series:
+                    status: Optional[str] = None) -> None:
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
         Returns a series with the :attr:`Database.hdf5` indices of all new entries.
@@ -406,83 +387,71 @@ class Database:
         """
         # Identify new and preexisting entries
         if status == 'optimized':
-            new = df[HDF5_INDEX][df[OPT] == False] & ~df[MOL].isnull()  # noqa
-            old = df[HDF5_INDEX][df[OPT] == True]  # noqa
-            opt = True
+            index = df_bool[HDF5_INDEX]
+            is_opt = True
         else:
-            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1] & ~df[MOL].isnull()
-            old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
-            opt = False
+            index = df_bool[OPT]
+            is_opt = False
 
-        # Add new entries to the database
-        self.hdf5_availability()
-        with self.hdf5('r+') as f:
-            group = f[database]
-            dtype = IDX_DTYPE[database]
+        new = df.loc[index, HDF5_INDEX]
+        old = df.loc[~index, HDF5_INDEX]
 
-            if new.any():
-                ret = self._write_hdf5(group, df, new.index, dtype, database, opt=opt)
-            else:
-                ret = pd.Series(name=HDF5_INDEX, dtype=int)
+        if new.any():
+            self._write_hdf5(group, df, new.index, opt=is_opt)
 
-            # If **overwrite** is *True*
-            if overwrite and old.any():
-                self._overwrite_hdf5(group, old, df, dtype, opt=opt)
-        return ret
+        # If **overwrite** is *True*
+        if overwrite and old.any():
+            self._overwrite_hdf5(group, df, old, opt=is_opt)
 
     @classmethod
-    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, new_index: pd.Index,
-                    dtype: DtypeLike, database: Union[Ligand, QD] = 'ligand',
+    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, index: pd.Index,
                     opt: bool = False) -> pd.Index:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
-        mol_series = df.loc[new_index, MOL]
+        mol_series = df.loc[index, MOL]
 
-        index = cls._sanitize_multi_idx(new_index, dtype, database)
-        pdb_new = PDBContainer.from_molecules(mol_series, index=index)
+        # Export the molecules to the .hdf5 file
+        dtype: np.dtype = group['index'].dtype
+        index_ar: np.ndarray = index.values.astype(dtype, copy=False)
+        pdb_new = PDBContainer.from_molecules(mol_series, index=index_ar)
         pdb_new.to_hdf5(group, mode='append')
 
+        # Update the HDF5_INDEX
         j = len(group['atoms'])
         i = j - len(mol_series)
-        ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
+        hdf5_index = np.arange(i, j)
+        df.loc[index, HDF5_INDEX] = hdf5_index
 
-        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
-        update_hdf5_log(group['logger'], idx=ret.values, message=message)
-        df.update(ret, overwrite=True)
+        # Post a message in the logger
+        message = f"datasets={[group[n].name for n in PDBContainer.keys()]!r}; overwrite=False"
+        update_hdf5_log(group['logger'], idx=hdf5_index, message=message)
+
         if opt:
-            df.loc[new_index, OPT] = True
-        return ret
+            df.loc[index, OPT] = True
 
     @staticmethod
-    def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
-                        dtype: DtypeLike, opt: bool = False) -> None:
+    def _overwrite_hdf5(group: h5py.Group, df: pd.DataFrame, hdf5_series: pd.Series,
+                        opt: bool = False) -> None:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
-        mol_series = df.loc[old.index, MOL]
+        index = hdf5_series.index
+        hdf5_index = hdf5_series.values
+        mol_series = df.loc[index, MOL]
 
-        index = mol_series.index.values.astype(dtype)
-        pdb_old = PDBContainer.from_molecules(mol_series, index=index)
-        pdb_old.to_hdf5(group, mode='update', idx=old.values)
+        # Export the molecules to the .hdf5 file
+        dtype: np.dtype = group['index'].dtype
+        mol_index: np.ndarray = mol_series.index.values.astype(dtype, copy=False)
+        pdb_old = PDBContainer.from_molecules(mol_series, index=mol_index)
+        pdb_old.to_hdf5(group, mode='update', idx=hdf5_index)
 
-        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
-        update_hdf5_log(group['logger'], idx=old.values, message=message)
+        # Update the logger
+        message = f"datasets={[group[n].name for n in PDBContainer.keys()]!r}; overwrite=True"
+        update_hdf5_log(group['logger'], idx=hdf5_index, message=message)
+
         if opt:
-            df.loc[old.index, OPT] = True
-
-    @staticmethod
-    def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
-        """Parse and sanitize the passed MultiIndex."""
-        return index.values.astype(dtype)  # type: ignore
-
-    def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
-        """Export all files in **df[column]** to hdf5 dataset **column**."""
-        self.hdf5_availability()
-        with self.hdf5('r+') as f:
-            _update_hdf5_settings(f, df, column)
+            df.loc[index, OPT] = True
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self, df: pd.DataFrame, database: Union[Ligand, QD] = 'ligand',
+    def from_csv(self, df: pd.DataFrame, database: Name = 'ligand',
                  get_mol: bool = True, inplace: bool = True) -> Optional[pd.Series]:
         """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
 
@@ -523,7 +492,7 @@ class Database:
         return self._get_csv_mol(df, database, inplace)
 
     def _get_csv_mol(self, df: pd.DataFrame,
-                     database: Union[Ligand, QD] = 'ligand',
+                     database: Name = 'ligand',
                      inplace: bool = True) -> Optional[pd.Series]:
         """A method which handles the retrieval and subsequent formatting of molecules.
 
@@ -570,7 +539,7 @@ class Database:
             return pd.Series(mol_list, index=df[df_slice].index, name=MOL)
 
     def from_hdf5(self, index: Union[slice, Sequence[int]],
-                  database: Union[Ligand, QD] = 'ligand', rdmol: bool = True,
+                  database: Name = 'ligand', rdmol: bool = True,
                   mol_list: Optional[Iterable[Molecule]] = None) -> List[Union[Molecule, Mol]]:
         """Import structures from the hdf5 database as RDKit or PLAMS molecules.
 
