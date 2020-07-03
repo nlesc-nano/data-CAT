@@ -78,4 +78,4 @@ def test_create_database_4() -> None:
 
     ref = np.rec.array(None, dtype=LIG_IDX_DTYPE, shape=(3,))
     ref[:] = b''
-    assertion.eq(pdb.index, ref, post_process=np.all)
+    assertion.eq(pdb.scale, ref, post_process=np.all)

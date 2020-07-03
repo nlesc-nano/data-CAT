@@ -409,17 +409,17 @@ class Database:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
         mol_series = df.loc[index, MOL]
 
-        # Export the molecules to the .hdf5 file
-        dtype: np.dtype = group['index'].dtype
-        index_ar: np.ndarray = index.values.astype(dtype, copy=False)
-        pdb_new = PDBContainer.from_molecules(mol_series, index=index_ar)
-        pdb_new.to_hdf5(group, mode='append')
-
         # Update the HDF5_INDEX
-        j = len(group['atoms'])
-        i = j - len(mol_series)
+        i = len(group['atoms'])
+        j = i + len(mol_series)
         hdf5_index = np.arange(i, j)
         df.loc[index, HDF5_INDEX] = hdf5_index
+
+        # Export the molecules to the .hdf5 file
+        dtype: np.dtype = group['index'].dtype
+        scale: np.ndarray = index.values.astype(dtype, copy=False)
+        pdb_new = PDBContainer.from_molecules(mol_series, scale=scale)
+        pdb_new.to_hdf5(group, index=np.s_[i:j])
 
         # Post a message in the logger
         message = f"datasets={[group[n].name for n in PDBContainer.keys()]!r}; overwrite=False"
@@ -436,18 +436,17 @@ class Database:
         hdf5_index = hdf5_series.values
         mol_series = df.loc[index, MOL]
 
-        # Export the molecules to the .hdf5 file
-        dtype: np.dtype = group['index'].dtype
-        mol_index: np.ndarray = mol_series.index.values.astype(dtype, copy=False)
-        pdb_old = PDBContainer.from_molecules(mol_series, index=mol_index)
-        pdb_old.to_hdf5(group, mode='update', idx=hdf5_index)
+        dtype: np.dtype = group['atoms'].dims[0]['index'].dtype
+        scale: np.ndarray = mol_series.index.values.astype(dtype)
+        pdb_old = PDBContainer.from_molecules(mol_series, scale=scale)
+        pdb_old.to_hdf5(group, index=old.values)
 
         # Update the logger
-        message = f"datasets={[group[n].name for n in PDBContainer.keys()]!r}; overwrite=True"
-        update_hdf5_log(group['logger'], idx=hdf5_index, message=message)
-
+        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
+        update_hdf5_log(group['logger'], index=old.values, message=message)
         if opt:
-            df.loc[index, OPT] = True
+            df.loc[old.index, OPT] = True
 
     """ ########################  Pulling results from the database ########################### """
 

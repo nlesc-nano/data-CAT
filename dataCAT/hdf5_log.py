@@ -206,7 +206,7 @@ def create_hdf5_log(file: h5py.Group,
     return grp
 
 
-def update_hdf5_log(group: h5py.Group, idx: ArrayLike,
+def update_hdf5_log(group: h5py.Group, index: ArrayLike,
                     message: Optional[str] = None,
                     version_values: Sequence[Tuple[int, int, int]] = _VERSION) -> None:
     r"""Add a new entry to the hdf5 logger in **file**.
@@ -239,7 +239,7 @@ def update_hdf5_log(group: h5py.Group, idx: ArrayLike,
         ...     date_before = group['date'][n]
         ...     index_before = group['index'][n]
         ...
-        ...     update_hdf5_log(group, idx=[0, 1, 2, 3], message='append')
+        ...     update_hdf5_log(group, index=[0, 1, 2, 3], message='append')
         ...     date_after = group['date'][n]
         ...     index_after = group['index'][n]
 
@@ -285,24 +285,24 @@ def update_hdf5_log(group: h5py.Group, idx: ArrayLike,
             group['message'].resize(n_max, axis=0)
 
     # Parse the passed **idx**
-    index = np.array(idx, ndmin=1, copy=False)
-    generic = index.dtype.type
-    if index.ndim > 1:
-        raise ValueError("The dimensionality of 'idx' should be <= 1; "
-                         f"observed dimensionality: {index.ndim!r}")
-    elif not index.ndim:
-        index = index.astype(INDEX_DTYPE)
+    idx = np.array(index, ndmin=1, copy=False)
+    generic = idx.dtype.type
+    if idx.ndim > 1:
+        raise ValueError("The dimensionality of 'index' should be <= 1; "
+                         f"observed dimensionality: {idx.ndim!r}")
+    elif not idx.ndim:
+        idx = idx.astype(INDEX_DTYPE)
 
     if issubclass(generic, np.bool_):
-        index, *_ = index.nonzero()
+        idx, *_ = idx.nonzero()
     elif not issubclass(generic, np.integer):
         raise TypeError("'idx' expected an integer or boolean array; "
-                        f"observed dtype: {index.dtype!r}")
+                        f"observed dtype: {idx.dtype!r}")
 
     # Update the datasets
     group['date'][n] = _get_now()
     group['version'][n] = version_values
-    group['index'][n] = index
+    group['index'][n] = idx
     if message is not None:
         group['message'][n] = message
 

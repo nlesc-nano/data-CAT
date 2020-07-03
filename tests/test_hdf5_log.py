@@ -26,7 +26,7 @@ def test_update_hdf5_log1() -> None:
 
         i += group.attrs['n_step']
         group.attrs['n'] = 100
-        update_hdf5_log(group, idx=[0])
+        update_hdf5_log(group, index=[0])
 
         n1 = group.attrs['n']
         assertion.eq(n1, 101)
@@ -49,7 +49,7 @@ def test_update_hdf5_log2() -> None:
         assertion.truth(n0)
 
         group.attrs['n'] = 100
-        update_hdf5_log(group, idx=[0])
+        update_hdf5_log(group, index=[0])
         group_new = f['ligand/logger']
 
         n1 = group_new.attrs['n']

@@ -9,7 +9,7 @@ Index
     PDBContainer.bonds
     PDBContainer.atom_count
     PDBContainer.bond_count
-    PDBContainer.index
+    PDBContainer.scale
 
 .. autosummary::
     PDBContainer.__init__
@@ -38,7 +38,7 @@ Index
 API
 ---
 .. autoclass:: PDBContainer
-    :members: atoms, bonds, atom_count, bond_count, index, __init__
+    :members: atoms, bonds, atom_count, bond_count, scale, __init__
 
 API: Miscellaneous Methods
 --------------------------
@@ -82,7 +82,7 @@ from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
 from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE, BACKUP_IDX_DTYPE
-from .functions import update_pdb_values, append_pdb_values, int_to_slice
+from .functions import int_to_slice, if_exception
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, DtypeLike
@@ -118,12 +118,12 @@ _BondTuple = Tuple[
 ]
 
 _ReduceTuple = Tuple[
-    np.recarray,
-    np.recarray,
-    np.ndarray,
-    np.ndarray,
-    np.recarray,
-    Literal[False]
+    np.recarray,  # atoms
+    np.recarray,  # bonds
+    np.ndarray,  # atom_count
+    np.ndarray,  # bond_count
+    np.recarray,  # scale
+    Literal[False]  # validate
 ]
 _Coords = Tuple[float, float, float]
 
@@ -228,9 +228,9 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
     return ret
 
 
-IndexLike = Union[SupportsIndex, Sequence[int], slice, np.ndarray]
+IndexLike = Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]
 Hdf5Mode = Literal['append', 'update']
-_AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count', 'index']
+_AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count', 'scale']
 
 #: The docstring to-be assigned by :meth:`PDBContainer.create_hdf5_group`.
 HDF5_DOCSTRING = """A Group of datasets representing :class:`{cls_name}`."""
@@ -250,7 +250,7 @@ class PDBContainer:
       :meth:`~PDBContainer.from_molecules`.
     * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
       :meth:`~PDBContainer.validate_hdf5`,
-      :meth:`~PDBContainer.to_hdf5` &  :meth:`~PDBContainer.from_hdf5`.
+      :meth:`~PDBContainer.to_hdf5` & :meth:`~PDBContainer.from_hdf5`.
     * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
       :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
       :meth:`~PDBContainer.__len__`.
@@ -284,13 +284,13 @@ class PDBContainer:
             bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
             atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
             bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-            index      = numpy.recarray(..., shape=(23,), dtype=...)
+            scale      = numpy.recarray(..., shape=(23,), dtype=...)
         )
 
         >>> hdf5_file = str(...)  # doctest: +SKIP
         >>> with h5py.File(hdf5_file, 'a') as f:
         ...     group = pdb.create_hdf5_group(f, name='ligand')
-        ...     pdb.to_hdf5(group, mode='append')
+        ...     pdb.to_hdf5(group, None)
         ...
         ...     print('group', '=', group)
         ...     for name, dset in group.items():
@@ -310,7 +310,7 @@ class PDBContainer:
     """
 
     __slots__ = (
-        '__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count', '_index'
+        '__weakref__', '_hash', '_atoms', '_bonds', '_atom_count', '_bond_count', '_scale'
     )
 
     #: A mapping holding the dimensionality of each array embedded within this class.
@@ -319,7 +319,7 @@ class PDBContainer:
         'bonds': 2,
         'atom_count': 1,
         'bond_count': 1,
-        'index': 1
+        'scale': 1
     })
 
     #: A mapping holding the dtype of each array embedded within this class.
@@ -328,8 +328,11 @@ class PDBContainer:
         'bonds': BONDS_DTYPE,
         'atom_count': ATOM_COUNT_DTYPE,
         'bond_count': BOND_COUNT_DTYPE,
-        'index': BACKUP_IDX_DTYPE
+        'scale': BACKUP_IDX_DTYPE
     })
+
+    #: The name of the h5py dimensional scale.
+    SCALE_NAME: ClassVar[str] = 'index'
 
     @property
     def atoms(self) -> np.recarray:
@@ -364,23 +367,27 @@ class PDBContainer:
         return self._bond_count
 
     @property
-    def index(self) -> np.recarray:
-        """:class:`numpy.recarray`, shape :math:`(n,)`: Get a recarray representing an index."""  # noqa: E501
-        return self._index
+    def scale(self) -> np.recarray:
+        """:class:`numpy.recarray`, shape :math:`(n,)`: Get a recarray representing an index.
+
+        Used as dimensional scale in the h5py Group.
+
+        """  # noqa: E501
+        return self._scale
 
     @overload
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
                  atom_count: np.ndarray, bond_count: np.ndarray,
-                 index: np.recarray,
+                 scale: np.recarray,
                  validate: Literal[False]) -> None:
         ...
     @overload  # noqa: E301
     def __init__(self, atoms: ArrayLike, bonds: ArrayLike,
                  atom_count: ArrayLike, bond_count: ArrayLike,
-                 index: Optional[ArrayLike] = None,
+                 scale: Optional[ArrayLike] = None,
                  validate: Literal[True] = ..., copy: bool = ...,) -> None:
         ...
-    def __init__(self, atoms, bonds, atom_count, bond_count, index=None, validate=True, copy=True, index_dtype=None):  # noqa: E501,E301
+    def __init__(self, atoms, bonds, atom_count, bond_count, scale=None, validate=True, copy=True, index_dtype=None):  # noqa: E501,E301
         """Initialize an instance.
 
         Parameters
@@ -397,10 +404,10 @@ class PDBContainer:
         bond_count : :class:`numpy.ndarray[int32]<numpy.ndarray>`, shape :math:`(n,)`
             An ndarray for keeping track of the number of bonds in each molecule in **bonds**.
             See :attr:`PDBContainer.bond_count`.
-        index : :class:`numpy.recarray`, shape :math:`(n,)`, optional
+        scale : :class:`numpy.recarray`, shape :math:`(n,)`, optional
             A recarray representing an index.
             If :data:`None`, use a simple numerical index (*i.e.* :func:`numpy.arange`).
-            See :attr:`PDBContainer.index`.
+            See :attr:`PDBContainer.scale`.
 
         Keyword Arguments
         -----------------
@@ -436,11 +443,11 @@ class PDBContainer:
                     array = array.view(np.recarray)
                 setattr(self, f'_{name}', array)
 
-            if index is None:
-                self._index = np.array(index, ndmin=1, copy=copy).view(np.recarray)
+            if scale is None:
+                self._scale = np.array(scale, ndmin=1, copy=copy).view(np.recarray)
             else:
-                dtype = cls.DTYPE['index']
-                self._index = np.arange(len(array), dtype=dtype).view(np.recarray)
+                dtype = cls.DTYPE['scale']
+                self._scale = np.arange(len(array), dtype=dtype).view(np.recarray)
 
             len_set = {len(ar) for ar in self.values()}
             if len(len_set) != 1:
@@ -452,7 +459,7 @@ class PDBContainer:
             self._bonds: np.recarray = bonds
             self._atom_count: np.ndarray = atom_count
             self._bond_count: np.ndarray = bond_count
-            self._index: np.recarray = index
+            self._scale: np.recarray = scale
 
         for ar in self.values():
             ar.setflags(write=False)
@@ -530,10 +537,10 @@ class PDBContainer:
             self._hash: int = hash((cls, tuple(args)))
             return self._hash
 
-    def __getitem__(self: ST, key: IndexLike) -> ST:
-        """Implement :meth:`self[key]<object.__getitem__>`.
+    def __getitem__(self: ST, index: IndexLike) -> ST:
+        """Implement :meth:`self[index]<object.__getitem__>`.
 
-        Constructs a new :class:`PDBContainer` instance by slicing all arrays with **key**.
+        Constructs a new :class:`PDBContainer` instance by slicing all arrays with **index**.
         Follows the standard NumPy broadcasting rules:
         if an integer or slice is passed then a shallow copy is returned;
         otherwise a deep copy will be created.
@@ -555,7 +562,7 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-                index      = numpy.recarray(..., shape=(23,), dtype=...)
+                scale      = numpy.recarray(..., shape=(23,), dtype=...)
             )
 
             >>> pdb[0]
@@ -564,7 +571,7 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(1, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(1,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(1,), dtype=int32),
-                index      = numpy.recarray(..., shape=(1,), dtype=...)
+                scale      = numpy.recarray(..., shape=(1,), dtype=...)
             )
 
             >>> pdb[:10]
@@ -573,7 +580,7 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(10, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(10,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(10,), dtype=int32),
-                index      = numpy.recarray(..., shape=(10,), dtype=...)
+                scale      = numpy.recarray(..., shape=(10,), dtype=...)
             )
 
             >>> pdb[[0, 5, 7, 9, 10]]
@@ -582,12 +589,12 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(5, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(5,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(5,), dtype=int32),
-                index      = numpy.recarray(..., shape=(5,), dtype=...)
+                scale      = numpy.recarray(..., shape=(5,), dtype=...)
             )
 
         Parameters
         ----------
-        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
+        index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
             An object for slicing arrays along :code:`axis=0`.
 
         Returns
@@ -597,16 +604,19 @@ class PDBContainer:
 
         """
         cls = type(self)
-        try:
-            index = int_to_slice(key, len(self))  # type: ignore
-        except (AttributeError, TypeError):
-            index = np.asarray(key) if not isinstance(key, slice) else key
-            assert getattr(index, 'ndim', 1) == 1
+        if index is None:
+            idx: Union[slice, np.ndarray] = slice(None)
+        else:
+            try:
+                idx = int_to_slice(index, len(self))  # type: ignore
+            except (AttributeError, TypeError):
+                idx = np.asarray(index) if not isinstance(index, slice) else index
+                assert getattr(index, 'ndim', 1) == 1
 
-        iterator = (ar[index] for ar in self.values())
-        ret = cls(*iterator, validate=False)  # type: ignore
-        ret._index = ret._index.view(np.recarray)
-        return ret  # type: ignore
+        iterator = (ar[idx] for ar in self.values())
+        ret: ST = cls(*iterator, validate=False)  # type: ignore
+        ret._scale = ret.scale.view(np.recarray)
+        return ret
 
     @classmethod
     def keys(cls) -> Generator[_AttrName, None, None]:
@@ -624,7 +634,7 @@ class PDBContainer:
             bonds
             atom_count
             bond_count
-            index
+            scale
 
         Yields
         ------
@@ -685,7 +695,7 @@ class PDBContainer:
             bonds = <numpy.recarray object at ...>
             atom_count = <numpy.ndarray object at ...>
             bond_count = <numpy.ndarray object at ...>
-            index = <numpy.recarray object at ...>
+            scale = <numpy.recarray object at ...>
 
         Yields
         ------
@@ -723,7 +733,7 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(69, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(69,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(69,), dtype=int32),
-                index      = numpy.recarray(..., shape=(69,), dtype=...)
+                scale      = numpy.recarray(..., shape=(69,), dtype=...)
             )
 
         Parameters
@@ -748,8 +758,8 @@ class PDBContainer:
         cls = type(self)
         ret_list = []
         for k, ar_self, ar_list in attr_list:
-            # 'index': a 1D recarray
-            if k == 'index':
+            # 'scale': a 1D recarray
+            if k == 'scale':
                 dtype = ar_self.dtype
                 ar_list = [ar.astype(dtype, copy=False) for ar in ar_list]
                 ar_new = np.concatenate((ar_self, *ar_list)).view(np.recarray)
@@ -777,7 +787,7 @@ class PDBContainer:
     def from_molecules(cls: Type[ST], mol_list: Iterable[Molecule],
                        min_atom: int = 0,
                        min_bond: int = 0,
-                       index: Optional[ArrayLike] = None) -> ST:
+                       scale: Optional[ArrayLike] = None) -> ST:
         """Convert an iterable or sequence of molecules into a new :class:`PDBContainer` instance.
 
         Examples
@@ -802,7 +812,7 @@ class PDBContainer:
                 bonds      = numpy.recarray(..., shape=(23, 75), dtype=...),
                 atom_count = numpy.ndarray(..., shape=(23,), dtype=int32),
                 bond_count = numpy.ndarray(..., shape=(23,), dtype=int32),
-                index      = numpy.recarray(..., shape=(23,), dtype=...)
+                scale      = numpy.recarray(..., shape=(23,), dtype=...)
             )
 
         Parameters
@@ -813,7 +823,7 @@ class PDBContainer:
             The minimum number of atoms which :attr:`PDBContainer.atoms` should accomodate.
         min_bond : :class:`int`
             The minimum number of bonds which :attr:`PDBContainer.bonds` should accomodate.
-        index : array-like, optional
+        scale : array-like, optional
             An array-like object representing an user-specified index.
             Defaults to a simple range index if :data:`None` (see :func:`numpy.arange`).
 
@@ -830,10 +840,10 @@ class PDBContainer:
             mol_count = len(mol_list)
 
         # Parse the index
-        if index is None:
-            idx = np.arange(mol_count, dtype=cls.DTYPE['index']).view(np.recarray)
+        if scale is None:
+            idx = np.arange(mol_count, dtype=cls.DTYPE['scale']).view(np.recarray)
         else:
-            idx = np.asarray(index).view(np.recarray)
+            idx = np.asarray(scale).view(np.recarray)
         if len(idx) != mol_count:
             raise ValueError("'mol_list' and 'idx' must be of equal length")
 
@@ -867,17 +877,17 @@ class PDBContainer:
         return cls(
             atoms=atom_array, bonds=bond_array,
             atom_count=atom_counter, bond_count=bond_counter,
-            index=idx, validate=False
+            scale=idx, validate=False
         )
 
     @overload
-    def to_molecules(self, idx: Union[None, Sequence[int], slice, np.ndarray] = ...,
+    def to_molecules(self, index: Union[None, Sequence[int], slice, np.ndarray] = ...,
                      mol: Optional[Iterable[Optional[Molecule]]] = ...) -> List[Molecule]:
         ...
     @overload  # noqa: E301
-    def to_molecules(self, idx: SupportsIndex = ..., mol: Optional[Molecule] = ...) -> Molecule:
+    def to_molecules(self, index: SupportsIndex = ..., mol: Optional[Molecule] = ...) -> Molecule:
         ...
-    def to_molecules(self, idx=None, mol=None):  # noqa: E301
+    def to_molecules(self, index=None, mol=None):  # noqa: E301
         """Create a molecule or list of molecules from this instance.
 
         Examples
@@ -900,11 +910,11 @@ class PDBContainer:
             >>> pdb = PDBContainer(...)  # doctest: +SKIP
 
             # Create a single new molecule from `pdb`
-            >>> pdb.to_molecules(idx=0)  # doctest: +ELLIPSIS
+            >>> pdb.to_molecules(index=0)  # doctest: +ELLIPSIS
             <scm.plams.mol.molecule.Molecule object at ...>
 
             # Create three new molecules from `pdb`
-            >>> pdb.to_molecules(idx=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
+            >>> pdb.to_molecules(index=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
             [<scm.plams.mol.molecule.Molecule object at ...>,
              <scm.plams.mol.molecule.Molecule object at ...>]
 
@@ -914,13 +924,13 @@ class PDBContainer:
 
             # Update `mol` with the info from `pdb`
             >>> mol = Molecule(...)  # doctest: +SKIP
-            >>> mol_new = pdb.to_molecules(idx=2, mol=mol)
+            >>> mol_new = pdb.to_molecules(index=2, mol=mol)
             >>> mol is mol_new
             True
 
             # Update all molecules in `mol_list` with info from `pdb`
             >>> mol_list = [Molecule(...), Molecule(...), Molecule(...)]  # doctest: +SKIP
-            >>> mol_list_new = pdb.to_molecules(idx=range(3), mol=mol_list)
+            >>> mol_list_new = pdb.to_molecules(index=range(3), mol=mol_list)
             >>> for m, m_new in zip(mol_list, mol_list_new):
             ...     print(m is m_new)
             True
@@ -929,9 +939,9 @@ class PDBContainer:
 
         Parameters
         ----------
-        idx : :class:`int` or :class:`Sequence[int]<typing.Sequence>`, optional
+        index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
             An object for slicing the arrays embedded within this instance.
-            Follows the standard numpy broadcasting rules (*e.g.* :code:`self.atoms[idx]`).
+            Follows the standard numpy broadcasting rules (*e.g.* :code:`self.atoms[index]`).
             If a scalar is provided (*e.g.* an integer) then a single molecule will be returned.
             If a sequence, range, slice, *etc.* is provided then
             a list of molecules will be returned.
@@ -943,19 +953,19 @@ class PDBContainer:
         -------
         :class:`~scm.plams.mol.molecule.Molecule` or :class:`List[Molecule]<typing.List>`
             A molecule or list of molecules,
-            depending on whether or not **idx** is a scalar or sequence / slice.
+            depending on whether or not **index** is a scalar or sequence / slice.
             Note that if :data:`mol is not None<None>`, then the-be returned molecules won't be copies.
 
         """  # noqa: E501
-        if idx is None:
+        if index is None:
             i = slice(None)
             is_seq = True
         else:
             try:
-                i = idx.__index__()
+                i = index.__index__()
                 is_seq = False
             except (AttributeError, TypeError):
-                i = idx
+                i = index
                 is_seq = True
 
         atoms = self.atoms[i]
@@ -976,12 +986,23 @@ class PDBContainer:
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
         return [_rec_to_mol(*args) for args in iterator]
 
+    @overload
     @classmethod
-    def create_hdf5_group(cls, file: h5py.Group,
-                          name: str,
-                          index_dtype: DtypeLike = None,
-                          **kwargs: Any) -> h5py.Group:
+    def create_hdf5_group(cls, file: h5py.Group, name: str, *,
+                          scale: h5py.Dataset, **kwargs: Any) -> h5py.Group:
+        ...
+    @overload  # noqa: E301
+    @classmethod
+    def create_hdf5_group(cls, file: h5py.Group, name: str, *,
+                          scale_dtype: DtypeLike = ..., **kwargs: Any) -> h5py.Group:
+        ...
+    @classmethod  # noqa: E301
+    def create_hdf5_group(cls, file, name, *, scale=None, scale_dtype=None, **kwargs):
         r"""Create a h5py Group for storing :class:`dataCAT.PDBContainer` instances.
+
+        Notes
+        -----
+        The **scale** and **scale_dtype** parameters are mutually exclusive.
 
         Parameters
         ----------
@@ -989,9 +1010,18 @@ class PDBContainer:
             The h5py File or Group where the new Group will be created.
         name : :class:`str`
             The name of the to-be created Group.
+
+        Keyword Arguments
+        -----------------
+        scale : :class:`h5py.Dataset`, keyword-only
+            A pre-existing dataset serving as dimensional scale.
+            See **scale_dtype** to create a new instead instead.
+        scale_dtype : dtype-like, keyword-only
+            The datatype of the to-be created dimensional scale.
+            See **scale** to use a pre-existing dataset for this purpose.
         \**kwargs : :data:`~typing.Any`
             Further keyword arguments for the creation of each dataset.
-            The arguments already specified by default are:
+            Arguments already specified by default are:
             ``name``, ``shape``, ``maxshape`` and ``dtype``.
 
         Returns
@@ -1000,6 +1030,9 @@ class PDBContainer:
             The newly created Group.
 
         """
+        if scale is not None and scale_dtype is not None:
+            raise TypeError("'scale' and 'scale_dtype' cannot be both specified")
+
         cls_name = cls.__name__
 
         # Create the group
@@ -1009,7 +1042,7 @@ class PDBContainer:
         # Create the datasets
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
-        key_iter = (k for k in cls.keys() if k != 'index')
+        key_iter = (k for k in cls.keys() if k != 'scale')
         for key in key_iter:
             maxshape = NDIM[key] * (None,)
             shape = NDIM[key] * (0,)
@@ -1019,15 +1052,19 @@ class PDBContainer:
             dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.atoms`.")
 
         # Set the index
-        _dtype = index_dtype if index_dtype is not None else cls.DTYPE['index']
-        scale = grp.create_dataset('index', shape=(0,), maxshape=(None,), dtype=_dtype)
-        scale.make_scale('index')
+        scale_name = cls.SCALE_NAME
+        if scale is not None:
+            scale_dset = scale
+        else:
+            _dtype = scale_dtype if scale_dtype is not None else cls.DTYPE['scale']
+            scale_dset = grp.create_dataset(scale_name, shape=(0,), maxshape=(None,), dtype=_dtype)
+            scale_dset.make_scale(scale_name)
 
         # Use the index as a scale
-        dset_iter = (grp[k] for k in cls.keys() if k != 'index')
+        dset_iter = (grp[k] for k in cls.keys() if k != 'scale')
         for dset in dset_iter:
-            dset.dims[0].label = 'index'
-            dset.dims[0].attach_scale(scale)
+            dset.dims[0].label = scale_name
+            dset.dims[0].attach_scale(scale_dset)
 
         grp['atoms'].dims[1].label = 'atoms'
         grp['bonds'].dims[1].label = 'bonds'
@@ -1035,7 +1072,7 @@ class PDBContainer:
 
     @classmethod
     def validate_hdf5(cls, group: h5py.Group) -> None:
-        """Validate the passed hdf5 **group**, ensuring it is compatible with :meth:`~PDBContainer.to_hdf5` and :meth:`~PDBContainer.from_hdf5`.
+        """Validate the passed hdf5 **group**, ensuring it is compatible with :class:`PDBContainer` instances.
 
         An :exc:`AssertionError` will be raise if **group** does not validate.
 
@@ -1058,19 +1095,21 @@ class PDBContainer:
                             f"observed type: {group.__class__.__name__}")
 
         # Check if **group** has all required keys
-        keys = set(cls.keys())
-        difference = keys - group.keys()
+        keys: List[str] = list(cls.keys())
+        keys[-1] = cls.SCALE_NAME
+        difference = set(keys) - group.keys()
         if difference:
             missing_keys = ', '.join(repr(i) for i in difference)
             raise AssertionError(f"Missing keys in {group!r}: {missing_keys}")
 
         # Check the dimensionality and dtype of all datasets
         len_dict = {}
-        iterator = ((k, group[k]) for k in cls.keys())
-        for key, dset in iterator:
+        for key in cls.keys():
+            dset = group[key] if key != 'scale' else group[cls.SCALE_NAME]
+
             len_dict[key] = len(dset)
             assertion.eq(dset.ndim, cls.NDIM[key], message=f"{key!r} ndim mismatch")
-            if key != 'index':
+            if key != 'scale':
                 assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{key!r} dtype mismatch")
 
         # Check that all datasets are of the same length
@@ -1080,67 +1119,116 @@ class PDBContainer:
                 f"Observed lengths: {len_dict!r}"
             )
 
-    def to_hdf5(self, group: h5py.Group, mode: Hdf5Mode = 'append',
-                idx: Optional[IndexLike] = None) -> None:
-        """Export this instance to the specified hdf5 **group**.
+    @if_exception(validate_hdf5.__func__)  # type: ignore
+    def to_hdf5(self, group: h5py.Group, index: IndexLike, update_scale: bool = True) -> None:
+        """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
+
+        Follows the standard broadcasting rules as employed by h5py.
 
         Important
         ---------
-        If **idx** is passed as a sequence of integers then, contrary to NumPy,
+        If **index** is passed as a sequence of integers then, contrary to NumPy,
         they *will* have to be sorted.
 
         Parameters
         ----------
         group : :class:`h5py.Group`
-            The to-be updated/appended h5py group.
-        mode : :class:`str`
-            Whether to append the passed **group** with new values or
-            update user-specified existing value in-place (see **idx**).
-            Accepted values are ``"append"`` and ``"update"``.
-        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+            The to-be updated h5py group.
+        index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
             An object for slicing all datasets in **group**.
-            Only relevant when :code:`mode = "update"`.
-
-        Returns
-        -------
-        :class:`numpy.ndarray[int]<numpy.ndarray>`
-            A numpy array with
+            Note that, contrary to numpy, if a sequence of integers is provided
+            then they'll have to ordered.
+        update_scale : :class:`bool`
+            If :data:`True`, also export :attr:`PDBContainer.scale` to the dimensional
+            scale in the passed **group**.
 
         """
         # Parse **idx**
-        if idx is None:
-            index: Union[slice, np.ndarray] = slice(None)
+        if index is None:
+            idx: Union[slice, np.ndarray] = slice(None)
+            idx_max = len(self)
         else:
             try:
-                index = int_to_slice(idx, len(self))  # type: ignore
+                idx = int_to_slice(index, len(self))  # type: ignore
+                idx_max = idx.stop or len(self)
             except (AttributeError, TypeError):
-                index = np.asarray(idx) if not isinstance(idx, slice) else idx
-                assert getattr(index, 'ndim', 1) == 1
+                if not isinstance(index, slice):
+                    idx = np.asarray(index)
+                    idx_max = idx.max()
+                    assert idx.ndim == 1
+                    assert issubclass(idx.dtype.type, np.integer)
+                else:
+                    idx = index
+                    idx_max = idx.stop or len(self)
 
-        # Parse **mode**
-        if mode not in {'append', 'update'}:
-            raise ValueError(f"Invalid mode: {mode!r}")
+        # Update the length of all groups
+        scale_name = self.SCALE_NAME
+        scale = group['atoms'].dims[0][scale_name]
+        if len(scale) < idx_max:
+            scale.resize(idx_max, axis=0)
+        self._update_hdf5_shape(group)
 
-        # Export to the .hdf5 file
-        try:
-            if mode == 'append':
-                return append_pdb_values(group, self)
-            elif mode == 'update':
-                return update_pdb_values(group, self, index)
+        # Update the datasets
+        items = ((name, ar) for name, ar in self.items() if name != 'scale')
+        for name, ar in items:
+            dataset = group[name]
 
-        except Exception as ex:
-            self.validate_hdf5(group)
-            raise ex
+            if ar.ndim == 1:
+                dataset[idx] = ar
+            else:
+                _, j = ar.shape
+                dataset[idx, :j] = ar
+
+        # Update the index
+        if update_scale:
+            scale[idx] = self.scale
+
+    def _update_hdf5_shape(self, group: h5py.Group) -> None:
+        """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
+
+        The length of all datasets will be set equal to the ``index`` dimensional cale.
+
+        This method is automatically called by :meth:`PDBContainer.update_hdf5` when required.
+
+        Parameters
+        ----------
+        group : :class:`h5py.Group`
+            The h5py Group with the to-be reshaped datasets.
+        pdb : :class:`dataCAT.PDBContainer`
+            The pdb container for updating **group**.
+
+
+        :rtype: :data:`None`
+
+        """  # noqa: E501
+        # Get the length of the dimensional scale
+        scale_name = self.SCALE_NAME
+        idx = group['atoms'].dims[0][scale_name]
+        idx_len = len(idx)
+
+        items = ((name, ar) for name, ar in self.items() if name != 'scale')
+        for name, ar in items:
+            dataset = group[name]
+
+            # Identify the new shape of all datasets
+            shape = np.fromiter(dataset.shape, dtype=int)
+            shape[0] = idx_len
+            if ar.ndim == 2:
+                shape[1] = max(shape[1], ar.shape[1])
+
+            # Set the new shape
+            dataset.shape = shape
 
     @classmethod
-    def from_hdf5(cls: Type[ST], group: h5py.Group, idx: Optional[IndexLike] = None) -> ST:
+    @if_exception(validate_hdf5.__func__)  # type: ignore
+    def from_hdf5(cls: Type[ST], group: h5py.Group, index: IndexLike = None) -> ST:
         """Construct a new PDBContainer from the passed hdf5 **group**.
 
         Parameters
         ----------
         group : :class:`h5py.Group`
             The to-be read h5py group.
-        idx : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
+        index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
             An object for slicing all datasets in **group**.
 
         Returns
@@ -1149,27 +1237,24 @@ class PDBContainer:
             A new PDBContainer constructed from **group**.
 
         """
-        if idx is None:
-            index: Union[slice, np.ndarray] = slice(None)
+        if index is None:
+            idx: Union[slice, np.ndarray] = slice(None)
         else:
             try:
-                index = int_to_slice(idx, len(group['atom_count']))  # type: ignore
+                idx = int_to_slice(index, len(group['atom_count']))  # type: ignore
             except (AttributeError, TypeError):
-                index = np.asarray(idx) if not isinstance(idx, slice) else idx
-                assert getattr(index, 'ndim', 1) == 1
+                idx = np.asarray(index) if not isinstance(index, slice) else index
+                assert getattr(idx, 'ndim', 1) == 1
 
-        try:
-            return cls(
-                atoms=group['atoms'][index].view(np.recarray),
-                bonds=group['bonds'][index].view(np.recarray),
-                atom_count=group['atom_count'][index],
-                bond_count=group['bond_count'][index],
-                index=group['index'][index].view(np.recarray),
-                validate=False
-            )
-        except Exception as ex:
-            cls.validate_hdf5(group)
-            raise ex
+        scale_name = cls.SCALE_NAME
+        return cls(
+            atoms=group['atoms'][idx].view(np.recarray),
+            bonds=group['bonds'][idx].view(np.recarray),
+            atom_count=group['atom_count'][idx],
+            bond_count=group['bond_count'][idx],
+            scale=group[scale_name][idx].view(np.recarray),
+            validate=False
+        )
 
     def intersection(self: ST, value: Union[ST, ArrayLike]) -> ST:
         """Construct a new PDBContainer by the intersection of **self** and **value**.
@@ -1187,23 +1272,23 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> print(pdb.index)
+            >>> print(pdb.scale)
             [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
 
             >>> pdb_new = pdb.intersection(range(4))
-            >>> print(pdb_new.index)
+            >>> print(pdb_new.scale)
             [0 1 2 3]
 
         Parameters
         ----------
         value : :class:`PDBContainer` or array-like
-            Another PDBContainer or an array-like object representing :attr:`PDBContainer.index`.
-            Note that both **value** and **self.index** should consist of unique elements.
+            Another PDBContainer or an array-like object representing :attr:`PDBContainer.scale`.
+            Note that both **value** and **self.scale** should consist of unique elements.
 
         Returns
         -------
         :class:`PDBContainer`
-            A new instance by intersecting :attr:`self.index<PDBContainer.index>` and **value**.
+            A new instance by intersecting :attr:`self.scale<PDBContainer.scale>` and **value**.
 
         See Also
         --------
@@ -1229,23 +1314,23 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> print(pdb.index)
+            >>> print(pdb.scale)
             [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
 
             >>> pdb_new = pdb.difference(range(10, 30))
-            >>> print(pdb_new.index)
+            >>> print(pdb_new.scale)
             [0 1 2 3 4 5 6 7 8 9]
 
         Parameters
         ----------
         value : :class:`PDBContainer` or array-like
-            Another PDBContainer or an array-like object representing :attr:`PDBContainer.index`.
-            Note that both **value** and **self.index** should consist of unique elements.
+            Another PDBContainer or an array-like object representing :attr:`PDBContainer.scale`.
+            Note that both **value** and **self.scale** should consist of unique elements.
 
         Returns
         -------
         :class:`PDBContainer`
-            A new instance as the difference of :attr:`self.index<PDBContainer.index>`
+            A new instance as the difference of :attr:`self.scale<PDBContainer.scale>`
             and **value**.
 
         See Also
@@ -1278,25 +1363,25 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> pdb2 = PDBContainer(..., index=range(10, 30))  # doctest: +SKIP
+            >>> pdb2 = PDBContainer(..., scale=range(10, 30))  # doctest: +SKIP
 
-            >>> print(pdb.index)
+            >>> print(pdb.scale)
             [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
 
             >>> pdb_new = pdb.symmetric_difference(pdb2)
-            >>> print(pdb_new.index)
+            >>> print(pdb_new.scale)
             [ 0  1  2  3  4  5  6  7  8  9 23 24 25 26 27 28 29]
 
         Parameters
         ----------
         value : :class:`PDBContainer`
             Another PDBContainer.
-            Note that both **value.index** and **self.index** should consist of unique elements.
+            Note that both **value.scale** and **self.scale** should consist of unique elements.
 
         Returns
         -------
         :class:`PDBContainer`
-            A new instance as the symmetric difference of :attr:`self.index<PDBContainer.index>`
+            A new instance as the symmetric difference of :attr:`self.scale<PDBContainer.scale>`
             and **value**.
 
         See Also
@@ -1329,13 +1414,13 @@ class PDBContainer:
             >>> from dataCAT import PDBContainer
 
             >>> pdb = PDBContainer(...)  # doctest: +SKIP
-            >>> pdb2 = PDBContainer(..., index=range(10, 30))  # doctest: +SKIP
+            >>> pdb2 = PDBContainer(..., scale=range(10, 30))  # doctest: +SKIP
 
-            >>> print(pdb.index)
+            >>> print(pdb.scale)
             [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22]
 
             >>> pdb_new = pdb.union(pdb2)
-            >>> print(pdb_new.index)
+            >>> print(pdb_new.scale)
             [ 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 18 19 20 21 22 23
              24 25 26 27 28 29]
 
@@ -1343,7 +1428,7 @@ class PDBContainer:
         ----------
         value : :class:`PDBContainer`
             Another PDBContainer.
-            Note that both **value** and **self.index** should consist of unique elements.
+            Note that both **value** and **self.scale** should consist of unique elements.
 
         Returns
         -------
@@ -1361,17 +1446,17 @@ class PDBContainer:
             raise TypeError(f"'value' expected a {cls.__name__} instance; "
                             f"observed type: {value.__class__.__name__}")
 
-        idx1 = self.index
-        idx2 = value.index.astype(idx1.dtype, copy=False)
+        idx1 = self.scale
+        idx2 = value.scale.astype(idx1.dtype, copy=False)
         i = np.in1d(idx2, idx1, assume_unique=True, invert=True)
 
         ret = value[i]
         return self.concatenate(ret)
 
     def _get_index(self: ST, value: Union[ST, ArrayLike]) -> Tuple[np.recarray, np.ndarray]:
-        """Parse and return the :attr:`~PDBContainer.index` of **self** and **value**."""
+        """Parse and return the :attr:`~PDBContainer.scale` of **self** and **value**."""
         cls = type(self)
-        index1 = self.index
-        _index2 = value.index if isinstance(value, cls) else value
-        index2 = np.asarray(_index2, dtype=index1.dtype)
-        return index1, index2
+        scale1 = self.scale
+        _scale2 = value.scale if isinstance(value, cls) else value
+        scale2 = np.asarray(_scale2, dtype=scale1.dtype)
+        return scale1, scale2
