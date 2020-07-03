@@ -478,7 +478,7 @@ class Database:
 
         index = cls._sanitize_multi_idx(new_index, dtype, database)
         pdb_new = PDBContainer.from_molecules(mol_series, index=index)
-        pdb_new.to_hdf5(group, mode='append')
+        pdb_new.append_hdf5(group)
 
         j = len(group['atoms'])
         i = j - len(mol_series)
@@ -500,7 +500,7 @@ class Database:
 
         index = mol_series.index.values.astype(dtype)
         pdb_old = PDBContainer.from_molecules(mol_series, index=index)
-        pdb_old.to_hdf5(group, mode='update', index=old.values)
+        pdb_old.update_hdf5(group, index=old.values)
 
         names = ('atoms', 'bonds', 'atom_count', 'bond_count')
         message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"

@@ -26,7 +26,10 @@ Index
     PDBContainer.create_hdf5_group
     PDBContainer.validate_hdf5
     PDBContainer.from_hdf5
-    PDBContainer.to_hdf5
+    PDBContainer.append_hdf5
+    PDBContainer.update_hdf5
+    PDBContainer.update_hdf5_index
+    PDBContainer.update_hdf5_shape
 
 .. autosummary::
     PDBContainer.intersection
@@ -56,7 +59,10 @@ API: Object Interconversion
 .. automethod:: PDBContainer.create_hdf5_group
 .. automethod:: PDBContainer.validate_hdf5
 .. automethod:: PDBContainer.from_hdf5
-.. automethod:: PDBContainer.to_hdf5
+.. automethod:: PDBContainer.append_hdf5
+.. automethod:: PDBContainer.update_hdf5
+.. automethod:: PDBContainer.update_hdf5_index
+.. automethod:: PDBContainer.update_hdf5_shape
 
 API: Set Operations
 -------------------
@@ -82,7 +88,7 @@ from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
 from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE, BACKUP_IDX_DTYPE
-from .functions import int_to_slice
+from .functions import int_to_slice, if_exception
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, DtypeLike
@@ -118,12 +124,12 @@ _BondTuple = Tuple[
 ]
 
 _ReduceTuple = Tuple[
-    np.recarray,
-    np.recarray,
-    np.ndarray,
-    np.ndarray,
-    np.recarray,
-    Literal[False]
+    np.recarray,  # atoms
+    np.recarray,  # bonds
+    np.ndarray,  # atom_count
+    np.ndarray,  # bond_count
+    np.recarray,  # index
+    Literal[False]  # validate
 ]
 _Coords = Tuple[float, float, float]
 
@@ -250,7 +256,8 @@ class PDBContainer:
       :meth:`~PDBContainer.from_molecules`.
     * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
       :meth:`~PDBContainer.validate_hdf5`,
-      :meth:`~PDBContainer.to_hdf5` &  :meth:`~PDBContainer.from_hdf5`.
+      :meth:`~PDBContainer.append_hdf5`, :meth:`~PDBContainer.update_hdf5` &
+      :meth:`~PDBContainer.from_hdf5`.
     * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
       :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
       :meth:`~PDBContainer.__len__`.
@@ -290,7 +297,7 @@ class PDBContainer:
         >>> hdf5_file = str(...)  # doctest: +SKIP
         >>> with h5py.File(hdf5_file, 'a') as f:
         ...     group = pdb.create_hdf5_group(f, name='ligand')
-        ...     pdb.to_hdf5(group, mode='append')
+        ...     pdb.append_hdf5(group)
         ...
         ...     print('group', '=', group)
         ...     for name, dset in group.items():
@@ -1061,12 +1068,13 @@ class PDBContainer:
 
     @classmethod
     def validate_hdf5(cls, group: h5py.Group) -> None:
-        """Validate the passed hdf5 **group**, ensuring it is compatible with :meth:`~PDBContainer.to_hdf5` and :meth:`~PDBContainer.from_hdf5`.
+        """Validate the passed hdf5 **group**, ensuring it is compatible with :class:`PDBContainer` instances.
 
         An :exc:`AssertionError` will be raise if **group** does not validate.
 
         This method is called automatically when an exception is raised by
-        :meth:`~PDBContainer.to_hdf5` or :meth:`~PDBContainer.from_hdf5`.
+        :meth:`~PDBContainer.append_hdf5`, :meth:`~PDBContainer.utepda_hdf5` or
+        :meth:`~PDBContainer.from_hdf5`.
 
         Parameters
         ----------
@@ -1106,9 +1114,40 @@ class PDBContainer:
                 f"Observed lengths: {len_dict!r}"
             )
 
-    def to_hdf5(self, group: h5py.Group, mode: Hdf5Mode = 'append',
-                index: Optional[IndexLike] = None) -> None:
-        """Export this instance to the specified hdf5 **group**.
+    @if_exception(validate_hdf5.__func__)  # type: ignore
+    def append_hdf5(self, group: h5py.Group, resize_index: bool = True) -> None:
+        """Append all datasets in **group** positioned with its counterpart from **pdb**.
+
+        Parameters
+        ----------
+        group : :class:`h5py.Group`
+            The to-be appended h5py group.
+        resize_index : :class:`bool`
+            If :data:`True`, resize all datasets including the ``index`` dimensional scale.
+            This value can be set to :data:`False` in case of multiple Groups
+            with a single shared ``index``.
+
+        """
+        if resize_index:
+            index = group['atoms'].dims[0]['index']
+            self.update_hdf5_index(index)
+
+        self.update_hdf5_shape(group)
+        for name, ar in self.items():
+            dataset = group[name]
+
+            if ar.ndim == 1:
+                i = len(ar)
+                dataset[-i:] = ar
+            else:
+                i, j = ar.shape
+                dataset[-i:, :j] = ar
+
+    @if_exception(validate_hdf5.__func__)  # type: ignore
+    def update_hdf5(self, group: h5py.Group, index: Optional[IndexLike] = None) -> None:
+        """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
+
+        Follows the standard broadcasting rules as employed by h5py.
 
         Important
         ---------
@@ -1118,19 +1157,11 @@ class PDBContainer:
         Parameters
         ----------
         group : :class:`h5py.Group`
-            The to-be updated/appended h5py group.
-        mode : :class:`str`
-            Whether to append the passed **group** with new values or
-            update user-specified existing value in-place (see **index**).
-            Accepted values are ``"append"`` and ``"update"``.
+            The to-be updated h5py group.
         index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
             An object for slicing all datasets in **group**.
-            Only relevant when :code:`mode = "update"`.
-
-        Returns
-        -------
-        :class:`numpy.ndarray[int]<numpy.ndarray>`
-            A numpy array with
+            Note that, contrary to numpy, if a sequence of integers is provided
+            then they'll have to ordered.
 
         """
         # Parse **idx**
@@ -1143,56 +1174,7 @@ class PDBContainer:
                 idx = np.asarray(index) if not isinstance(index, slice) else index
                 assert getattr(idx, 'ndim', 1) == 1
 
-        # Export to the .hdf5 file
-        try:
-            if mode == 'append':
-                return self.append_hdf5(group)
-            elif mode == 'update':
-                return self.update_hdf5(group, index)
-            else:
-                raise ValueError(f"Invalid mode: {mode!r}")
-
-        except Exception as ex:
-            self.validate_hdf5(group)
-            raise ex
-
-    def append_hdf5(self, group: h5py.Group) -> None:
-        """Append all datasets in **group** positioned with its counterpart from **pdb**.
-
-        Parameters
-        ----------
-        group : :class:`h5py.Group`
-            The to-be appended h5py group.
-
-        """
-        self.update_hdf5_shape(group)
-        for name, ar in self.items():
-            dataset = group[name]
-
-            if ar.ndim == 1:
-                i = len(ar)
-                dataset[-i:] = ar
-            else:
-                i, j = ar.shape
-                dataset[-i:, :j] = ar
-
-    def update_hdf5(self, group: h5py.Group, index: Optional[IndexLike] = None) -> None:
-        """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
-
-        Follows the standard broadcasting rules as employed by h5py.
-
-        Parameters
-        ----------
-        group : :class:`h5py.Group`
-            The to-be updated h5py group.
-        index : :class:`int`, :class:`Sequence[int]<typing.Sequence>` or :class:`slice`, optional
-            An object for slicing all datasets in **group**.
-            Note that, contrary to numpy, if a sequence of integers is provided
-            then they'll have to ordered.
-
-        """
-        idx = slice(None) if index is None else index
-
+        # Update the datasets
         for name, ar in self.items():
             dataset = group[name]
 
@@ -1202,23 +1184,59 @@ class PDBContainer:
                 _, j = ar.shape
                 dataset[idx, :j] = ar
 
+    def update_hdf5_index(self, dataset: h5py.Dataset) -> None:
+        """Extend the length of **dataset** such that it can accommodate :attr:`PDBContainer.index`.
+
+        Parameters
+        ----------
+        dataset : :class:`h5py.Dataset`
+            The to-be reshaped dataset containing the ``index`` dimensional scale.
+
+
+        :rtype: :data:`None`
+
+        See Also
+        --------
+        :meth:`PDBContainer.update_hdf5_shape`
+            Update the shape of all datasets in **group** such that it can accommodate **pdb**.
+
+        """  # noqa: E501
+        index = self.index
+        i = len(dataset) + len(index)
+        dataset.resize(i, axis=0)
+
     def update_hdf5_shape(self, group: h5py.Group) -> None:
         """Update the shape of all datasets in **group** such that it can accommodate **pdb**.
+
+        The length of all datasets will be set equal to the ``index`` dimensional cale.
 
         Parameters
         ----------
         group : :class:`h5py.Group`
-            The to-be reshape h5py group.
+            The h5py Group with the to-be reshaped datasets.
         pdb : :class:`dataCAT.PDBContainer`
             The pdb container for updating **group**.
 
-        """
-        for name, ar in self.items():
+
+        :rtype: :data:`None`
+
+        See Also
+        --------
+        :meth:`PDBContainer.update_hdf5_index`
+            Update the length of **dataset** such that it can accommodate :attr:`PDBContainer.index`.
+
+        """  # noqa: E501
+        # Get the length of the dimensional scale
+        idx = group['atoms'].dims[0]['index']
+        idx_len = len(idx)
+
+        items = ((name, ar) for name, ar in self.items() if name != 'index')
+        for name, ar in items:
             dataset = group[name]
 
             # Identify the new shape of all datasets
             shape = np.fromiter(dataset.shape, dtype=int)
-            shape[0] += len(ar)
+            shape[0] = idx_len
             if ar.ndim == 2:
                 shape[1] = max(shape[1], ar.shape[1])
 
@@ -1226,6 +1244,7 @@ class PDBContainer:
             dataset.shape = shape
 
     @classmethod
+    @if_exception(validate_hdf5.__func__)  # type: ignore
     def from_hdf5(cls: Type[ST], group: h5py.Group, index: Optional[IndexLike] = None) -> ST:
         """Construct a new PDBContainer from the passed hdf5 **group**.
 
@@ -1251,18 +1270,14 @@ class PDBContainer:
                 idx = np.asarray(index) if not isinstance(index, slice) else index
                 assert getattr(idx, 'ndim', 1) == 1
 
-        try:
-            return cls(
-                atoms=group['atoms'][idx].view(np.recarray),
-                bonds=group['bonds'][idx].view(np.recarray),
-                atom_count=group['atom_count'][idx],
-                bond_count=group['bond_count'][idx],
-                index=group['index'][idx].view(np.recarray),
-                validate=False
-            )
-        except Exception as ex:
-            cls.validate_hdf5(group)
-            raise ex
+        return cls(
+            atoms=group['atoms'][idx].view(np.recarray),
+            bonds=group['bonds'][idx].view(np.recarray),
+            atom_count=group['atom_count'][idx],
+            bond_count=group['bond_count'][idx],
+            index=group['index'][idx].view(np.recarray),
+            validate=False
+        )
 
     def intersection(self: ST, value: Union[ST, ArrayLike]) -> ST:
         """Construct a new PDBContainer by the intersection of **self** and **value**.

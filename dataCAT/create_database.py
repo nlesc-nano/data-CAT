@@ -197,7 +197,7 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             _update_index_dset(group, grp_name, logger)
 
             if pdb is not None:
-                pdb.to_hdf5(group, mode='append')
+                pdb.append_hdf5(group)
 
             _update_property_dsets(group, grp_name)
 

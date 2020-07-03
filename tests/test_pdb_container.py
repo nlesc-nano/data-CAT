@@ -87,12 +87,22 @@ def test_validate() -> None:
             PDB.from_hdf5(group)
         except AssertionError as ex:
             assertion.isinstance(ex.__context__, KeyError)
-            group.create_dataset('atoms', data=[1])
+            dset = group.create_dataset('atoms', data=[1])
         else:
             raise AssertionError("Failed to raise an AssertionError")
 
         try:
-            PDB.to_hdf5(group)
+            PDB.append_hdf5(group)
+        except AssertionError as ex:
+            assertion.isinstance(ex.__context__, RuntimeError)
+            scale = group.create_dataset('index', data=[1], maxshape=(None,))
+            scale.make_scale('index')
+            dset.dims[0].attach_scale(scale)
+        else:
+            raise AssertionError("Failed to raise an AssertionError")
+
+        try:
+            PDB.append_hdf5(group)
         except AssertionError as ex:
             assertion.isinstance(ex.__context__, IndexError)
         else:

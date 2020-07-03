@@ -21,9 +21,10 @@ API
 import warnings
 from time import sleep
 from types import MappingProxyType
+from functools import wraps
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any,
-    Hashable, Optional, Type, TYPE_CHECKING
+    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, cast,
+    Hashable, Optional, Type, TypeVar, Callable, TYPE_CHECKING
 )
 
 import h5py
@@ -46,8 +47,11 @@ else:
     DtypeLike = 'numpy.typing.DtypeLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability'
+    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability',
+    'if_exception'
 ]
+
+FT = TypeVar('FT', bound=Callable[..., Any])
 
 
 def df_to_mongo_dict(df: pd.DataFrame,
@@ -376,3 +380,17 @@ def _set_index(cls: Type[PDBContainer], group: h5py.Group,
     group['atoms'].dims[1].label = 'atoms'
     group['bonds'].dims[1].label = 'bonds'
     return scale
+
+
+def if_exception(func: Callable[[Any, Any], None]) -> Callable[[FT], FT]:
+    """A decorator which executes **func** if the decorated instance-/class-method raises an exception."""  # noqa: E501
+    def decorator(meth: FT) -> FT:
+        @wraps(meth)
+        def wrapper(self, obj, *args, **kwargs):
+            try:
+                return meth(self, obj, *args, **kwargs)
+            except Exception as ex:
+                func(self, obj)
+                raise ex
+        return cast(FT, wrapper)
+    return decorator
