@@ -73,7 +73,7 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
         ret = _append_rows(df, index_, j)
 
     df_bool = pd.DataFrame({name: series.astype(bool) for name, series in df.items()})
-    df_bool[HDF5_INDEX] = df[HDF5_INDEX]
+    del df_bool[HDF5_INDEX]
     return ret, df_bool
 
 
@@ -81,7 +81,7 @@ def get_bool_df(df: pd.DataFrame) -> pd.DataFrame:
     return df.astype(bool)
 
 
-def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.Dataset], i: np.ndarray) -> None:
+def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: np.ndarray) -> None:
     """Add columns to **df** for the various properties in **prop_dset**."""
     for dset in prop_dset:
         _resize_prop_dset(dset)

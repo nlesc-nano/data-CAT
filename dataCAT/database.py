@@ -276,7 +276,7 @@ class Database:
                     filter_ = {i: item[i] for i in idx_keys}
                     collection.replace_one(filter_, item)
 
-    def from_df(self, df: pd.DataFrame, df_bool: pd.DataFrame, name: Name,
+    def from_df(self, df: pd.DataFrame, df_bool: Optional[pd.DataFrame], name: Name,
                 columns: Optional[ArrayLike] = None,
                 overwrite: bool = False,
                 status: Optional[str] = None,
@@ -307,6 +307,10 @@ class Database:
         df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
         if len(getattr(df_columns, 'levels', ())) != 2:
             raise ValueError('Expected a 2-level MultiIndex')
+
+        if df_bool is None:
+            df_bool = df.copy()
+            df_bool[:] = True
 
         self.hdf5_availability()
         with self.hdf5('r+') as f:
