@@ -309,8 +309,7 @@ class Database:
             raise ValueError('Expected a 2-level MultiIndex')
 
         if df_bool is None:
-            df_bool = df.copy()
-            df_bool[:] = True
+            df_bool = {}
 
         self.hdf5_availability()
         with self.hdf5('r+') as f:
@@ -336,7 +335,7 @@ class Database:
         parent = group.parent
         for n, name_seq in column_iterator:
             # Define slices
-            index = df_bool[n] if not overwrite else slice(None)
+            index = df_bool.get(n, slice(None)) if not overwrite else slice(None)
             data = df.loc[index, n].values
             hdf5_index = df.loc[index, HDF5_INDEX].values
 
