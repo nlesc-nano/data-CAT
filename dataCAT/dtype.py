@@ -275,7 +275,9 @@ __all__ = [
 
     'LIG_IDX_DTYPE', 'QD_IDX_DTYPE', 'BACKUP_IDX_DTYPE',
 
-    'FORMULA_DTYPE', 'LIG_COUNT_DTYPE'
+    'FORMULA_DTYPE', 'LIG_COUNT_DTYPE',
+
+    'SETTINGS_DTYPE'
 ]
 
 _ATOMS_MAPPING = {
@@ -367,3 +369,5 @@ FORMULA_DTYPE = h5py.string_dtype(encoding='ascii')
 
 #: The datatype of the ``"/qd/properties/ligand count"`` dataset.
 LIG_COUNT_DTYPE = np.dtype('int32')
+
+SETTINGS_DTYPE = np.dtype('S120')

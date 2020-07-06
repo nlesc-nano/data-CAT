@@ -30,19 +30,22 @@ from pymongo import MongoClient, ASCENDING
 from nanoutils import Literal, PathType
 from CAT.logger import logger
 
-from .dtype import BACKUP_IDX_DTYPE, LIG_IDX_DTYPE, QD_IDX_DTYPE, FORMULA_DTYPE, LIG_COUNT_DTYPE
+from . import DATACAT_VERSION
 from .hdf5_log import create_hdf5_log
 from .pdb_array import PDBContainer
 from .functions import from_pdb_array, _set_index
 from .property_dset import create_prop_dset, create_prop_group
+from .dtype import (
+    BACKUP_IDX_DTYPE, LIG_IDX_DTYPE, QD_IDX_DTYPE, FORMULA_DTYPE,
+    LIG_COUNT_DTYPE, VERSION_DTYPE, SETTINGS_DTYPE
+)
 
 __all__ = ['create_csv', 'create_hdf5', 'create_mongodb']
 
-Ligand = Literal['ligand', 'ligand_no_opt']
-QD = Literal['qd', 'qd_no_opt']
+Name = Literal['ligand', 'ligand_no_opt', 'qd', 'qd_no_opt']
 
 
-def create_csv(path: Union[str, PathLike], database: Union[Ligand, QD] = 'ligand') -> str:
+def create_csv(path: Union[str, PathLike], database: Name) -> str:
     """Create a ligand or qd database (csv format) if it does not yet exist.
 
     Parameters
@@ -144,6 +147,13 @@ DEFAULT_PROPERTIES: Mapping[str, Optional[Tuple[str, np.dtype]]] = MappingProxyT
 })
 
 
+OPT_MAPPING: Mapping[str, str] = MappingProxyType({
+    'core_no_opt': 'core',
+    'ligand_no_opt': 'ligand',
+    'qd_no_opt': 'qd',
+})
+
+
 @overload
 def create_hdf5(path: Union[AnyStr, 'PathLike[AnyStr]']) -> AnyStr:
     ...
@@ -213,8 +223,9 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
         # Create new 3D datasets
         iterator_3d = (grp_name for grp_name in dataset_names_3d if grp_name not in f)
         for grp_name in iterator_3d:
-            f.create_dataset(grp_name, data=np.empty((0, 1, 1), dtype='S120'), **kwargs_3d)
+            f.create_dataset(grp_name, data=np.empty((0, 1, 1), dtype=SETTINGS_DTYPE), **kwargs_3d)
 
+        f.attrs['__version__'] = np.array(DATACAT_VERSION, dtype=VERSION_DTYPE)
     return path
 
 
@@ -250,6 +261,10 @@ def _update_index_dset(group: h5py.Group, name: str, logger: Optional[Logger] = 
 def _update_property_dsets(group: h5py.Group, name: str) -> None:
     """Check for and update pre dataCAT 0.4 style databases."""
     if 'properties' in group:
+        return None
+    elif name in OPT_MAPPING.keys():
+        opt_name = OPT_MAPPING[name]
+        group['properties'] = h5py.SoftLink(f'{opt_name}/properties')
         return None
 
     scale = group['index']
