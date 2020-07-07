@@ -5,8 +5,6 @@ Index
 .. currentmodule:: dataCAT.functions
 .. autosummary::
     df_to_mongo_dict
-    get_nan_row
-    even_index
     hdf5_availability
     scale_to_index
     array_to_index
@@ -15,8 +13,6 @@ Index
 API
 ---
 .. autofunction:: df_to_mongo_dict
-.. autofunction:: get_nan_row
-.. autofunction:: even_index
 .. autofunction:: hdf5_availability
 .. autofunction:: scale_to_index
 .. autofunction:: array_to_index
@@ -26,10 +22,9 @@ API
 
 import warnings
 from time import sleep
-from types import MappingProxyType
 from functools import wraps
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, cast,
+    Collection, Union, Sequence, Tuple, List, Generator, Any, cast,
     Hashable, Optional, Type, TypeVar, Callable, Dict, TYPE_CHECKING
 )
 
@@ -54,7 +49,7 @@ else:
     ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability',
+    'df_to_mongo_dict', 'int_to_slice', 'hdf5_availability',
     'scale_to_index', 'array_to_index', 'if_exception'
 ]
 
@@ -143,40 +138,6 @@ def df_to_mongo_dict(df: pd.DataFrame,
     return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
-#: A dictionary with NumPy dtypes as keys and matching :data:`None`-esque items as values.
-DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
-    np.dtype(np.int64): 0,
-    np.dtype(np.float64): 0.0,
-    np.dtype(np.object_): '',
-    np.dtype(np.bool_): False
-})
-
-
-def get_nan_row(df: pd.DataFrame) -> list:
-    """Return a list of None-esque objects for each column in **df**.
-
-    The object in question depends on the data type of the column.
-    Will default to ``None`` if a specific data type is not recognized
-
-        * :class:`~numpy.int64`: :data:`-1`
-        * :class:`~numpy.float64`: :data:`~numpy.nan`
-        * :class:`~numpy.object_`: :data:`None`
-        * :class:`~numpy.bool_`: :data:`False`
-
-    Parameters
-    ----------
-    df : :class:`pandas.DataFrame`
-        A dataframe.
-
-    Returns
-    -------
-    :class:`list`
-        A list of none-esque objects, one for each column in **df**.
-
-    """
-    return [DTYPE_DICT.get(v.dtype, None) for _, v in df.items()]
-
-
 def as_pdb_array(mol_list: Collection[Molecule], min_size: int = 0,
                  warn: bool = True) -> np.ndarray:
     """Convert a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
@@ -241,35 +202,6 @@ def from_pdb_array(array: np.ndarray, rdmol: bool = True,
     if not rdmol:
         return molkit.from_rdmol(ret)
     return ret
-
-
-def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-    """Ensure that ``df2.index`` is a subset of ``df1.index``.
-
-    Parameters
-    ----------
-    df1 : :class:`pandas.DataFrame`
-        A DataFrame whose index is to-be a superset of ``df2.index``.
-    df2 : :class:`pandas.DataFrame`
-        A DataFrame whose index is to-be a subset of ``df1.index``.
-
-    Returns
-    -------
-    :class:`pandas.DataFrame`
-        A new (sorted) dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
-        Returns **df1** if ``df2.index`` is already a subset of ``df1.index``
-
-    """
-    # Figure out if ``df1.index`` is a subset of ``df2.index``
-    bool_ar = df2.index.isin(df1.index)
-    if bool_ar.all():
-        return df1
-
-    # Make ``df1.index`` a subset of ``df2.index``
-    nan_row = get_nan_row(df1)
-    idx = df2.index[~bool_ar]
-    df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
-    return df1.append(df_tmp, sort=True)
 
 
 def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:

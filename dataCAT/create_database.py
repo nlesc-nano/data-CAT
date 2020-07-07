@@ -15,17 +15,16 @@ API
 """
 
 from os import PathLike
-from os.path import join, isfile
+from os.path import join
 from types import MappingProxyType
 from logging import Logger
 from typing import Dict, Any, Union, AnyStr, Mapping, Optional, Tuple, overload
 
 import h5py
 import numpy as np
-import pandas as pd
 from pymongo import MongoClient, ASCENDING
 
-from nanoutils import Literal, PathType
+from nanoutils import Literal
 from CAT.logger import logger
 
 from . import DATACAT_VERSION

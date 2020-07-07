@@ -10,14 +10,13 @@ from pathlib import Path
 
 import h5py
 import numpy as np
-import pandas as pd
 
 from scm.plams import readpdb
 from nanoutils import delete_finally
 from assertionlib import assertion
-from CAT.workflows import MOL, HDF5_INDEX, OPT, V_BULK, JOB_SETTINGS_CDFT
+from CAT.workflows import MOL, HDF5_INDEX, OPT, JOB_SETTINGS_CDFT
 
-from dataCAT import Database, OpenLig, OpenQD
+from dataCAT import Database
 
 PATH = Path('tests') / 'test_files'
 DB_PATH = PATH / 'database'
@@ -29,12 +28,6 @@ DB = Database(DB_PATH)
 def test_init() -> None:
     """Test :meth:`dataCAT.Database.__init__`."""
     assertion.eq(DB.dirname, abspath(DB_PATH))
-
-    assertion.eq(DB.csv_lig.keywords['filename'], abspath(join(DB_PATH, 'ligand_database.csv')))
-    assertion.is_(DB.csv_lig.func, OpenLig)
-
-    assertion.eq(DB.csv_qd.keywords['filename'], abspath(join(DB_PATH, 'qd_database.csv')))
-    assertion.is_(DB.csv_qd.func, OpenQD)
 
     assertion.eq(DB.hdf5.args[0], abspath(join(DB_PATH, 'structures.hdf5')))
     assertion.is_(DB.hdf5.func, h5py.File)
@@ -57,19 +50,8 @@ def test_eq() -> None:
 
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
-    for name in ('dirname', 'csv_lig', 'csv_qd', 'hdf5'):
+    for name in ('dirname', 'hdf5'):
         assertion.contains(db_str, str(getattr(DB, name)), message=name)
-
-
-def test_parse_database() -> None:
-    """Test :meth:`dataCAT.Database._parse_database`."""
-    out1 = DB._parse_database('ligand')
-    out2 = DB._parse_database('qd')
-
-    assertion.is_(out1, DB.csv_lig)
-    assertion.is_(out2, DB.csv_qd)
-
-    assertion.assert_(DB._parse_database, 'bob', exception=ValueError)
 
 
 def test_hdf5_availability() -> None:
@@ -90,29 +72,6 @@ def test_from_hdf5() -> None:
     idx2 = np.arange(0, 2)
     mol_list2 = DB.from_hdf5(idx2, 'ligand', rdmol=False)
     for mol, ref in zip(mol_list2, ref_tup[0:2]):
-        assertion.eq(mol.get_formula(), ref)
-
-
-def test_from_csv() -> None:
-    """Test :meth:`dataCAT.Database.from_csv`."""
-    columns = pd.MultiIndex.from_tuples(
-        [('mol', ''), ('hdf5 index', ''), ('opt', '')]
-    )
-    idx = pd.MultiIndex.from_tuples(
-        [('C[O-]', 'O2'), ('CC[O-]', 'O3'), ('CCC[O-]', 'O4')]
-    )
-    df = pd.DataFrame(np.nan, index=idx, columns=columns)
-
-    df[MOL] = None
-    df[HDF5_INDEX] = np.arange(0, 3, dtype=int)
-    df[OPT] = True
-
-    out1 = DB.from_csv(df, 'ligand', get_mol=False)
-    assertion.is_(out1, None)
-
-    ref_tup = ('C1H3O1', 'C2H5O1', 'C3H7O1')
-    out2: pd.Series = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
-    for mol, ref in zip(out2, ref_tup):
         assertion.eq(mol.get_formula(), ref)
 
 
@@ -141,45 +100,6 @@ def test_update_hdf5() -> None:
     series3 = db.update_hdf5(df, database='ligand', overwrite=True)
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
     assertion.eq(series3, [], post_process=np.all)
-
-
-@delete_finally(DB_PATH_UPDATE)
-def test_update_csv() -> None:
-    """Test :meth:`~dataCAT.Database.update_csv`."""
-    shutil.copytree(DB_PATH, DB_PATH_UPDATE)
-    db = Database(DB_PATH_UPDATE)
-
-    mol_dict = {
-        ('CC(=O)[O-]', 'O4'): readpdb(str(PATH / 'CC[=O][O-]@O4.pdb')),
-        ('CCC(=O)[O-]', 'O5'): readpdb(str(PATH / 'CCC[=O][O-]@O5.pdb')),
-    }
-    df = pd.DataFrame({MOL: mol_dict})
-    df[HDF5_INDEX] = -1
-    df[OPT] = False
-    df[V_BULK] = np.arange(2, dtype=float)
-
-    db.update_csv(df, database='ligand', columns=[V_BULK])
-    with db.csv_lig(write=False) as df2:
-        np.testing.assert_allclose(df[V_BULK], df2.loc[df.index, V_BULK])
-
-    db.update_csv(df, database='ligand', columns=[V_BULK])
-    with db.csv_lig(write=False) as df2:
-        np.testing.assert_allclose(df[V_BULK], df2.loc[df.index, V_BULK])
-
-    df[V_BULK] *= 100
-    db.update_csv(df, database='ligand', columns=[V_BULK], overwrite=True)
-    with db.csv_lig(write=False) as df2:
-        np.testing.assert_allclose(df[V_BULK], df2.loc[df.index, V_BULK])
-
-    with db.hdf5('r') as f:
-        dset = f['ligand/properties/V_bulk']
-        idx = df[HDF5_INDEX].values
-        np.testing.assert_array_equal(dset[idx], df[V_BULK])
-
-        log = f['ligand/logger']
-        msg = b"datasets=['/ligand/properties/V_bulk']; overwrite=False"
-        assertion.eq(log['message'][3], msg)
-        np.testing.assert_array_equal(log['index'][3], idx)
 
 
 @delete_finally(DB_PATH_UPDATE)
@@ -217,8 +137,8 @@ def test_update_hdf5_settinga() -> None:
                 pass
 
 
-def test_update_mbongodb() -> None:
-    """Test :meth:`~dataCAT.Database.update_mbongodb`."""
+def test_update_mongodb() -> None:
+    """Test :meth:`~dataCAT.Database.update_mongodb`."""
     if DB.mongodb is None:
         warnings.warn("MongoDB server not found; skipping test", category=RuntimeWarning)
         return

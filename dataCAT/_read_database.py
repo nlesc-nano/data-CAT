@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Iterable, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, Optional
 
 import h5py
 import numpy as np
@@ -8,7 +8,7 @@ from scm.plams import Molecule
 from CAT.workflows import MOL, HDF5_INDEX, OPT
 
 from dataCAT import PDBContainer
-from dataCAT.functions import array_to_index, get_nan_row
+from dataCAT.functions import array_to_index
 from dataCAT.property_dset import _resize_prop_dset
 
 if TYPE_CHECKING:
