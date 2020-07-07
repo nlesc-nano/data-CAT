@@ -15,13 +15,12 @@ API
 
 import reprlib
 import textwrap
-import warnings
 from os import getcwd, PathLike
 from os.path import abspath
 from types import MappingProxyType
 from functools import partial
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping, FrozenSet,
+    Optional, Union, Any, Dict, TypeVar, Mapping, FrozenSet,
     overload, Tuple, Type, Iterable, ClassVar, TYPE_CHECKING
 )
 
@@ -31,14 +30,10 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
-from rdkit.Chem import Mol
-from scm.plams import Settings, Molecule, from_rdmol
-from nanoutils import TypedDict, Literal
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
-from .create_database import create_csv, create_hdf5, create_mongodb, Name, IDX_DTYPE
-from .context_managers import OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, hdf5_availability
+from .create_database import create_hdf5, create_mongodb, Name
+from .functions import df_to_mongo_dict, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
 from .property_dset import create_prop_dset, update_prop_dset
@@ -58,11 +53,8 @@ ST = TypeVar('ST', bound='Database')
 MIT = TypeVar('MIT', bound=pd.MultiIndex)
 
 
-class JobRecipe(TypedDict):
-    """A :class:`~typing.TypedDict` representing the input of :class:`.Database.update_yaml`."""
-
-    key: Union[str, type]
-    value: Union[str, Settings]
+def _filter(ar: ArrayLike) -> np.ndarray:
+    return ~np.asarray(ar, dtype=bool)
 
 
 class Database:
@@ -304,6 +296,7 @@ class Database:
         :rtype: :data:`None`
 
         """
+        # import pdb; pdb.set_trace()
         df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
         if len(getattr(df_columns, 'levels', ())) != 2:
             raise ValueError('Expected a 2-level MultiIndex')
@@ -315,7 +308,8 @@ class Database:
         with self.hdf5('r+') as f:
             # Update molecules
             grp = f[name]
-            self.update_hdf5(df, df_bool, grp, overwrite=overwrite, status=status)
+            if MOL in df_columns:
+                self.update_hdf5(df, df_bool, grp, overwrite=overwrite, status=status)
 
             # Update properties
             prop_grp = grp['properties']
@@ -329,7 +323,7 @@ class Database:
     def _update_properties(cls, group: h5py.Group, df: pd.DataFrame, df_bool: pd.DataFrame,
                            columns: pd.MultiIndex, overwrite: bool = False) -> None:
         # Identify the property-containing columns
-        lvl0 = set(df.levels[0]).difference(cls.PORPERTY_BLACKLIST)
+        lvl0 = set(columns.levels[0]).difference(cls.PORPERTY_BLACKLIST)
         column_iterator = ((k, columns.get_loc_level(k)[1]) for k in lvl0)
 
         parent = group.parent
@@ -349,7 +343,6 @@ class Database:
 
             # Update the dataset
             update_prop_dset(dset, data, hdf5_index)
-            del df[n]
 
             # Add an entry to the logger
             message = f'datasets={[dset.name]!r}; overwrite={overwrite!r}'
@@ -391,10 +384,10 @@ class Database:
         """
         # Identify new and preexisting entries
         if status == 'optimized':
-            index = df_bool[HDF5_INDEX]
+            index = df_bool[OPT]
             is_opt = True
         else:
-            index = df_bool[OPT]
+            index = df_bool[MOL]
             is_opt = False
 
         new = df.loc[index, HDF5_INDEX]
@@ -464,7 +457,7 @@ class Database:
     def to_df(self, df: pd.DataFrame, name: Name, *prop_names: str,
               read_mol: bool = True) -> pd.DataFrame:
         ...
-    def to_df(self, arg, name, *args, read_mol=True):
+    def to_df(self, arg, name, *prop_names, read_mol=True):
         r"""Construct or update a dataframe with the specified data.
 
         Parameters
@@ -512,15 +505,17 @@ class Database:
                 mol_list = None
 
             # Construct the new dataframe
-            df_new, df_bool = df_from_hdf5(
+            df_new = df_from_hdf5(
                 mol_group, index, *prop_dsets, mol_list=mol_list, read_mol=read_mol
             )
+            df_bool = pd.DataFrame(index=df_new.index, columns=df_new.columns, dtype=bool)
+            df_bool[:] = ~df_new.values.astype(bool)
 
             # Define the to-be returned DataFrame
             if df is None:
                 ret = df_new
             else:
-                df.update(df_new)
+                df.update(df_new, filter_func=_filter)
                 ret = df
 
             # Sort the index and return

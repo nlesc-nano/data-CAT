@@ -42,7 +42,7 @@ from .dtype import (
 
 __all__ = ['create_csv', 'create_hdf5', 'create_mongodb']
 
-Name = Literal['ligand', 'ligand_no_opt', 'qd', 'qd_no_opt']
+Name = Literal['ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', 'core', 'core_no_opt']
 
 
 def create_csv(path: Union[str, PathLike], database: Name) -> str:
@@ -200,7 +200,7 @@ def create_hdf5(path, name='structures.hdf5'):  # noqa: E302
             if grp_name not in f:
                 idx_grp = scale_dict.get(grp_name)
                 if idx_grp is not None:
-                    scale = f[f'{idx_grp}/{PDBContainer.SCALE_NAME}']
+                    scale = f[f'{idx_grp}/{PDBContainer.DSET_NAMES["scale"]}']
                     group = PDBContainer.create_hdf5_group(f, grp_name, scale=scale, **kwargs)
                 else:
                     dtype = IDX_DTYPE[grp_name]
@@ -264,7 +264,7 @@ def _update_property_dsets(group: h5py.Group, name: str) -> None:
         return None
     elif name in OPT_MAPPING.keys():
         opt_name = OPT_MAPPING[name]
-        group['properties'] = h5py.SoftLink(f'{opt_name}/properties')
+        group['properties'] = h5py.SoftLink(f'/{opt_name}/properties')
         return None
 
     scale = group['index']

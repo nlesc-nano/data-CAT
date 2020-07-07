@@ -5,7 +5,7 @@ import numpy as np
 import pandas as pd
 
 from scm.plams import Molecule
-from CAT.workflows import MOL, HDF5_INDEX
+from CAT.workflows import MOL, HDF5_INDEX, OPT
 
 from dataCAT import PDBContainer
 from dataCAT.functions import array_to_index, get_nan_row
@@ -19,7 +19,7 @@ else:
 
 def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Dataset,
                  mol_list: Optional[Iterable[Molecule]] = None,
-                 read_mol: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
+                 read_mol: bool = True) -> pd.DataFrame:
     r"""Construct a DataFrame.
 
     Parameters
@@ -43,45 +43,49 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
         The DataFrame's index is an intersection of **index** and :code:`mol_group['index']`.
 
     """
+    mol_array = np.array(mol_list, dtype=object)
+
     # Parse the passed index
     dim0_scale = mol_group['index']
     dim0_name = dim0_scale.name.rsplit('/', 1)[-1]
-    index_ = np.asarray(index, dtype=dim0_scale.dtype)
+    dtype = dim0_scale.dtype
+    index_ = np.asarray(index, dtype=dtype)
 
     # Find the intersection between the passed index and the scale
-    intersect, i, j = np.intersect1d(dim0_scale[:], index_, assume_unique=True, return_indices=True)
+    dim0 = np.asarray([dim0_scale[i] for i in dtype.fields.keys()], dtype=str).astype(dtype)
+    intersect, i, j = np.intersect1d(dim0, index_, assume_unique=True, return_indices=True)
     i.sort()
 
     # Construct a DataFrame
     multi_index = array_to_index(intersect, name=dim0_name)
-    columns = pd.Index([MOL, HDF5_INDEX])
+    columns = pd.Index([MOL, HDF5_INDEX, OPT]) if read_mol else pd.MultiIndex([(), ()], [(), ()])
     df = pd.DataFrame(index=multi_index, columns=columns, dtype=object)
 
     # Fill the DataFrame
     if read_mol:
         pdb = PDBContainer.from_hdf5(mol_group, i)
-        df[MOL] = pdb.to_molecules(mol=mol_list)
-    df[HDF5_INDEX] = i
+        df[MOL] = pdb.to_molecules(mol=mol_array)
+        df[HDF5_INDEX] = i
+        df[OPT] = False
+        df.loc[pdb.atoms.view(bool).any(axis=1), OPT] = True
+
+        if not df[OPT].all():
+            mol_group2 = mol_group.file[mol_group.name.rstrip('/') + '_no_opt']
+            j = i[~df[OPT].values]
+            pdb2 = PDBContainer.from_hdf5(mol_group2, j)
+            df.loc[j, MOL] = pdb2.to_molecules(mol=mol_array[j])
 
     # Fill the DataFrame with other optional properties
     _insert_properties(df, prop_dset, i)
 
     # Append empty rows
     if len(j) == len(index_):
-        ret = df
+        return df
     else:
-        ret = _append_rows(df, index_, j)
-
-    df_bool = pd.DataFrame({name: series.astype(bool) for name, series in df.items()})
-    del df_bool[HDF5_INDEX]
-    return ret, df_bool
+        return _append_rows(df, index_, j, len(dim0_scale))
 
 
-def get_bool_df(df: pd.DataFrame) -> pd.DataFrame:
-    return df.astype(bool)
-
-
-def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: np.ndarray) -> None:
+def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.Dataset], i: np.ndarray) -> None:
     """Add columns to **df** for the various properties in **prop_dset**."""
     for dset in prop_dset:
         _resize_prop_dset(dset)
@@ -103,7 +107,8 @@ def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.DataSat], i: n
         df[columns] = df_tmp
 
 
-def _append_rows(df: pd.DataFrame, index: np.ndarray, j: np.ndarray) -> pd.DataFrame:
+def _append_rows(df: pd.DataFrame, index: np.ndarray, j: np.ndarray,
+                 idx_start: int = 0) -> pd.DataFrame:
     """Append **df** with all (previously missing) indices from **index**."""
     # Invert the indices in `j`
     bool_ar = np.ones_like(index, dtype=bool)
@@ -111,9 +116,10 @@ def _append_rows(df: pd.DataFrame, index: np.ndarray, j: np.ndarray) -> pd.DataF
     multi_index2 = array_to_index(index[bool_ar], name=df.index.name)
 
     # Construct the to-be appended dataframe
-    data_list = get_nan_row(df)
     df_append = pd.DataFrame(index=multi_index2)
-    for k, data in zip(df.columns, data_list):
-        df_append[k] = data
+    for name, series in df.items():
+        df_append[name] = np.zeros(1, dtype=series.dtype).take(0)
 
+    if HDF5_INDEX in df_append:
+        df_append[HDF5_INDEX] = np.arange(idx_start, idx_start + len(df_append))
     return df.append(df_append)
