@@ -866,10 +866,10 @@ class PDBContainer:
 
         # Construct the to-be returned (padded) arrays
         DTYPE = cls.DTYPE
-        atom_array = np.rec.array(None, shape=atom_shape, dtype=DTYPE['atoms'])
-        bond_array = np.rec.array(None, shape=bond_shape, dtype=DTYPE['bonds'])
-        atom_counter = np.empty(mol_count, dtype=DTYPE['atom_count'])
-        bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
+        atom_array = np.zeros(atom_shape, dtype=DTYPE['atoms']).view(np.recarray)
+        bond_array = np.zeros(bond_shape, dtype=DTYPE['bonds']).view(np.recarray)
+        atom_counter = np.zeros(mol_count, dtype=DTYPE['atom_count'])
+        bond_counter = np.zeros(mol_count, dtype=DTYPE['bond_count'])
 
         # Fill the to-be returned arrays
         for i, mol in enumerate(mol_list):
@@ -1029,7 +1029,7 @@ class PDBContainer:
         \**kwargs : :data:`~typing.Any`
             Further keyword arguments for the creation of each dataset.
             Arguments already specified by default are:
-            ``name``, ``shape``, ``maxshape`` and ``dtype``.
+            ``name``, ``shape``, ``maxshape``, ``dtype`` and ``fillvalue``.
 
         Returns
         -------
@@ -1052,22 +1052,25 @@ class PDBContainer:
         N = cls.DSET_NAMES
         key_iter = (k for k in cls.keys() if k != 'scale')
         for key in key_iter:
-            maxshape = NDIM[key] * (None,)
+            name = N[key]
             shape = NDIM[key] * (0,)
+            maxshape = NDIM[key] * (None,)
             dtype = DTYPE[key]
-            name = n[key]
+            fill_value = np.zeros(1, dtype=dtype).take(0)
 
-            dset = grp.create_dataset(name, shape=shape, maxshape=maxshape, dtype=dtype, **kwargs)
+            dset = grp.create_dataset(name, shape=shape, maxshape=maxshape, dtype=dtype,
+                                      fillvalue=fill_value, **kwargs)
             dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.{key}`.")
 
         # Set the index
         scale_name = N['scale']
         if scale is not None:  # Create a soft-link
             scale_dset = scale
-            file[scale_name] = h5py.SoftLink(scale.name)
+            grp[scale_name] = h5py.SoftLink(scale.name)
         else:
-            _dtype = scale_dtype if scale_dtype is not None else cls.DTYPE['scale']
-            scale_dset = grp.create_dataset(scale_name, shape=(0,), maxshape=(None,), dtype=_dtype)
+            _scale_dtype = scale_dtype if scale_dtype is not None else cls.DTYPE['scale']
+            scale_dset = grp.create_dataset(scale_name, shape=(0,), maxshape=(None,),
+                                            dtype=_scale_dtype)
             scale_dset.make_scale(scale_name)
 
         # Use the index as a scale
@@ -1076,8 +1079,8 @@ class PDBContainer:
             dset.dims[0].label = scale_name
             dset.dims[0].attach_scale(scale_dset)
 
-        grp[N['atoms']].dims[1].label = 'atoms'
-        grp[N['bonds']].dims[1].label = 'bonds'
+        grp[N['atoms']].dims[1].label = N['atoms']
+        grp[N['bonds']].dims[1].label = N['bonds']
         return grp
 
     @classmethod
