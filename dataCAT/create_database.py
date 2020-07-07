@@ -4,13 +4,11 @@ Index
 -----
 .. currentmodule:: dataCAT.create_database
 .. autosummary::
-    create_csv
     create_hdf5
     create_mongodb
 
 API
 ---
-.. autofunction:: create_csv
 .. autofunction:: create_hdf5
 .. autofunction:: create_mongodb
 
@@ -40,92 +38,9 @@ from .dtype import (
     LIG_COUNT_DTYPE, VERSION_DTYPE, SETTINGS_DTYPE
 )
 
-__all__ = ['create_csv', 'create_hdf5', 'create_mongodb']
+__all__ = ['create_hdf5', 'create_mongodb']
 
 Name = Literal['ligand', 'ligand_no_opt', 'qd', 'qd_no_opt', 'core', 'core_no_opt']
-
-
-def create_csv(path: Union[str, PathLike], database: Name) -> str:
-    """Create a ligand or qd database (csv format) if it does not yet exist.
-
-    Parameters
-    ----------
-    path : str
-        The path (without filename) of the database.
-
-    database : |str|_
-        The type of database, accepted values are ``"ligand"`` and ``"qd"``.
-
-    Returns
-    -------
-    |str|_
-        The absolute path to the ligand or qd database.
-
-    """
-    filename = join(path, f'{database}_database.csv')
-
-    # Check if the database exists and has the proper keys; create it if it does not
-    if not isfile(filename):
-        if database == 'ligand':
-            _create_csv_lig(filename)
-        elif database == 'qd':
-            _create_csv_qd(filename)
-        else:
-            raise ValueError(f"{database!r} is not an accepated value for the 'database' argument")
-        logger.info(f'{database}_database.csv not found in {path}, creating {database} database')
-    return filename
-
-
-def _create_csv_lig(filename: PathType) -> None:
-    """Create a ligand database and and return its absolute path.
-
-    Parameters
-    ----------
-    path : str
-        The path+filename of the ligand database.
-
-    """
-    idx = pd.MultiIndex.from_tuples([('-', '-')], names=['smiles', 'anchor'])
-
-    columns = pd.MultiIndex.from_tuples(
-        [('hdf5 index', ''), ('formula', ''), ('opt', ''), ('settings', 1)],
-        names=['index', 'sub index']
-    )
-
-    df = pd.DataFrame(None, index=idx, columns=columns)
-    df['hdf5 index'] = -1
-    df['formula'] = 'str'
-    df['settings'] = 'str'
-    df['opt'] = False
-    df.to_csv(filename)
-
-
-def _create_csv_qd(filename: PathType) -> None:
-    """Create a qd database and and return its absolute path.
-
-    Parameters
-    ----------
-    path : str
-        The path+filename of the qd database.
-
-    """
-    idx = pd.MultiIndex.from_tuples(
-        [('-', '-', '-', '-')],
-        names=['core', 'core anchor', 'ligand smiles', 'ligand anchor']
-    )
-
-    columns = pd.MultiIndex.from_tuples(
-        [('hdf5 index', ''), ('ligand count', ''), ('opt', ''), ('settings', 1), ('settings', 2)],
-        names=['index', 'sub index']
-    )
-
-    df = pd.DataFrame(None, index=idx, columns=columns)
-    df['hdf5 index'] = -1
-    df['ligand count'] = -1
-    df['settings'] = 'str'
-    df['opt'] = False
-    df.to_csv(filename)
-
 
 IDX_DTYPE: Mapping[str, np.dtype] = MappingProxyType({
     'core': BACKUP_IDX_DTYPE,
@@ -136,7 +51,6 @@ IDX_DTYPE: Mapping[str, np.dtype] = MappingProxyType({
     'qd_no_opt': QD_IDX_DTYPE
 })
 
-
 DEFAULT_PROPERTIES: Mapping[str, Optional[Tuple[str, np.dtype]]] = MappingProxyType({
     'core': None,
     'core_no_opt': None,
@@ -145,7 +59,6 @@ DEFAULT_PROPERTIES: Mapping[str, Optional[Tuple[str, np.dtype]]] = MappingProxyT
     'qd': ('ligand count', LIG_COUNT_DTYPE),
     'qd_no_opt': None
 })
-
 
 OPT_MAPPING: Mapping[str, str] = MappingProxyType({
     'core_no_opt': 'core',
