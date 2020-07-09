@@ -1055,8 +1055,13 @@ class PDBContainer:
         N = cls.DSET_NAMES
         key_iter = (k for k in cls.keys() if k != 'scale')
         for key in key_iter:
+            # Fancy indexing can act weirdly in h5py when one of the axes is of size 0;
+            # set the size of the last axis to 1 (for >1d datasets) to circumvent this
+            if NDIM[key] == 1:
+                shape = (0,)
+            else:
+                shape = (0,) * (NDIM[key] - 1) + (1,)
             name = N[key]
-            shape = NDIM[key] * (0,)
             maxshape = NDIM[key] * (None,)
             dtype = DTYPE[key]
             fill_value = np.zeros(1, dtype=dtype).take(0)

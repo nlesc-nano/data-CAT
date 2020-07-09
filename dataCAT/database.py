@@ -223,6 +223,8 @@ class Database:
         :rtype: :data:`None`
 
         """
+        raise NotImplementedError
+
         if self.mongodb is None:
             raise ValueError('Database.Mongodb is None')
 
@@ -268,7 +270,7 @@ class Database:
                     filter_ = {i: item[i] for i in idx_keys}
                     collection.replace_one(filter_, item)
 
-    def from_df(self, df: pd.DataFrame, df_bool: Optional[pd.DataFrame], name: Name,
+    def from_df(self, df: pd.DataFrame, df_bool: pd.DataFrame, name: Name,
                 columns: Optional[ArrayLike] = None,
                 overwrite: bool = False,
                 status: Optional[str] = None,
@@ -298,10 +300,7 @@ class Database:
         """
         df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
         if len(getattr(df_columns, 'levels', ())) != 2:
-            raise ValueError('Expected a 2-level MultiIndex')
-
-        if df_bool is None:
-            df_bool = {}
+            raise ValueError("'columns' expected a 2-level MultiIndex")
 
         self.hdf5_availability()
         with self.hdf5('r+') as f:
@@ -315,7 +314,7 @@ class Database:
             self._update_properties(prop_grp, df, df_bool, df_columns, overwrite=overwrite)
 
             # Update the job settings
-            settings = (i for i, _ in df_columns if 'settings' == i)
+            settings = (j for i, j in df_columns if i == 'settings')
             self._update_job_settings(f, df, settings)
 
     @classmethod
@@ -353,7 +352,7 @@ class Database:
         while column_set:
             name = column_set.pop()
             _update_hdf5_settings(f, df, name)
-            del df[name]
+            del df['settings', name]
 
     def update_hdf5(self, df: pd.DataFrame, df_bool: pd.DataFrame,
                     group: h5py.Group,

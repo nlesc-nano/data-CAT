@@ -94,8 +94,6 @@ def _set_min_size(group: h5py.Group, *names: str) -> None:
         dset = group[n]
         if len(dset) < i:
             dset.resize(i, axis=0)
-        if dset.ndim == 2 and not dset.shape[1]:
-            dset.resize(1, axis=1)
 
 
 def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.Dataset], i: np.ndarray) -> None:
