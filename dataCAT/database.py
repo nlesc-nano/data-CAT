@@ -391,11 +391,11 @@ class Database:
         new = df.loc[index, HDF5_INDEX]
         old = df.loc[~index, HDF5_INDEX]
 
-        if new.any():
+        if new.size:
             self._write_hdf5(group, df, new, opt=is_opt)
 
         # If **overwrite** is *True*
-        if overwrite and old.any():
+        if overwrite and old.size:
             self._overwrite_hdf5(group, df, old, opt=is_opt)
 
     @classmethod
@@ -406,13 +406,11 @@ class Database:
         hdf5_index = hdf5_series.values
         mol_series = df.loc[index, MOL]
 
-        update_scale = not opt if not overwrite else False
-
         # Export the molecules to the .hdf5 file
         dtype: np.dtype = group['index'].dtype
         scale: np.ndarray = index.values.astype(dtype, copy=False)
         pdb_new = PDBContainer.from_molecules(mol_series, scale=scale)
-        pdb_new.to_hdf5(group, index=hdf5_index, update_scale=update_scale)
+        pdb_new.to_hdf5(group, index=hdf5_index, update_scale=not opt)
 
         # Post a message in the logger
         names = PDBContainer.DSET_NAMES.values()
