@@ -249,9 +249,12 @@ class PDBContainer:
 
     * Molecule-interconversion: :meth:`~PDBContainer.to_molecules` &
       :meth:`~PDBContainer.from_molecules`.
-    * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
+    * Hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
       :meth:`~PDBContainer.validate_hdf5`,
       :meth:`~PDBContainer.to_hdf5` & :meth:`~PDBContainer.from_hdf5`.
+    * Set operatorations: :meth:`~PDBContainer.intersection`,
+      :meth:`~PDBContainer.difference`, :meth:`~PDBContainer.symmetric_difference` &
+      :meth:`~PDBContainer.union`.
     * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
       :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
       :meth:`~PDBContainer.__len__`.
@@ -1166,7 +1169,7 @@ class PDBContainer:
             except (AttributeError, TypeError):
                 if not isinstance(index, slice):
                     idx = np.asarray(index)
-                    idx_max = idx.max()
+                    idx_max = idx.max() + 1
                     assert idx.ndim == 1
                     assert issubclass(idx.dtype.type, np.integer)
                 else:
