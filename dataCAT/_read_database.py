@@ -43,7 +43,7 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
         The DataFrame's index is an intersection of **index** and :code:`mol_group['index']`.
 
     """
-    mol_array = np.array(mol_list, dtype=object)
+    mol_array = np.array(mol_list, dtype=object) if mol_list is not None else None
 
     # Parse the passed index
     dim0_scale = mol_group['index']
