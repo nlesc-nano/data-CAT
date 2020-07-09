@@ -52,7 +52,8 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
     index_ = np.asarray(index, dtype=dtype)
 
     # Find the intersection between the passed index and the scale
-    dim0 = np.asarray([dim0_scale[i] for i in dtype.fields.keys()], dtype=str).astype(dtype)
+    _dim0 = np.asarray([dim0_scale[i] for i in dtype.fields.keys()])
+    dim0 = np.rec.fromarrays(_dim0.astype(str), dtype=dtype)
     intersect, i, j = np.intersect1d(dim0, index_, assume_unique=True, return_indices=True)
     i.sort()
 
@@ -63,6 +64,7 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
 
     # Fill the DataFrame
     if read_mol:
+        _set_min_size(mol_group, *PDBContainer.DSET_NAMES.values())
         pdb = PDBContainer.from_hdf5(mol_group, i)
         df[MOL] = pdb.to_molecules(mol=mol_array)
         df[HDF5_INDEX] = i
@@ -73,7 +75,7 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
             mol_group2 = mol_group.file[mol_group.name.rstrip('/') + '_no_opt']
             j = i[~df[OPT].values]
             pdb2 = PDBContainer.from_hdf5(mol_group2, j)
-            df.loc[j, MOL] = pdb2.to_molecules(mol=mol_array[j])
+            df.loc[~df[OPT], MOL] = pdb2.to_molecules(mol=mol_array[j])
 
     # Fill the DataFrame with other optional properties
     _insert_properties(df, prop_dset, i)
@@ -85,15 +87,28 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
         return _append_rows(df, index_, j, len(dim0_scale))
 
 
+def _set_min_size(group: h5py.Group, *names: str) -> None:
+    scale = group['index']
+    i = len(scale)
+    for n in names:
+        dset = group[n]
+        if len(dset) < i:
+            dset.resize(i, axis=0)
+        if dset.ndim == 2 and not dset.shape[1]:
+            dset.resize(1, axis=1)
+
+
 def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.Dataset], i: np.ndarray) -> None:
     """Add columns to **df** for the various properties in **prop_dset**."""
     for dset in prop_dset:
         _resize_prop_dset(dset)
         name = dset.name.rsplit('/', 1)[-1]
 
+        data = dset[i].astype(str) if h5py.check_string_dtype(dset.dtype) else dset[i]
+
         # It's not a 2D Dataset
         if dset.ndim == 1:
-            df[(name, '')] = dset[i]
+            df[(name, '')] = data
             continue
 
         # Construct the new columns
@@ -102,7 +117,6 @@ def _insert_properties(df: pd.DataFrame, prop_dset: Iterable[h5py.Dataset], i: n
         columns = pd.MultiIndex.from_product([[name], dim1])
 
         # Update **df**
-        data = dset[i].astype(str) if h5py.check_string_dtype(dset.dtype) else dset[i]
         df_tmp = pd.DataFrame(data, index=df.index, columns=columns)
         df[columns] = df_tmp
 

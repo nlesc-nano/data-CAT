@@ -296,7 +296,6 @@ class Database:
         :rtype: :data:`None`
 
         """
-        # import pdb; pdb.set_trace()
         df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
         if len(getattr(df_columns, 'levels', ())) != 2:
             raise ValueError('Expected a 2-level MultiIndex')
@@ -394,54 +393,31 @@ class Database:
         old = df.loc[~index, HDF5_INDEX]
 
         if new.any():
-            self._write_hdf5(group, df, new.index, opt=is_opt)
+            self._write_hdf5(group, df, new, opt=is_opt)
 
         # If **overwrite** is *True*
         if overwrite and old.any():
             self._overwrite_hdf5(group, df, old, opt=is_opt)
 
     @classmethod
-    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, index: pd.Index,
-                    opt: bool = False) -> pd.Index:
+    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, hdf5_series: pd.Series,
+                    opt: bool = False, overwrite: bool = False) -> pd.Index:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
+        index = hdf5_series.index
+        hdf5_index = hdf5_series.values
         mol_series = df.loc[index, MOL]
 
-        # Update the HDF5_INDEX
-        i = len(group['atoms'])
-        j = i + len(mol_series)
-        hdf5_index = np.arange(i, j)
-        df.loc[index, HDF5_INDEX] = hdf5_index
+        update_scale = not opt if not overwrite else False
 
         # Export the molecules to the .hdf5 file
         dtype: np.dtype = group['index'].dtype
         scale: np.ndarray = index.values.astype(dtype, copy=False)
         pdb_new = PDBContainer.from_molecules(mol_series, scale=scale)
-        pdb_new.to_hdf5(group, index=np.s_[i:j], update_scale=not opt)
+        pdb_new.to_hdf5(group, index=hdf5_index, update_scale=update_scale)
 
         # Post a message in the logger
         names = PDBContainer.DSET_NAMES.values()
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
-        update_hdf5_log(group['logger'], index=hdf5_index, message=message)
-
-        if opt:
-            df.loc[index, OPT] = True
-
-    @staticmethod
-    def _overwrite_hdf5(group: h5py.Group, df: pd.DataFrame, hdf5_series: pd.Series,
-                        opt: bool = False) -> None:
-        """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
-        index = hdf5_series.index
-        hdf5_index = hdf5_series.values
-        mol_series = df.loc[index, MOL]
-
-        dtype: np.dtype = group['index'].dtype
-        scale: np.ndarray = mol_series.index.values.astype(dtype)
-        pdb_old = PDBContainer.from_molecules(mol_series, scale=scale)
-        pdb_old.to_hdf5(group, index=hdf5_index)
-
-        # Update the logger
-        names = PDBContainer.DSET_NAMES.values()
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite={overwrite}"
         update_hdf5_log(group['logger'], index=hdf5_index, message=message)
 
         if opt:
@@ -485,7 +461,7 @@ class Database:
 
         """
         # Update the *hdf5 index* column in **df**
-        with self.hdf5('r') as f:
+        with self.hdf5('r+') as f:
             # Prepare the group and datasets
             mol_group = f[name]
             try:
