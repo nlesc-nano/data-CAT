@@ -75,7 +75,10 @@ def df_from_hdf5(mol_group: h5py.Group, index: ArrayLike, *prop_dset: h5py.Datas
             mol_group2 = mol_group.file[mol_group.name.rstrip('/') + '_no_opt']
             j = i[~df[OPT].values]
             pdb2 = PDBContainer.from_hdf5(mol_group2, j)
-            df.loc[~df[OPT], MOL] = pdb2.to_molecules(mol=mol_array[j])
+            if len(df) == 1:
+                df.at[df.index[0], MOL] = pdb2.to_molecules(mol=mol_array[j])[0]
+            else:
+                df.loc[~df[OPT], MOL] = pdb2.to_molecules(mol=mol_array[j])
 
     # Fill the DataFrame with other optional properties
     _insert_properties(df, prop_dset, i)

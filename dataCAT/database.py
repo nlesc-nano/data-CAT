@@ -233,7 +233,7 @@ class Database:
         mongo_db = client.cat_database
 
         if callable(getattr(database, 'items', None)):
-            database, db = next(iter(database.items()))  # type: ignore
+            database, db = next(iter(database.items()))
             dict_gen = df_to_mongo_dict(db)
             idx_keys = db.index.names
             collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
@@ -298,7 +298,10 @@ class Database:
         :rtype: :data:`None`
 
         """
-        df_columns: pd.MultiIndex = df.columns if columns is None else pd.Index(columns)
+        if isinstance(columns, pd.MultiIndex):
+            df_columns: pd.MultiIndex = columns
+        else:
+            df_columns = df.columns if columns is None else pd.Index(columns)
         if len(getattr(df_columns, 'levels', ())) != 2:
             raise ValueError("'columns' expected a 2-level MultiIndex")
 
@@ -326,8 +329,9 @@ class Database:
 
         parent = group.parent
         for n, name_seq in column_iterator:
-            # Define slices
-            index = df_bool.get(n, slice(None)) if not overwrite else slice(None)
+            index = df_bool[n]
+            if isinstance(index, pd.DataFrame):
+                index = index.any(axis=1)
             data = df.loc[index, n].values
             hdf5_index = df.loc[index, HDF5_INDEX].values
 
@@ -392,11 +396,11 @@ class Database:
         old = df.loc[~index, HDF5_INDEX]
 
         if new.size:
-            self._write_hdf5(group, df, new, opt=is_opt)
+            self._write_hdf5(group, df, new, opt=is_opt, overwrite=False)
 
         # If **overwrite** is *True*
         if overwrite and old.size:
-            self._overwrite_hdf5(group, df, old, opt=is_opt)
+            self._write_hdf5(group, df, old, opt=is_opt, overwrite=True)
 
     @classmethod
     def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, hdf5_series: pd.Series,
@@ -461,10 +465,13 @@ class Database:
         with self.hdf5('r+') as f:
             # Prepare the group and datasets
             mol_group = f[name]
-            try:
-                prop_dsets = [mol_group[f'properties/{i}'] for i in prop_names]
-            except KeyError as ex:
-                raise ValueError(f"Unknown dataset: {ex}")
+
+            prop_dsets = []
+            for i in prop_names:
+                try:
+                    prop_dsets.append(mol_group[f'properties/{i}'])
+                except KeyError:
+                    pass
 
             # Parse **arg**
             dtype = mol_group['index'].dtype
@@ -483,6 +490,7 @@ class Database:
             )
             df_bool = pd.DataFrame(index=df_new.index, columns=df_new.columns, dtype=bool)
             df_bool[:] = ~df_new.values.astype(bool)
+            df_bool.columns.names = df.columns.names
 
             # Define the to-be returned DataFrame
             if df is None:
@@ -492,9 +500,11 @@ class Database:
                 ret = df
 
             # Sort the index and return
-            if HDF5_INDEX in ret.columns:
+            if HDF5_INDEX in df_bool.columns:
                 ret.sort_values([HDF5_INDEX], inplace=True)
+                df_bool[HDF5_INDEX] = ret[HDF5_INDEX]
                 df_bool.sort_values([HDF5_INDEX], inplace=True)
+                df_bool[HDF5_INDEX] = True
             return ret, df_bool
 
     def hdf5_availability(self, timeout: float = 5.0,
