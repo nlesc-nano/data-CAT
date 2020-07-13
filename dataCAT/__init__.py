@@ -18,7 +18,7 @@ except ImportError:
 else:
     if NANOCAT_VERSION < (0, 7, 0):
         _v = '.'.join(str(i) for i in NANOCAT_VERSION)
-        raise ValueError(f"{__name__} {__version__} requires dataCAT >= 0.7; observed version: {_v}")  # noqa: E501
+        raise ValueError(f"{__name__} {__version__} requires nanoCAT >= 0.7; observed version: {_v}")  # noqa: E501
 
 version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
 del VersionInfo
