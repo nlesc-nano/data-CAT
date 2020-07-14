@@ -1,3 +1,5 @@
+"""Helper module for constructing dataframes."""
+
 from typing import TYPE_CHECKING, Iterable, Optional
 
 import h5py

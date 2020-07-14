@@ -3,7 +3,6 @@
 from os.path import join
 
 import numpy as np
-import pandas as pd
 
 from rdkit import Chem
 from assertionlib import assertion

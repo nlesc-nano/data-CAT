@@ -430,11 +430,11 @@ class Database:
     def to_df(self, index: Optional[ArrayLike], name: Name, *properties: str,
               read_mol: bool = True) -> pd.DataFrame:
         ...
-    @overload
+    @overload  # noqa: E301
     def to_df(self, df: pd.DataFrame, name: Name, *prop_names: str,
               read_mol: bool = True) -> pd.DataFrame:
         ...
-    def to_df(self, arg, name, *prop_names, read_mol=True):
+    def to_df(self, arg, name, *prop_names, read_mol=True):  # noqa: E301
         r"""Construct or update a dataframe with the specified data.
 
         Parameters
