@@ -20,7 +20,7 @@ def _update_hdf5_settings(f: h5py.File, df: pd.DataFrame, column: str) -> None:
 
     # Create a 3D array of input files
     try:
-        job_ar = _read_inp(df[column], j, k)
+        job_ar = _read_inp(df['settings', column], j, k)
     except ValueError:  # df[column] consists of empty lists, abort
         return None
 
@@ -29,7 +29,7 @@ def _update_hdf5_settings(f: h5py.File, df: pd.DataFrame, column: str) -> None:
     f[column].shape = k, job_ar.shape[1], job_ar.shape[2]
 
     # Update the hdf5 dataset
-    idx = df[HDF5_INDEX].astype(int, copy=False)
+    idx = df[HDF5_INDEX]
     idx_argsort = np.argsort(idx)
     f[column][idx[idx_argsort]] = job_ar[idx_argsort]
 
@@ -54,7 +54,8 @@ def _get_line_count(filename: PathType) -> int:
     """Return the total number of lines in **filename**."""
     substract = 0
     with open(filename, 'r') as f:
-        for i, j in enumerate(f, 1):
-            if j == '\n':
+        iterator = (i.rstrip('\n') for i in f)
+        for i, j in enumerate(iterator, 1):
+            if not j:
                 substract += 1
     return i - substract

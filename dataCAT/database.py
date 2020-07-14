@@ -15,14 +15,13 @@ API
 
 import reprlib
 import textwrap
-import warnings
 from os import getcwd, PathLike
 from os.path import abspath
 from types import MappingProxyType
 from functools import partial
 from typing import (
-    Optional, Sequence, List, Union, Any, Dict, TypeVar, Mapping,
-    overload, Tuple, Type, Iterable, TYPE_CHECKING
+    Optional, Union, Any, Dict, TypeVar, Mapping, FrozenSet,
+    overload, Tuple, Type, Iterable, ClassVar, TYPE_CHECKING
 )
 
 import h5py
@@ -31,25 +30,21 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
 
-from rdkit.Chem import Mol
-from scm.plams import Settings, Molecule, from_rdmol
-from nanoutils import TypedDict
 from CAT.workflows import HDF5_INDEX, OPT, MOL
 
-from .create_database import create_csv, create_hdf5, create_mongodb, QD, Ligand, IDX_DTYPE
-from .context_managers import OpenLig, OpenQD
-from .functions import df_to_mongo_dict, even_index, hdf5_availability
+from .create_database import create_hdf5, create_mongodb, Name
+from .functions import df_to_mongo_dict, hdf5_availability
 from .pdb_array import PDBContainer
 from .hdf5_log import update_hdf5_log
 from .property_dset import create_prop_dset, update_prop_dset
 from ._parse_settings import _update_hdf5_settings
+from ._read_database import df_from_hdf5
 
 if TYPE_CHECKING:
-    from .df_proxy import DFProxy
-    from numpy.typing import DtypeLike
+    from numpy.typing import DtypeLike, ArrayLike
 else:
-    DFProxy = 'dataCAT.DFProxy'
     DtypeLike = 'numpy.typing.DtypeLike'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = ['Database']
 
@@ -58,32 +53,23 @@ ST = TypeVar('ST', bound='Database')
 MIT = TypeVar('MIT', bound=pd.MultiIndex)
 
 
-class JobRecipe(TypedDict):
-    """A :class:`~typing.TypedDict` representing the input of :class:`.Database.update_yaml`."""
-
-    key: Union[str, type]
-    value: Union[str, Settings]
+def _filter(ar: ArrayLike) -> np.ndarray:
+    return ~np.asarray(ar, dtype=bool)
 
 
 class Database:
     """The Database class."""
 
-    __slots__ = ('__weakref__', '_dirname', '_csv_lig', '_csv_qd', '_hdf5', '_mongodb', '_hash')
+    __slots__ = ('__weakref__', '_dirname', '_hdf5', '_mongodb', '_hash')
+
+    PORPERTY_BLACKLIST: ClassVar[FrozenSet[str]] = frozenset({
+        MOL[0], OPT[0], HDF5_INDEX[0], 'settings'
+    })
 
     @property
     def dirname(self) -> str:
         """Get the path+filename of the directory containing all database components."""
         return self._dirname
-
-    @property
-    def csv_lig(self) -> 'partial[OpenLig]':
-        """:data:`Callable[..., dataCAT.OpenLig]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenLig` context manager."""  # noqa: E501
-        return self._csv_lig
-
-    @property
-    def csv_qd(self) -> 'partial[OpenQD]':
-        """:data:`Callable[..., dataCAT.OpenQD]<typing.Callable>`: Get a function for constructing an :class:`dataCAT.OpenQD` context manager."""  # noqa: E501
-        return self._csv_qd
 
     @property
     def hdf5(self) -> 'partial[h5py.File]':
@@ -123,14 +109,8 @@ class Database:
         """  # noqa: E501
         self._dirname: str = abspath(path) if path is not None else getcwd()
 
-        # Create the database components and return the filename
-        lig_path = create_csv(self.dirname, database='ligand')
-        qd_path = create_csv(self.dirname, database='qd')
-        hdf5_path = create_hdf5(self.dirname)
-
         # Populate attributes with MetaManager instances
-        self._csv_lig = partial(OpenLig, filename=lig_path)
-        self._csv_qd = partial(OpenQD, filename=qd_path)
+        hdf5_path = create_hdf5(self.dirname)
         self._hdf5 = partial(h5py.File, hdf5_path, libver='latest')
 
         # Try to create or access the mongodb database
@@ -143,7 +123,7 @@ class Database:
 
     def __repr__(self) -> str:
         """Implement :class:`str(self)<str>` and :func:`repr(self)<repr>`."""
-        attr_tup = ('dirname', 'csv_lig', 'csv_qd', 'hdf5', 'mongodb')
+        attr_tup = ('dirname', 'hdf5', 'mongodb')
         attr_max = max(len(i) for i in attr_tup)
 
         iterator = ((name, getattr(self, name)) for name in attr_tup[:-1])
@@ -162,10 +142,12 @@ class Database:
         if not ret:
             return False
 
-        partial_names = ('csv_lig', 'csv_qd', 'hdf5')
-        iterator = ((getattr(self, name), getattr(value, name)) for name in partial_names)
-        return all(func1.args == func2.args and func1.keywords == func2.keywords and
-                   func1.func is func2.func for func1, func2 in iterator)
+        self_hdf5 = self.hdf5
+        value_hdf5 = value.hdf5
+
+        return (self_hdf5.args == value_hdf5.args and
+                self_hdf5.keywords == value_hdf5.keywords and
+                self_hdf5.func is value_hdf5.func)
 
     def __hash__(self) -> int:
         """Implement :func:`hash(self)<hash>`."""
@@ -205,20 +187,6 @@ class Database:
 
     """ #################################  Updating the database ############################## """
 
-    @overload
-    def _parse_database(self, database: Ligand) -> 'partial[OpenLig]':
-        ...
-    @overload  # noqa: E301
-    def _parse_database(self, database: QD) -> 'partial[OpenQD]':
-        ...
-    def _parse_database(self, database):  # noqa: E301
-        """Operate on either the ligand or quantum dot database."""
-        if database in {'ligand', 'ligand_no_opt'}:
-            return self.csv_lig
-        elif database in {'qd', 'qd_no_opt'}:
-            return self.csv_qd
-        raise ValueError(f"database={database!r}; accepted values for are 'ligand' and 'qd'")
-
     def update_mongodb(self, database: Union[str, Mapping[str, pd.DataFrame]] = 'ligand',
                        overwrite: bool = False) -> None:
         """Export ligand or qd results to the MongoDB database.
@@ -255,6 +223,8 @@ class Database:
         :rtype: :data:`None`
 
         """
+        raise NotImplementedError
+
         if self.mongodb is None:
             raise ValueError('Database.Mongodb is None')
 
@@ -263,7 +233,7 @@ class Database:
         mongo_db = client.cat_database
 
         if callable(getattr(database, 'items', None)):
-            database, db = next(iter(database.items()))  # type: ignore
+            database, db = next(iter(database.items()))
             dict_gen = df_to_mongo_dict(db)
             idx_keys = db.index.names
             collection = mongo_db.ligand_database if database == 'ligand' else mongo_db.qd_database
@@ -300,19 +270,18 @@ class Database:
                     filter_ = {i: item[i] for i in idx_keys}
                     collection.replace_one(filter_, item)
 
-    def update_csv(self, df: pd.DataFrame,
-                   database: Union[Ligand, QD] = 'ligand',
-                   columns: Optional[Sequence] = None,
-                   overwrite: bool = False,
-                   job_recipe: None = None,
-                   status: Optional[str] = None) -> None:
+    def from_df(self, df: pd.DataFrame, df_bool: pd.DataFrame, name: Name,
+                columns: Optional[ArrayLike] = None,
+                overwrite: bool = False,
+                status: Optional[str] = None,
+                ) -> None:
         """Update :attr:`Database.csv_lig` or :attr:`Database.csv_qd` with new settings.
 
         Parameters
         ----------
         df : :class:`pandas.DataFrame`
             A dataframe of new (potential) database entries.
-        database : :class:`str`
+        name : :class:`str`
             The type of database; accepted values are ``"ligand"`` (:attr:`Database.csv_lig`)
             and ``"qd"`` (:attr:`Database.csv_qd`).
         columns : :class:`~collections.abc.Sequence`, optional
@@ -329,98 +298,70 @@ class Database:
         :rtype: :data:`None`
 
         """
-        # Operate on either the ligand or quantum dot database
-        manager = self._parse_database(database)
+        if isinstance(columns, pd.MultiIndex):
+            df_columns: pd.MultiIndex = columns
+        else:
+            df_columns = df.columns if columns is None else pd.Index(columns)
+        if len(getattr(df_columns, 'levels', ())) != 2:
+            raise ValueError("'columns' expected a 2-level MultiIndex")
 
-        if job_recipe is not None:
-            warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
-
-        with manager(write=True) as db:
-            # Update **db.index**
-            df.sort_values(by=[HDF5_INDEX], inplace=True)
-            db.ndframe = even_index(db.ndframe, df)
-
-            # Filter columns
-            if columns is None:
-                df_columns = df.columns
-            else:
-                df_columns = pd.Index(columns)
-
-            # Remove columns with the (now deprecated) `settings` key
-            if isinstance(df_columns, pd.MultiIndex):
-                df_columns = pd.Index([(i, j) for i, j in df_columns if i != 'settings'])
-
-            # Update **db.columns**
-            bool_ar = df_columns.isin(db.columns)
-            df_columns = self._even_df_columns(df, db, df_columns, ~bool_ar)
-
-            # Update **self.hdf5**; returns a new series of indices
-            hdf5_series = self.update_hdf5(
-                df, database=database, overwrite=overwrite, status=status
-            )
-
-            # Update **db.values**
-            db.update(df[df_columns], overwrite=overwrite)
-            db.update(hdf5_series, overwrite=True)
-            df.update(hdf5_series, overwrite=True)
-            if status == 'optimized':
-                db.update(df[OPT], overwrite=True)
-
-        # Update the hdf5 file
+        self.hdf5_availability()
         with self.hdf5('r+') as f:
-            # Get the appropiate group
-            name = 'ligand' if manager == self.csv_lig else 'qd'
-            group = f[f'{name}/properties']
+            # Update molecules
+            grp = f[name]
+            if MOL in df_columns:
+                self.update_hdf5(df, df_bool, grp, overwrite=overwrite, status=status)
 
-            # Define the indices
-            index = slice(None) if overwrite else hdf5_series.index
-            hdf5_index = df[HDF5_INDEX].values if overwrite else hdf5_series.values
+            # Update properties
+            prop_grp = grp['properties']
+            self._update_properties(prop_grp, df, df_bool, df_columns, overwrite=overwrite)
 
-            # Define the properties
-            lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
-            dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
-            for n, name_seq in dct.items():
-                data = df.loc[index, n].values
+            # Update the job settings
+            settings = (j for i, j in df_columns if i == 'settings')
+            self._update_job_settings(f, df, settings)
 
-                # Get the dataset
-                try:
-                    dset = group[n]
-                except KeyError:
-                    if len(name_seq) == 1:
-                        name_seq = None
-                    dset = create_prop_dset(group, n, data.dtype, name_seq)
+    @classmethod
+    def _update_properties(cls, group: h5py.Group, df: pd.DataFrame, df_bool: pd.DataFrame,
+                           columns: pd.MultiIndex, overwrite: bool = False) -> None:
+        # Identify the property-containing columns
+        lvl0 = set(columns.levels[0]).difference(cls.PORPERTY_BLACKLIST)
+        column_iterator = ((k, columns.get_loc_level(k)[1]) for k in lvl0)
 
-                # Update the dataset
-                update_prop_dset(dset, data, hdf5_index)
+        parent = group.parent
+        for n, name_seq in column_iterator:
+            index = df_bool[n]
+            if isinstance(index, pd.DataFrame):
+                index = index.any(axis=1)
+            data = df.loc[index, n].values
+            hdf5_index = df.loc[index, HDF5_INDEX].values
+
+            # Get (or set) the dataset
+            try:
+                dset = group[n]
+            except KeyError:
+                if len(name_seq) == 1:
+                    name_seq = None
+                dset = create_prop_dset(group, n, data.dtype, name_seq)
+
+            # Update the dataset
+            update_prop_dset(dset, data, hdf5_index)
 
             # Add an entry to the logger
-            names = [group[k].name for k in dct]
-            message = f'datasets={names!r}; overwrite={overwrite!r}'
-            update_hdf5_log(f[f'{name}/logger'], hdf5_index, message=message)
+            message = f'datasets={[dset.name]!r}; overwrite={overwrite!r}'
+            update_hdf5_log(parent['logger'], hdf5_index, message=message)
 
-    def _even_df_columns(self, df: pd.DataFrame, db: DFProxy,
-                         columns: MIT, subset: np.ndarray) -> MIT:
+    def _update_job_settings(self, f: h5py.File, df: pd.DataFrame, columns: Iterable[str]) -> None:
         """Even the columns of **df** and **db**."""
-        drop_idx = []
-        for i in columns[subset]:
-            # Check for job settings
-            if 'job_settings' in i[0]:
-                self._update_hdf5_settings(df, i[0])
-                del df[i]
-                drop_idx.append(i)
-                continue
+        column_set = set(columns)
+        while column_set:
+            name = column_set.pop()
+            _update_hdf5_settings(f, df, name)
+            del df['settings', name]
 
-            # Ensure that **db** has the same keys as **df**
-            try:
-                db[i] = np.array((None), dtype=df[i].dtype)
-            except TypeError:  # e.g. if csv[i] consists of the datatype np.int64
-                db[i] = -1
-        return columns.drop(drop_idx)  # type: ignore
-
-    def update_hdf5(self, df: pd.DataFrame,
-                    database: Union[Ligand, QD] = 'ligand',
+    def update_hdf5(self, df: pd.DataFrame, df_bool: pd.DataFrame,
+                    group: h5py.Group,
                     overwrite: bool = False,
-                    status: Optional[str] = None) -> pd.Series:
+                    status: Optional[str] = None) -> None:
         """Export molecules (see the ``"mol"`` column in **df**) to the structure database.
 
         Returns a series with the :attr:`Database.hdf5` indices of all new entries.
@@ -445,198 +386,126 @@ class Database:
         """
         # Identify new and preexisting entries
         if status == 'optimized':
-            new = df[HDF5_INDEX][df[OPT] == False] & ~df[MOL].isnull()  # noqa
-            old = df[HDF5_INDEX][df[OPT] == True]  # noqa
-            opt = True
+            index = df_bool[OPT]
+            is_opt = True
         else:
-            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1] & ~df[MOL].isnull()
-            old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
-            opt = False
+            index = df_bool[MOL]
+            is_opt = False
 
-        # Add new entries to the database
-        self.hdf5_availability()
-        with self.hdf5('r+') as f:
-            group = f[database]
-            dtype = IDX_DTYPE[database]
+        new = df.loc[index, HDF5_INDEX]
+        old = df.loc[~index, HDF5_INDEX]
 
-            if new.any():
-                ret = self._write_hdf5(group, df, new.index, dtype, database, opt=opt)
-            else:
-                ret = pd.Series(name=HDF5_INDEX, dtype=int)
+        if new.size:
+            self._write_hdf5(group, df, new, opt=is_opt, overwrite=False)
 
-            # If **overwrite** is *True*
-            if overwrite and old.any():
-                self._overwrite_hdf5(group, old, df, dtype, opt=opt)
-        return ret
+        # If **overwrite** is *True*
+        if overwrite and old.size:
+            self._write_hdf5(group, df, old, opt=is_opt, overwrite=True)
 
     @classmethod
-    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, new_index: pd.Index,
-                    dtype: DtypeLike, database: Union[Ligand, QD] = 'ligand',
-                    opt: bool = False) -> pd.Index:
+    def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, hdf5_series: pd.Series,
+                    opt: bool = False, overwrite: bool = False) -> pd.Index:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
-        mol_series = df.loc[new_index, MOL]
+        index = hdf5_series.index
+        hdf5_index = hdf5_series.values
+        mol_series = df.loc[index, MOL]
 
-        i = len(group['atoms'])
-        j = i + len(mol_series)
-        ret = pd.Series(np.arange(i, j), index=new_index, name=HDF5_INDEX)
-
-        scale = cls._sanitize_multi_idx(new_index, dtype, database)
+        # Export the molecules to the .hdf5 file
+        dtype: np.dtype = group['index'].dtype
+        scale: np.ndarray = index.values.astype(dtype, copy=False)
         pdb_new = PDBContainer.from_molecules(mol_series, scale=scale)
-        pdb_new.to_hdf5(group, index=np.s_[i:j], update_scale=not opt)
+        pdb_new.to_hdf5(group, index=hdf5_index, update_scale=not opt)
 
-        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=False"
-        update_hdf5_log(group['logger'], index=ret.values, message=message)
-        df.update(ret, overwrite=True)
+        # Post a message in the logger
+        names = PDBContainer.DSET_NAMES.values()
+        message = f"datasets={[group[n].name for n in names]!r}; overwrite={overwrite}"
+        update_hdf5_log(group['logger'], index=hdf5_index, message=message)
+
         if opt:
-            df.loc[new_index, OPT] = True
-        return ret
-
-    @staticmethod
-    def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
-                        dtype: DtypeLike, opt: bool = False) -> None:
-        """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
-        mol_series = df.loc[old.index, MOL]
-
-        scale = mol_series.index.values.astype(dtype)
-        pdb_old = PDBContainer.from_molecules(mol_series, scale=scale)
-        pdb_old.to_hdf5(group, index=old.values)
-
-        names = ('atoms', 'bonds', 'atom_count', 'bond_count')
-        message = f"datasets={[group[n].name for n in names]!r}; overwrite=True"
-        update_hdf5_log(group['logger'], index=old.values, message=message)
-        if opt:
-            df.loc[old.index, OPT] = True
-
-    @staticmethod
-    def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
-        """Parse and sanitize the passed MultiIndex."""
-        return index.values.astype(dtype)  # type: ignore
-
-    def _update_hdf5_settings(self, df: pd.DataFrame, column: str) -> None:
-        """Export all files in **df[column]** to hdf5 dataset **column**."""
-        self.hdf5_availability()
-        with self.hdf5('r+') as f:
-            _update_hdf5_settings(f, df, column)
+            df.loc[index, OPT] = True
 
     """ ########################  Pulling results from the database ########################### """
 
-    def from_csv(self, df: pd.DataFrame, database: Union[Ligand, QD] = 'ligand',
-                 get_mol: bool = True, inplace: bool = True) -> Optional[pd.Series]:
-        """Pull results from :attr:`Database.csv_lig` or :attr:`Database.csv_qd`.
-
-        Performs in inplace update of **df** if **inplace** = :data:`True`,
-        thus returing :data:`None`.
+    @overload
+    def to_df(self, index: Optional[ArrayLike], name: Name, *properties: str,
+              read_mol: bool = True) -> pd.DataFrame:
+        ...
+    @overload  # noqa: E301
+    def to_df(self, df: pd.DataFrame, name: Name, *prop_names: str,
+              read_mol: bool = True) -> pd.DataFrame:
+        ...
+    def to_df(self, arg, name, *prop_names, read_mol=True):  # noqa: E301
+        r"""Construct or update a dataframe with the specified data.
 
         Parameters
         ----------
+        index : array-like
+            An array-like object representing an index; used for constructing a new DataFrame.
+            Serves as an alternative to **df**.
         df : :class:`pandas.DataFrame`
-            A dataframe of new (potential) database entries.
-        database : :class:`str`
-            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-        get_mol : :class:`bool`
-            Attempt to pull preexisting molecules from the database.
-            See the **inplace** argument for more details.
-        inplace : :class:`bool`
-            If :data:`True` perform an inplace update of the ``"mol"`` column in **df**.
-            Otherwise return a new series of PLAMS molecules.
+            A to-be updated DataFrame.
+            Serves as an alternative to **index**.
+        name : :class:`str`
+            The name of the database Group.
+            Accepted values are ``"ligand"`` and ``"qd"``,
+        \*prop_names : :class:`str`
+            The names of 0 or more to-be read properties.
+        read_mol : :class:`bool`
+            Whether or not to read molecules from the database.
 
         Returns
         -------
-        :class:`pandas.Series`, optional
-            Optional: A Series of PLAMS molecules if **get_mol** = :data:`True`
-            and **inplace** = :data:`False`.
+        :class:`pandas.DataFrame`
+            A DataFrame constructed from the database.
+            Note that if :code:`df = pd.DataFrame(..)` then the passed DataFrame
+            will be returned.
 
         """
-        # Operate on either the ligand or quantum dot database
-        manager = self._parse_database(database)
-
         # Update the *hdf5 index* column in **df**
-        with manager(write=False) as db:
-            df.update(db.ndframe, overwrite=True)
-            df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
+        with self.hdf5('r+') as f:
+            # Prepare the group and datasets
+            mol_group = f[name]
 
-        # **df** has been updated and **get_mol** = *False*
-        if not get_mol:
-            return None
-        return self._get_csv_mol(df, database, inplace)
+            prop_dsets = []
+            for i in prop_names:
+                try:
+                    prop_dsets.append(mol_group[f'properties/{i}'])
+                except KeyError:
+                    pass
 
-    def _get_csv_mol(self, df: pd.DataFrame,
-                     database: Union[Ligand, QD] = 'ligand',
-                     inplace: bool = True) -> Optional[pd.Series]:
-        """A method which handles the retrieval and subsequent formatting of molecules.
+            # Parse **arg**
+            dtype = mol_group['index'].dtype
+            if isinstance(arg, pd.DataFrame):
+                df = arg
+                index: Union[slice, np.ndarray] = df.index.values.astype(dtype, copy=False)
+                mol_list = df.get(MOL, None)
+            else:
+                df = None
+                index = np.asarray(arg, dtype=dtype) if arg is not None else slice(None)
+                mol_list = None
 
-        Called internally by :meth:`Database.from_csv`.
+            # Construct the new dataframe
+            df_new = df_from_hdf5(
+                mol_group, index, *prop_dsets, mol_list=mol_list, read_mol=read_mol
+            )
+            df_bool = pd.DataFrame(index=df_new.index, columns=df_new.columns, dtype=bool)
+            df_bool[:] = ~df_new.values.astype(bool)
+            df_bool.columns.names = df.columns.names
 
-        Parameters
-        ----------
-        df : :class:`pandas.DataFrame`
-            A dataframe of new (potential) database entries.
-        database : :class:`str`
-            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-        inplace : :class:`bool`
-            If :data:`True` perform an inplace update of the ``("mol", "")`` column in **df**.
-            Otherwise return a new series of PLAMS molecules.
+            # Define the to-be returned DataFrame
+            if df is None:
+                ret = df_new
+            else:
+                df.update(df_new, filter_func=_filter)
+                ret = df
 
-        Returns
-        -------
-        :class:`pandas.Series`, optional
-            Optional: A Series of PLAMS molecules if **inplace** is :data:`False`.
-
-        """
-        # Sort and find all valid HDF5 indices
-        df.sort_values(by=[HDF5_INDEX], inplace=True)
-        if 'no_opt' in database:
-            df_slice = df[HDF5_INDEX] >= 0
-        else:
-            df_slice = df[OPT] == True  # noqa
-        idx = df[HDF5_INDEX][df_slice].values
-
-        # If no HDF5 indices are availble in **df** then abort the function
-        if not df_slice.any():
-            if inplace:
-                return None
-            return pd.Series(None, name=MOL, dtype=object)
-
-        # Update **df** with preexisting molecules from **self**, returning *None*
-        if inplace:
-            self.from_hdf5(idx, database=database, mol_list=df.loc[df_slice, MOL], rdmol=False)
-            return None
-
-        # Create and return a new series of PLAMS molecules
-        else:
-            mol_list = self.from_hdf5(idx, database=database, rdmol=False)
-            return pd.Series(mol_list, index=df[df_slice].index, name=MOL)
-
-    def from_hdf5(self, index: Union[slice, Sequence[int]],
-                  database: Union[Ligand, QD] = 'ligand', rdmol: bool = True,
-                  mol_list: Optional[Iterable[Molecule]] = None) -> List[Union[Molecule, Mol]]:
-        """Import structures from the hdf5 database as RDKit or PLAMS molecules.
-
-        Parameters
-        ----------
-        index : :class:`Sequence[int]<typing.Sequence>` or :class:`slice`
-            The indices of the to be retrieved structures.
-        database : :class:`str`
-            The type of database; accepted values are ``"ligand"`` and ``"qd"``.
-        rdmol : :class:`bool`
-            If :data:`True`, return an RDKit molecule instead of a PLAMS molecule.
-
-        Returns
-        -------
-        :class:`List[plams.Molecule]<typing.List>` or :class:`List[rdkit.Mol]<typing.List>`
-            A list of PLAMS or RDKit molecules.
-
-        """
-        # Open the database and pull entries
-        self.hdf5_availability()
-        with self.hdf5('r') as f:
-            pdb = PDBContainer.from_hdf5(f[database], index)
-            mol_list_ = pdb.to_molecules(mol=mol_list)
-
-        if rdmol:
-            return [from_rdmol(mol) for mol in mol_list_]
-        return mol_list_
+            # Sort the index and return
+            if HDF5_INDEX in df_bool.columns:
+                ret.sort_values([HDF5_INDEX], inplace=True)
+                df_bool[HDF5_INDEX] = ret[HDF5_INDEX]
+                df_bool.sort_values([HDF5_INDEX], inplace=True)
+                df_bool[HDF5_INDEX] = True
+            return ret, df_bool
 
     def hdf5_availability(self, timeout: float = 5.0,
                           max_attempts: Optional[int] = 10) -> None:

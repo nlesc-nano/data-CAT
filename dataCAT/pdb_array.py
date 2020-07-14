@@ -231,6 +231,7 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
 IndexLike = Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]
 Hdf5Mode = Literal['append', 'update']
 _AttrName = Literal['atoms', 'bonds', 'atom_count', 'bond_count', 'scale']
+_DsetName = Literal['atoms', 'bonds', 'atom_count', 'bond_count', 'index']
 
 #: The docstring to-be assigned by :meth:`PDBContainer.create_hdf5_group`.
 HDF5_DOCSTRING = """A Group of datasets representing :class:`{cls_name}`."""
@@ -248,9 +249,12 @@ class PDBContainer:
 
     * Molecule-interconversion: :meth:`~PDBContainer.to_molecules` &
       :meth:`~PDBContainer.from_molecules`.
-    * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
+    * Hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
       :meth:`~PDBContainer.validate_hdf5`,
       :meth:`~PDBContainer.to_hdf5` & :meth:`~PDBContainer.from_hdf5`.
+    * Set operatorations: :meth:`~PDBContainer.intersection`,
+      :meth:`~PDBContainer.difference`, :meth:`~PDBContainer.symmetric_difference` &
+      :meth:`~PDBContainer.union`.
     * Miscellaneous: :meth:`~PDBContainer.keys`, :meth:`~PDBContainer.values`,
       :meth:`~PDBContainer.items`, :meth:`~PDBContainer.__getitem__` &
       :meth:`~PDBContainer.__len__`.
@@ -331,8 +335,14 @@ class PDBContainer:
         'scale': BACKUP_IDX_DTYPE
     })
 
-    #: The name of the h5py dimensional scale.
-    SCALE_NAME: ClassVar[str] = 'index'
+    #: A mapping holding the matching dataset name for each attribute in :class:`PDBContainer`.
+    DSET_NAMES: ClassVar[Mapping[_AttrName, _DsetName]] = MappingProxyType({
+        'atoms': 'atoms',
+        'bonds': 'bonds',
+        'atom_count': 'atom_count',
+        'bond_count': 'bond_count',
+        'scale': 'index'
+    })
 
     @property
     def atoms(self) -> np.recarray:
@@ -859,10 +869,10 @@ class PDBContainer:
 
         # Construct the to-be returned (padded) arrays
         DTYPE = cls.DTYPE
-        atom_array = np.rec.array(None, shape=atom_shape, dtype=DTYPE['atoms'])
-        bond_array = np.rec.array(None, shape=bond_shape, dtype=DTYPE['bonds'])
-        atom_counter = np.empty(mol_count, dtype=DTYPE['atom_count'])
-        bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
+        atom_array = np.zeros(atom_shape, dtype=DTYPE['atoms']).view(np.recarray)
+        bond_array = np.zeros(bond_shape, dtype=DTYPE['bonds']).view(np.recarray)
+        atom_counter = np.zeros(mol_count, dtype=DTYPE['atom_count'])
+        bond_counter = np.zeros(mol_count, dtype=DTYPE['bond_count'])
 
         # Fill the to-be returned arrays
         for i, mol in enumerate(mol_list):
@@ -1022,7 +1032,7 @@ class PDBContainer:
         \**kwargs : :data:`~typing.Any`
             Further keyword arguments for the creation of each dataset.
             Arguments already specified by default are:
-            ``name``, ``shape``, ``maxshape`` and ``dtype``.
+            ``name``, ``shape``, ``maxshape``, ``dtype`` and ``fillvalue``.
 
         Returns
         -------
@@ -1042,32 +1052,43 @@ class PDBContainer:
         # Create the datasets
         NDIM = cls.NDIM
         DTYPE = cls.DTYPE
+        N = cls.DSET_NAMES
         key_iter = (k for k in cls.keys() if k != 'scale')
         for key in key_iter:
+            # Fancy indexing can act weirdly in h5py when one of the axes is of size 0;
+            # set the size of the last axis to 1 (for >1d datasets) to circumvent this
+            if NDIM[key] == 1:
+                shape = (0,)
+            else:
+                shape = (0,) * (NDIM[key] - 1) + (1,)
+            name = N[key]
             maxshape = NDIM[key] * (None,)
-            shape = NDIM[key] * (0,)
             dtype = DTYPE[key]
+            fill_value = np.zeros(1, dtype=dtype).take(0)
 
-            dset = grp.create_dataset(key, shape=shape, maxshape=maxshape, dtype=dtype, **kwargs)
-            dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.atoms`.")
+            dset = grp.create_dataset(name, shape=shape, maxshape=maxshape, dtype=dtype,
+                                      fillvalue=fill_value, **kwargs)
+            dset.attrs['__doc__'] = np.string_(f"A dataset representing `{cls_name}.{key}`.")
 
         # Set the index
-        scale_name = cls.SCALE_NAME
-        if scale is not None:
+        scale_name = N['scale']
+        if scale is not None:  # Create a soft-link
             scale_dset = scale
+            grp[scale_name] = h5py.SoftLink(scale.name)
         else:
-            _dtype = scale_dtype if scale_dtype is not None else cls.DTYPE['scale']
-            scale_dset = grp.create_dataset(scale_name, shape=(0,), maxshape=(None,), dtype=_dtype)
+            _scale_dtype = scale_dtype if scale_dtype is not None else cls.DTYPE['scale']
+            scale_dset = grp.create_dataset(scale_name, shape=(0,), maxshape=(None,),
+                                            dtype=_scale_dtype)
             scale_dset.make_scale(scale_name)
 
         # Use the index as a scale
-        dset_iter = (grp[k] for k in cls.keys() if k != 'scale')
+        dset_iter = (grp[N[k]] for k in cls.keys() if k != 'scale')
         for dset in dset_iter:
             dset.dims[0].label = scale_name
             dset.dims[0].attach_scale(scale_dset)
 
-        grp['atoms'].dims[1].label = 'atoms'
-        grp['bonds'].dims[1].label = 'bonds'
+        grp[N['atoms']].dims[1].label = N['atoms']
+        grp[N['bonds']].dims[1].label = N['bonds']
         return grp
 
     @classmethod
@@ -1095,22 +1116,21 @@ class PDBContainer:
                             f"observed type: {group.__class__.__name__}")
 
         # Check if **group** has all required keys
-        keys: List[str] = list(cls.keys())
-        keys[-1] = cls.SCALE_NAME
-        difference = set(keys) - group.keys()
+        keys = set(cls.DSET_NAMES.values())
+        difference = keys - group.keys()
         if difference:
             missing_keys = ', '.join(repr(i) for i in difference)
             raise AssertionError(f"Missing keys in {group!r}: {missing_keys}")
 
         # Check the dimensionality and dtype of all datasets
         len_dict = {}
-        for key in cls.keys():
-            dset = group[key] if key != 'scale' else group[cls.SCALE_NAME]
+        for key, dset_key in cls.DSET_NAMES.items():
+            dset = group[dset_key]
 
             len_dict[key] = len(dset)
-            assertion.eq(dset.ndim, cls.NDIM[key], message=f"{key!r} ndim mismatch")
+            assertion.eq(dset.ndim, cls.NDIM[key], message=f"{dset_key!r} ndim mismatch")
             if key != 'scale':
-                assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{key!r} dtype mismatch")
+                assertion.eq(dset.dtype, cls.DTYPE[key], message=f"{dset_key!r} dtype mismatch")
 
         # Check that all datasets are of the same length
         if len(set(len_dict.values())) != 1:
@@ -1154,22 +1174,23 @@ class PDBContainer:
             except (AttributeError, TypeError):
                 if not isinstance(index, slice):
                     idx = np.asarray(index)
-                    idx_max = idx.max()
+                    idx_max = idx.max() + 1
                     assert idx.ndim == 1
                     assert issubclass(idx.dtype.type, np.integer)
                 else:
                     idx = index
                     idx_max = idx.stop or len(self)
 
+        N = self.DSET_NAMES
+
         # Update the length of all groups
-        scale_name = self.SCALE_NAME
-        scale = group['atoms'].dims[0][scale_name]
+        scale = group[N['scale']]
         if len(scale) < idx_max:
             scale.resize(idx_max, axis=0)
         self._update_hdf5_shape(group)
 
         # Update the datasets
-        items = ((name, ar) for name, ar in self.items() if name != 'scale')
+        items = ((N[name], ar) for name, ar in self.items() if name != 'scale')
         for name, ar in items:
             dataset = group[name]
 
@@ -1202,11 +1223,11 @@ class PDBContainer:
 
         """  # noqa: E501
         # Get the length of the dimensional scale
-        scale_name = self.SCALE_NAME
-        idx = group['atoms'].dims[0][scale_name]
+        N = self.DSET_NAMES
+        idx = group[N['scale']]
         idx_len = len(idx)
 
-        items = ((name, ar) for name, ar in self.items() if name != 'scale')
+        items = ((N[name], ar) for name, ar in self.items() if name != 'scale')
         for name, ar in items:
             dataset = group[name]
 
@@ -1246,13 +1267,13 @@ class PDBContainer:
                 idx = np.asarray(index) if not isinstance(index, slice) else index
                 assert getattr(idx, 'ndim', 1) == 1
 
-        scale_name = cls.SCALE_NAME
+        N = cls.DSET_NAMES
         return cls(
-            atoms=group['atoms'][idx].view(np.recarray),
-            bonds=group['bonds'][idx].view(np.recarray),
-            atom_count=group['atom_count'][idx],
-            bond_count=group['bond_count'][idx],
-            scale=group[scale_name][idx].view(np.recarray),
+            atoms=group[N['atoms']][idx].view(np.recarray),
+            bonds=group[N['bonds']][idx].view(np.recarray),
+            atom_count=group[N['atom_count']][idx],
+            bond_count=group[N['bond_count']][idx],
+            scale=group[N['scale']][idx].view(np.recarray),
             validate=False
         )
 

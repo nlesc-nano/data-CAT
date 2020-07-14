@@ -5,26 +5,27 @@ Index
 .. currentmodule:: dataCAT.functions
 .. autosummary::
     df_to_mongo_dict
-    get_nan_row
-    even_index
     hdf5_availability
+    scale_to_index
+    array_to_index
+    if_exception
 
 API
 ---
 .. autofunction:: df_to_mongo_dict
-.. autofunction:: get_nan_row
-.. autofunction:: even_index
 .. autofunction:: hdf5_availability
+.. autofunction:: scale_to_index
+.. autofunction:: array_to_index
+.. autofunction:: if_exception
 
 """
 
 import warnings
 from time import sleep
-from types import MappingProxyType
 from functools import wraps
 from typing import (
-    Collection, Union, Sequence, Tuple, List, Generator, Mapping, Any, cast,
-    Hashable, Optional, Type, TypeVar, Callable, TYPE_CHECKING
+    Collection, Union, Sequence, Tuple, List, Generator, Any, cast,
+    Hashable, Optional, Type, TypeVar, Callable, Dict, TYPE_CHECKING
 )
 
 import h5py
@@ -40,15 +41,16 @@ from nanoutils import SupportsIndex, PathType
 
 if TYPE_CHECKING:
     from .pdb_array import PDBContainer, IndexLike
-    from numpy.typing import DtypeLike
+    from numpy.typing import DtypeLike, ArrayLike
 else:
     PDBContainer = 'dataCAT.PDBContainer'
     IndexLike = 'dataCAT.pdb_array.IndexLike'
     DtypeLike = 'numpy.typing.DtypeLike'
+    ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = [
-    'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability',
-    'if_exception'
+    'df_to_mongo_dict', 'int_to_slice', 'hdf5_availability',
+    'scale_to_index', 'array_to_index', 'if_exception'
 ]
 
 FT = TypeVar('FT', bound=Callable[..., Any])
@@ -136,40 +138,6 @@ def df_to_mongo_dict(df: pd.DataFrame,
     return [_get_dict(idx, row, idx_names) for idx, row in df.iterrows()]
 
 
-#: A dictionary with NumPy dtypes as keys and matching :data:`None`-esque items as values.
-DTYPE_DICT: Mapping[np.dtype, Any] = MappingProxyType({
-    np.dtype(np.int64): -1,
-    np.dtype(np.float64): np.nan,
-    np.dtype(np.object_): None,
-    np.dtype(np.bool_): False
-})
-
-
-def get_nan_row(df: pd.DataFrame) -> list:
-    """Return a list of None-esque objects for each column in **df**.
-
-    The object in question depends on the data type of the column.
-    Will default to ``None`` if a specific data type is not recognized
-
-        * :class:`~numpy.int64`: :data:`-1`
-        * :class:`~numpy.float64`: :data:`~numpy.nan`
-        * :class:`~numpy.object_`: :data:`None`
-        * :class:`~numpy.bool_`: :data:`False`
-
-    Parameters
-    ----------
-    df : :class:`pandas.DataFrame`
-        A dataframe.
-
-    Returns
-    -------
-    :class:`list`
-        A list of none-esque objects, one for each column in **df**.
-
-    """
-    return [DTYPE_DICT.get(v.dtype, None) for _, v in df.items()]
-
-
 def as_pdb_array(mol_list: Collection[Molecule], min_size: int = 0,
                  warn: bool = True) -> np.ndarray:
     """Convert a list of PLAMS molecule into an array of (partially) de-serialized .pdb files.
@@ -234,35 +202,6 @@ def from_pdb_array(array: np.ndarray, rdmol: bool = True,
     if not rdmol:
         return molkit.from_rdmol(ret)
     return ret
-
-
-def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
-    """Ensure that ``df2.index`` is a subset of ``df1.index``.
-
-    Parameters
-    ----------
-    df1 : :class:`pandas.DataFrame`
-        A DataFrame whose index is to-be a superset of ``df2.index``.
-    df2 : :class:`pandas.DataFrame`
-        A DataFrame whose index is to-be a subset of ``df1.index``.
-
-    Returns
-    -------
-    :class:`pandas.DataFrame`
-        A new (sorted) dataframe containing all unique elements of ``df1.index`` and ``df2.index``.
-        Returns **df1** if ``df2.index`` is already a subset of ``df1.index``
-
-    """
-    # Figure out if ``df1.index`` is a subset of ``df2.index``
-    bool_ar = df2.index.isin(df1.index)
-    if bool_ar.all():
-        return df1
-
-    # Make ``df1.index`` a subset of ``df2.index``
-    nan_row = get_nan_row(df1)
-    idx = df2.index[~bool_ar]
-    df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
-    return df1.append(df_tmp, sort=True)
 
 
 def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
@@ -365,6 +304,81 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
         i -= 1
 
     raise exception
+
+
+def scale_to_index(scale: h5py.Dataset, index: Optional[IndexLike] = None) -> pd.Index:
+    """Construct a pandas Index from the passed **scale** Dataset.
+
+    Returns a :class:`pandas.Index` if the **scale** dtype lacks any fields;
+    a :class:`pandas.MultiIndex` is returned otherwise.
+
+    Parameters
+    ----------
+    scale : :class:`h5py.Dataset`
+        The to-be converted 1D Dataset.
+    index : :class:`int`, 'Sequence[int]<typing.Sequence>' or :class:`slice`, optional
+        The indices of the dataset elements of interest.
+        Set to :data:`None` to use the entire dataset.
+
+    Returns
+    -------
+    :class:`pandas.Index` or :class:`pandas.MultiIndex`
+        An MultiIndex or Index, depending on whether or not **scale** has a structured dtype.
+
+    """
+    i = index if index is not None else slice(None)
+    array = scale[i]
+
+    name = scale.name.rsplit('/', 1)[1]
+    return array_to_index(array, name)
+
+
+def array_to_index(array: ArrayLike, name: Optional[str] = None) -> pd.Index:
+    """See :func:`scale_to_index`."""
+    data_ar = np.asanyarray(array)
+    dtype = data_ar.dtype
+
+    # Create an Index
+    if data_ar.dtype.fields is None:
+        if h5py.check_string_dtype(dtype):
+            data = data_ar.astype(str)
+        else:
+            data = data_ar
+        return pd.Index(data, name=name)
+
+    # It's a structured array; create a MultiIndex
+    fields = []
+    field_names = []
+    for name, (field_dtype, *_) in dtype.fields.items():
+        # It's a bytes-string; decode it
+        if h5py.check_string_dtype(field_dtype):
+            ar = data_ar[name].astype(str)
+
+        # It's a h5py `vlen` dtype; convert it into a list of tuples
+        elif h5py.check_vlen_dtype(field_dtype):
+            ar = _vlen_to_tuples(data_ar[name])
+
+        else:
+            ar = data_ar[name]
+
+        fields.append(ar)
+        field_names.append(name)
+    return pd.MultiIndex.from_arrays(fields, names=field_names)
+
+
+def _vlen_to_tuples(array: np.ndarray) -> np.ndarray:
+    """Convert an (object) array consisting of arrays into an (object) array of tuples."""
+    cache: Dict[bytes, tuple] = {}
+    ret = np.empty_like(array, dtype=object)
+
+    for i, ar in enumerate(array):
+        byte = ar.tobytes()
+        try:
+            tup = cache[byte]
+        except KeyError:
+            cache[byte] = tup = tuple(ar)
+        ret[i] = tup
+    return ret
 
 
 def _set_index(cls: Type[PDBContainer], group: h5py.Group,

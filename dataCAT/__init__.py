@@ -7,10 +7,18 @@ from nanoutils import VersionInfo
 from .__version__ import __version__
 
 from CAT import version_info as CAT_VERSION
+if CAT_VERSION < (0, 10, 0):
+    _v = '.'.join(str(i) for i in CAT_VERSION)
+    raise ValueError(f"{__name__} {__version__} requires CAT >= 0.10; observed version: {_v}")
+
 try:
     from nanoCAT import version_info as NANOCAT_VERSION
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
+else:
+    if NANOCAT_VERSION < (0, 7, 0):
+        _v = '.'.join(str(i) for i in NANOCAT_VERSION)
+        raise ValueError(f"{__name__} {__version__} requires nanoCAT >= 0.7; observed version: {_v}")  # noqa: E501
 
 version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
 del VersionInfo

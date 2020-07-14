@@ -91,7 +91,7 @@ def test_validate() -> None:
         try:
             PDB.to_hdf5(group, None)
         except AssertionError as ex:
-            assertion.isinstance(ex.__context__, RuntimeError)
+            assertion.isinstance(ex.__context__, KeyError)
             scale = group.create_dataset('index', data=[1], maxshape=(None,))
             scale.make_scale('index')
             dset.dims[0].attach_scale(scale)
