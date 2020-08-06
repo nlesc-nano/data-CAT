@@ -373,14 +373,13 @@ class Database:
             group = f[f'{name}/properties']
 
             # Define the indices
-            index = slice(None) if overwrite else hdf5_series.index
-            hdf5_index = df[HDF5_INDEX].values if overwrite else hdf5_series.values
+            hdf5_index = df[HDF5_INDEX].values
 
             # Define the properties
             lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for n, name_seq in dct.items():
-                data = df.loc[index, n].values
+                data = df[n].values
 
                 # Get the dataset
                 try:
