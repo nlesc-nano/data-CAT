@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.5.1
+*****
+* Fixed an issue where not all properties were copied from the .csv to the .hdf5 file.
+
+
 0.5.0
 *****
 * Removed the .yaml job recipe storage component of the `Database` class.
