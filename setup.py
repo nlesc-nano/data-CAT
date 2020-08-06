@@ -30,7 +30,7 @@ tests_require = [
     'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
-    'CAT@git+https://github.com/nlesc-nano/CAT@devel',
+    'CAT@git+https://github.com/nlesc-nano/CAT@master',
 ]
 tests_require += build_require
 
