@@ -554,6 +554,13 @@ class Database:
         with manager(write=False) as db:
             df.update(db.ndframe, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
+            df[OPT] = df[OPT].astype(bool, copy=False)
+
+            bool_series = df[HDF5_INDEX] == -1
+            start = 1 + db[HDF5_INDEX].max()
+            stop = np.count_nonzero(bool_series)
+            stop += start
+            df.loc[bool_series, HDF5_INDEX] = np.arange(start, stop)
 
         # **df** has been updated and **get_mol** = *False*
         if not get_mol:
