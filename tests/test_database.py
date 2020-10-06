@@ -130,15 +130,15 @@ def test_update_hdf5() -> None:
     df[HDF5_INDEX] = -1
     df[OPT] = False
 
-    series1 = db.update_hdf5(df, database='ligand')
+    series1 = db.update_hdf5(df, np.s_[:], database='ligand')
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
     assertion.eq(series1, [3, 4], post_process=np.all)
 
-    series2 = db.update_hdf5(df, database='ligand')
+    series2 = db.update_hdf5(df, np.s_[:], database='ligand')
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
     assertion.eq(series2, [], post_process=np.all)
 
-    series3 = db.update_hdf5(df, database='ligand', overwrite=True)
+    series3 = db.update_hdf5(df, np.s_[:], database='ligand', overwrite=True)
     assertion.eq(df[HDF5_INDEX], [3, 4], post_process=np.all)
     assertion.eq(series3, [], post_process=np.all)
 
@@ -154,7 +154,7 @@ def test_update_csv() -> None:
         ('CCC(=O)[O-]', 'O5'): readpdb(str(PATH / 'CCC[=O][O-]@O5.pdb')),
     }
     df = pd.DataFrame({MOL: mol_dict})
-    df[HDF5_INDEX] = -1
+    df[HDF5_INDEX] = [0, 1]
     df[OPT] = False
     df[V_BULK] = np.arange(2, dtype=float)
 

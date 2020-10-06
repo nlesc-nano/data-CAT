@@ -301,6 +301,7 @@ class Database:
                     collection.replace_one(filter_, item)
 
     def update_csv(self, df: pd.DataFrame,
+                   index: Union[None, slice, pd.Series] = None,
                    database: Union[Ligand, QD] = 'ligand',
                    columns: Optional[Sequence] = None,
                    overwrite: bool = False,
@@ -335,16 +336,23 @@ class Database:
         if job_recipe is not None:
             warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
+        if index is None:
+            df_index = slice(None)
+
         with manager(write=True) as db:
             # Update **db.index**
+            db.ndframe = even_index(db.ndframe, df.loc[df_index])
             df.sort_values(by=[HDF5_INDEX], inplace=True)
-            db.ndframe = even_index(db.ndframe, df)
 
             # Filter columns
+            export_mol = False
             if columns is None:
                 df_columns = df.columns
             else:
                 df_columns = pd.Index(columns)
+                if MOL in df_columns:
+                    df_columns = df_columns.drop(MOL)
+                    export_mol = True
 
             # Remove columns with the (now deprecated) `settings` key
             if isinstance(df_columns, pd.MultiIndex):
@@ -355,16 +363,18 @@ class Database:
             df_columns = self._even_df_columns(df, db, df_columns, ~bool_ar)
 
             # Update **self.hdf5**; returns a new series of indices
-            hdf5_series = self.update_hdf5(
-                df, database=database, overwrite=overwrite, status=status
-            )
+            if export_mol:
+                hdf5_series = self.update_hdf5(
+                    df, df_index, database=database, overwrite=overwrite, status=status
+                )
 
             # Update **db.values**
-            db.update(df[df_columns], overwrite=overwrite)
-            db.update(hdf5_series, overwrite=True)
-            df.update(hdf5_series, overwrite=True)
-            if status == 'optimized':
-                db.update(df[OPT], overwrite=True)
+            db.update(df.loc[df_index, df_columns], overwrite=overwrite)
+            if export_mol:
+                db.update(hdf5_series, overwrite=True)
+                df.update(hdf5_series, overwrite=True)
+                if status == 'optimized':
+                    db.update(df.loc[df_index, OPT], overwrite=True)
 
         # Update the hdf5 file
         with self.hdf5('r+') as f:
@@ -376,7 +386,8 @@ class Database:
             hdf5_index = df[HDF5_INDEX].values
 
             # Define the properties
-            lvl0 = set(df_columns.levels[0]).difference({OPT[0], HDF5_INDEX[0]})
+            lvl0_ignore = {OPT[0], HDF5_INDEX[0], MOL[0]}
+            lvl0 = set(df_columns.levels[0]).difference(lvl0_ignore)
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for n, name_seq in dct.items():
                 data = df[n].values
@@ -417,6 +428,7 @@ class Database:
         return columns.drop(drop_idx)  # type: ignore
 
     def update_hdf5(self, df: pd.DataFrame,
+                    index: Union[slice, pd.Series],
                     database: Union[Ligand, QD] = 'ligand',
                     overwrite: bool = False,
                     status: Optional[str] = None) -> pd.Series:
@@ -443,13 +455,14 @@ class Database:
 
         """
         # Identify new and preexisting entries
+        sub_df = df.loc[index, :]
         if status == 'optimized':
-            new = df[HDF5_INDEX][df[OPT] == False] & ~df[MOL].isnull()  # noqa
-            old = df[HDF5_INDEX][df[OPT] == True]  # noqa
+            new = sub_df.loc[(sub_df[OPT] == False) & ~sub_df[MOL].isnull(), HDF5_INDEX]  # noqa
+            old = sub_df.loc[sub_df[OPT] == True, HDF5_INDEX]  # noqa
             opt = True
         else:
-            new = df[HDF5_INDEX][df[HDF5_INDEX] == -1] & ~df[MOL].isnull()
-            old = df[HDF5_INDEX][df[HDF5_INDEX] >= 0]
+            new = sub_df.loc[(sub_df[HDF5_INDEX] == -1) & ~sub_df[MOL].isnull(), HDF5_INDEX]
+            old = sub_df.loc[sub_df[HDF5_INDEX] >= 0, HDF5_INDEX]
             opt = False
 
         # Add new entries to the database
@@ -554,13 +567,6 @@ class Database:
         with manager(write=False) as db:
             df.update(db.ndframe, overwrite=True)
             df[HDF5_INDEX] = df[HDF5_INDEX].astype(int, copy=False)
-            df[OPT] = df[OPT].astype(bool, copy=False)
-
-            bool_series = df[HDF5_INDEX] == -1
-            start = 1 + db[HDF5_INDEX].max()
-            stop = np.count_nonzero(bool_series)
-            stop += start
-            df.loc[bool_series, HDF5_INDEX] = np.arange(start, stop)
 
         # **df** has been updated and **get_mol** = *False*
         if not get_mol:
