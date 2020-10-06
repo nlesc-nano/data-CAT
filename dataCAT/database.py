@@ -336,8 +336,7 @@ class Database:
         if job_recipe is not None:
             warnings.warn("job_recipe .yaml storage has been discontinued", DeprecationWarning)
 
-        if index is None:
-            df_index = slice(None)
+        df_index = slice(None) if index is None else index
 
         with manager(write=True) as db:
             # Update **db.index**
