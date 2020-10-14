@@ -1,6 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+
+import importlib
 import os
+
 from typing import Dict
 
 from setuptools import setup
@@ -36,7 +39,7 @@ tests_require += build_require
 
 # Check if rdkit is manually installed (as it is not available via pypi)
 try:
-    import rdkit
+    importlib.import_module("rdkit")
 except ModuleNotFoundError as ex:
     exc = ModuleNotFoundError(
         "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
