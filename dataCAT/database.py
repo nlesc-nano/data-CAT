@@ -192,7 +192,7 @@ class Database:
 
         try:
             self._mongodb = MappingProxyType(create_mongodb(**state))
-        except ServerSelectionTimeoutError:
+        except PyMongoError:
             self._mongodb = None
 
     def __copy__(self: ST) -> ST:
