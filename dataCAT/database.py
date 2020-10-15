@@ -29,7 +29,7 @@ import h5py
 import numpy as np
 import pandas as pd
 from pymongo import MongoClient
-from pymongo.errors import ServerSelectionTimeoutError, DuplicateKeyError
+from pymongo.errors import PyMongoError, DuplicateKeyError
 
 from rdkit.Chem import Mol
 from scm.plams import Settings, Molecule, from_rdmol
@@ -138,7 +138,7 @@ class Database:
             self._mongodb: Optional[Mapping[str, Any]] = MappingProxyType(
                 create_mongodb(host, port, **kwargs)
             )
-        except ServerSelectionTimeoutError:
+        except PyMongoError:
             self._mongodb = None
 
     def __repr__(self) -> str:
