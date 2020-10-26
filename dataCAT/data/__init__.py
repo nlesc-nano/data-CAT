@@ -19,9 +19,9 @@ from typing import Tuple
 _DATA = os.path.abspath(os.path.dirname(__file__))
 
 #: A tuple with the absolute paths to all .pdb files in :mod:`dataCAT.data`.
-PDB_TUPLE: Tuple[str, ...] = tuple(
+PDB_TUPLE: Tuple[str, ...] = tuple(sorted(
     os.path.join(_DATA, f) for f in os.listdir(_DATA) if f.endswith('pdb')
-)
+))
 del _DATA
 del os
 
