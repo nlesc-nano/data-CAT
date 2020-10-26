@@ -395,7 +395,7 @@ class Database:
                 try:
                     dset = group[n]
                 except KeyError:
-                    if len(name_seq) == 1:
+                    if not name_seq.any():
                         name_seq = None
                     dset = create_prop_dset(group, n, data.dtype, name_seq)
 
