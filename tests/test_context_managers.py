@@ -1,5 +1,6 @@
 """Tests for :mod:`dataCAT.context_managers`."""
 
+import sys
 import copy
 import pickle
 from os.path import join
@@ -32,7 +33,8 @@ def test_filemanagerabc() -> None:
     obj1_str = repr(obj1)
     assertion.contains(obj1_str, obj1.__class__.__name__)
     assertion.contains(obj1_str, str(obj1.write))
-    assertion.contains(obj1_str, str(obj1.filename))
+    if sys.platform != 'win32':
+        assertion.contains(obj1_str, str(obj1.filename))
 
     assertion.is_(copy.copy(obj1), obj1)
     assertion.is_(copy.deepcopy(obj1), obj1)

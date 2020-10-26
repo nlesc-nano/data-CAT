@@ -1,5 +1,6 @@
 """Tests for the :class:`dataCAT.Database` class."""
 
+import sys
 import copy
 import shutil
 import pickle
@@ -57,8 +58,9 @@ def test_eq() -> None:
 
     db_str = repr(DB)
     assertion.contains(db_str, DB.__class__.__name__)
-    for name in ('dirname', 'csv_lig', 'csv_qd', 'hdf5'):
-        assertion.contains(db_str, str(getattr(DB, name)), message=name)
+    if sys.platform != 'win32':
+        for name in ('dirname', 'csv_lig', 'csv_qd', 'hdf5'):
+            assertion.contains(db_str, str(getattr(DB, name)), message=name)
 
 
 def test_parse_database() -> None:

@@ -14,6 +14,7 @@ API
 
 """
 
+import sys
 from os.path import abspath
 from abc import abstractmethod, ABCMeta
 from types import TracebackType
@@ -21,7 +22,7 @@ from typing import (
     Optional, Any, Generic, TypeVar, Tuple, Type, AnyStr, Dict, TYPE_CHECKING, Union
 )
 
-import sys
+import numpy as np
 import pandas as pd
 
 from nanoutils import final
@@ -128,7 +129,7 @@ class OpenLig(FileManagerABC[AnyStr, DFProxy]):
     def __enter__(self) -> DFProxy:
         """Open the :class:`.OpenLig` context manager, importing :attr:`.df`."""
         # Open the .csv file
-        dtype = {'hdf5 index': int, 'formula': str, 'settings': str, 'opt': bool}
+        dtype = {'hdf5 index': np.int64, 'formula': str, 'settings': str, 'opt': bool}
         self._db = df = DFProxy(
             pd.read_csv(self.filename, index_col=[0, 1], header=[0, 1], dtype=dtype)
         )
@@ -153,7 +154,7 @@ class OpenQD(FileManagerABC[AnyStr, DFProxy]):
     def __enter__(self) -> DFProxy:
         """Open the :class:`.OpenQD` context manager, importing :attr:`.df`."""
         # Open the .csv file
-        dtype = {'hdf5 index': int, 'settings': str, 'opt': bool}
+        dtype = {'hdf5 index': np.int64, 'settings': str, 'opt': bool}
         self._db = df = DFProxy(
             pd.read_csv(self.filename, index_col=[0, 1, 2, 3], header=[0, 1], dtype=dtype)
         )
