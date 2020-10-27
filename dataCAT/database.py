@@ -386,7 +386,9 @@ class Database:
 
             # Define the properties
             lvl0_ignore = {OPT[0], HDF5_INDEX[0], MOL[0]}
+            lvl0_ignore.update(i for i in df_columns.levels[0] if i.startswith("job_settings"))
             lvl0 = set(df_columns.levels[0]).difference(lvl0_ignore)
+
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for n, name_seq in dct.items():
                 data = df[n].values
