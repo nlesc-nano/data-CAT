@@ -29,7 +29,7 @@ def _update_hdf5_settings(f: h5py.File, df: pd.DataFrame, column: str) -> None:
     f[column].shape = k, job_ar.shape[1], job_ar.shape[2]
 
     # Update the hdf5 dataset
-    idx = df[HDF5_INDEX].astype(int, copy=False)
+    idx = df[HDF5_INDEX].values.astype(int, copy=False)
     idx_argsort = np.argsort(idx)
     f[column][idx[idx_argsort]] = job_ar[idx_argsort]
 
