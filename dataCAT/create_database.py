@@ -232,6 +232,14 @@ def _update_pdb_dsets(file: h5py.File, name: str,
 
     dtype = IDX_DTYPE[name]
     scale = np.rec.array(None, dtype=dtype, shape=(m,))
+    if dtype.fields is not None and scale.size:
+        # Ensure that the sentinal value for vlen strings is an empty string, not `None`
+        elem = list(scale.item(0))
+        iterator = (v for v, *_ in dtype.fields.values())
+        for i, sub_dt in enumerate(iterator):
+            if h5py.check_string_dtype(sub_dt) is not None:
+                elem[i] = ''
+        scale[:] = tuple(elem)
     return PDBContainer.from_molecules(mol_list, scale=scale)
 
 
