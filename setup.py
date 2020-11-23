@@ -41,11 +41,12 @@ tests_require += build_require
 try:
     importlib.import_module("rdkit")
 except ModuleNotFoundError as ex:
-    exc = ModuleNotFoundError(
+    import warnings
+    exc = ImportWarning(
         "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
     )
-    exc.__cause__ = None
-    raise exc
+    exc.__cause__ = ex
+    warnings.warn(exc)
 
 setup(
     name='Data-CAT',
