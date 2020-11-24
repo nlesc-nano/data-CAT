@@ -264,9 +264,9 @@ def update_prop_dset(dset: h5py.Dataset, data: np.ndarray,
     try:
         _resize_prop_dset(dset)
         dset[idx] = data
-    except Exception as ex:
+    except Exception:
         validate_prop_group(dset.parent)
-        raise ex
+        raise
 
 
 def validate_prop_group(group: h5py.Group) -> None:
