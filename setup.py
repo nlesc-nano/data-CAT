@@ -104,7 +104,7 @@ setup(
         'Nano-Utils>=0.4.3',
         'AssertionLib>=2.2.0',
         'plams@git+https://github.com/SCM-NV/PLAMS@master',
-        'CAT@git+https://github.com/nlesc-nano/CAT@master',
+        'CAT@git+https://github.com/nlesc-nano/CAT',
     ],
     setup_requires=[
         'pytest-runner'
