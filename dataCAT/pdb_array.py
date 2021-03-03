@@ -67,6 +67,8 @@ API: Set Operations
 
 """  # noqa: E501
 
+from __future__ import annotations
+
 import textwrap
 from types import MappingProxyType
 from itertools import repeat, chain
@@ -86,9 +88,6 @@ from .functions import int_to_slice, if_exception
 
 if TYPE_CHECKING:
     from numpy.typing import ArrayLike, DTypeLike
-else:
-    ArrayLike = 'numpy.typing.ArrayLike'
-    DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = ['PDBContainer']
 
@@ -1145,8 +1144,8 @@ class PDBContainer:
         """
         # Parse **idx**
         if index is None:
-            idx: Union[slice, np.ndarray] = slice(None)
-            idx_max = len(self)
+            idx: slice | np.ndarray = slice(None)
+            idx_max: int | np.integer = len(self)
         else:
             try:
                 idx = int_to_slice(index, len(self))  # type: ignore
@@ -1154,7 +1153,7 @@ class PDBContainer:
             except (AttributeError, TypeError):
                 if not isinstance(index, slice):
                     idx = np.asarray(index)
-                    idx_max = idx.max()
+                    idx_max = idx.max()  # type: ignore[assignment]
                     assert idx.ndim == 1
                     assert issubclass(idx.dtype.type, np.integer)
                 else:

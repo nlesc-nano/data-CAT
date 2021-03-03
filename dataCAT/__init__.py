@@ -12,7 +12,8 @@ try:
 except ImportError:
     NANOCAT_VERSION = VersionInfo(-1, -1, -1)
 
-version_info = DATACAT_VERSION = VersionInfo.from_str(__version__)
+DATACAT_VERSION = VersionInfo.from_str(__version__)
+version_info = DATACAT_VERSION
 del VersionInfo
 
 from .df_proxy import DFProxy

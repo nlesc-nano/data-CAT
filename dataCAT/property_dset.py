@@ -219,7 +219,7 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DTypeLike = None,
 
 
 def _null_value(dtype_like: DTypeLike) -> np.generic:
-    dtype = np.dtype(dtype_like)
+    dtype: np.dtype = np.dtype(dtype_like)
     generic = dtype.type
 
     if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
@@ -228,7 +228,7 @@ def _null_value(dtype_like: DTypeLike) -> np.generic:
         return generic('')
 
     # Structured dtypes
-    values = (v[0] for v in dtype.fields.values())
+    values = (v[0] for v in dtype.fields.values())  # type: ignore[union-attr]
     data = tuple(_null_value(field_dtype) for field_dtype in values)
     return np.array(data, dtype=dtype).take(0)
 
