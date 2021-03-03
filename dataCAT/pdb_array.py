@@ -771,7 +771,7 @@ class PDBContainer:
             else:
                 ax0 = len(ar_self) + sum(len(ar) for ar in ar_list)
                 ax1 = max(ar_self.shape[1], *(ar.shape[1] for ar in ar_list))
-                ar_new = np.rec.array(None, dtype=cls.DTYPE[k], shape=(ax0, ax1))
+                ar_new = np.zeros((ax0, ax1), dtype=cls.DTYPE[k]).view(np.recarray)
 
                 i = 0
                 for ar in chain([ar_self], ar_list):
@@ -858,8 +858,8 @@ class PDBContainer:
 
         # Construct the to-be returned (padded) arrays
         DTYPE = cls.DTYPE
-        atom_array = np.rec.array(None, shape=atom_shape, dtype=DTYPE['atoms'])
-        bond_array = np.rec.array(None, shape=bond_shape, dtype=DTYPE['bonds'])
+        atom_array = np.zeros(atom_shape, dtype=DTYPE['atoms']).view(np.recarray)
+        bond_array = np.zeros(bond_shape, dtype=DTYPE['bonds']).view(np.recarray)
         atom_counter = np.empty(mol_count, dtype=DTYPE['atom_count'])
         bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
 
