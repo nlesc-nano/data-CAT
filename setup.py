@@ -69,7 +69,6 @@ setup(
         'science',
         'chemistry',
         'python-3',
-        'python-3-6',
         'python-3-7',
         'python-3-8',
         'automation'
@@ -88,14 +87,13 @@ setup(
         'Natural Language :: English',
         'Operating System :: Unix',
         'Operating System :: MacOS',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Topic :: Database',
         'Typing :: Typed'
     ],
     test_suite='tests',
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=[
         'h5py',
         'numpy',
