@@ -29,9 +29,9 @@ import pandas as pd
 from assertionlib import assertion
 
 if TYPE_CHECKING:
-    from numpy.typing import DtypeLike
+    from numpy.typing import DTypeLike
 else:
-    DtypeLike = 'numpy.typing.DtypeLike'
+    DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset',
            'validate_prop_group', 'prop_to_dataframe']
@@ -103,7 +103,7 @@ def create_prop_group(file: h5py.Group, scale: h5py.Dataset) -> h5py.Group:
     return grp
 
 
-def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
+def create_prop_dset(group: h5py.Group, name: str, dtype: DTypeLike = None,
                      prop_names: Optional[Sequence[str]] = None,
                      **kwargs: Any) -> h5py.Dataset:
     r"""Construct a new dataset for holding a user-defined molecular property.
@@ -218,7 +218,7 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
     return dset
 
 
-def _null_value(dtype_like: DtypeLike) -> np.generic:
+def _null_value(dtype_like: DTypeLike) -> np.generic:
     dtype = np.dtype(dtype_like)
     generic = dtype.type
 
@@ -297,7 +297,7 @@ def validate_prop_group(group: h5py.Group) -> None:
         assertion.eq(dset.dims[0]['index'], idx, message=f'{name!r} invalid dataset scale')
 
 
-def prop_to_dataframe(dset: h5py.Dataset, dtype: DtypeLike = None) -> pd.DataFrame:
+def prop_to_dataframe(dset: h5py.Dataset, dtype: DTypeLike = None) -> pd.DataFrame:
     """Convert the passed property Dataset into a DataFrame.
 
     Examples

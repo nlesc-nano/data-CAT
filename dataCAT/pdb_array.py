@@ -85,10 +85,10 @@ from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE,
 from .functions import int_to_slice, if_exception
 
 if TYPE_CHECKING:
-    from numpy.typing import ArrayLike, DtypeLike
+    from numpy.typing import ArrayLike, DTypeLike
 else:
     ArrayLike = 'numpy.typing.ArrayLike'
-    DtypeLike = 'numpy.typing.DtypeLike'
+    DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = ['PDBContainer']
 
@@ -994,7 +994,7 @@ class PDBContainer:
     @overload  # noqa: E301
     @classmethod
     def create_hdf5_group(cls, file: h5py.Group, name: str, *,
-                          scale_dtype: DtypeLike = ..., **kwargs: Any) -> h5py.Group:
+                          scale_dtype: DTypeLike = ..., **kwargs: Any) -> h5py.Group:
         ...
     @classmethod  # noqa: E301
     def create_hdf5_group(cls, file, name, *, scale=None, scale_dtype=None, **kwargs):

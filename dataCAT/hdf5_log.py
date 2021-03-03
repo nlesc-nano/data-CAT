@@ -29,9 +29,9 @@ from . import CAT_VERSION, NANOCAT_VERSION, DATACAT_VERSION
 from .dtype import DT_DTYPE, VERSION_DTYPE, MSG_DTYPE, INDEX_DTYPE
 
 if TYPE_CHECKING:
-    from numpy.typing import DtypeLike, ArrayLike
+    from numpy.typing import DTypeLike, ArrayLike
 else:
-    DtypeLike = 'numpy.typing.DtypeLike'
+    DTypeLike = 'numpy.typing.DTypeLike'
     ArrayLike = 'numpy.typing.ArrayLike'
 
 __all__ = [
