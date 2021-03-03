@@ -392,6 +392,10 @@ class Database:
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for n, name_seq in dct.items():
                 data = df[n].values
+                if data.dtype == object:
+                    dtype = h5py.string_dtype(encoding='utf-8')
+                else:
+                    dtype = data.dtype
 
                 # Get the dataset
                 try:
@@ -399,7 +403,7 @@ class Database:
                 except KeyError:
                     if not name_seq.any():
                         name_seq = None
-                    dset = create_prop_dset(group, n, data.dtype, name_seq)
+                    dset = create_prop_dset(group, n, dtype, name_seq)
 
                 # Update the dataset
                 update_prop_dset(dset, data, hdf5_index)

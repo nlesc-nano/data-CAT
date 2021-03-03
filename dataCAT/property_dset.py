@@ -204,7 +204,7 @@ def create_prop_dset(group: h5py.Group, name: str, dtype: DtypeLike = None,
         shape=(n, m),
         maxshape=(None, m),
         dtype=dtype,
-        fillvalue=_null_value(dtype),
+        fillvalue=(_null_value(dtype) if dtype != object else None),
         **kwargs
     )
     scale = group.create_dataset(scale_name, data=name_array, shape=(m,), dtype=name_array.dtype)
