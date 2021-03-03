@@ -28,7 +28,7 @@ TT = TypeVar('TT', bound='_DFMeta')
 
 class _DFMeta(type):
     MAGIC: FrozenSet[str] = frozenset({
-        '__array__', '__abs__', '__add__', '__and__', '__contains__', '__div__', '__eq__',
+        '__array__', '__abs__', '__add__', '__and__', '__contains__', '__eq__',
         '__floordiv__', '__ge__', '__getitem__', '__gt__', '__hash__', '__iadd__', '__iand__',
         '__ifloordiv__', '__imod__', '__imul__', '__ior__', '__ipow__', '__isub__', '__iter__',
         '__itruediv__', '__ixor__', '__le__', '__len__', '__lt__', '__matmul__', '__mod__',

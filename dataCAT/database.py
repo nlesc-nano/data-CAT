@@ -46,10 +46,10 @@ from ._parse_settings import _update_hdf5_settings
 
 if TYPE_CHECKING:
     from .df_proxy import DFProxy
-    from numpy.typing import DtypeLike
+    from numpy.typing import DTypeLike
 else:
     DFProxy = 'dataCAT.DFProxy'
-    DtypeLike = 'numpy.typing.DtypeLike'
+    DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = ['Database']
 
@@ -392,6 +392,10 @@ class Database:
             dct = {k: df_columns.get_loc_level(k)[1] for k in lvl0}
             for n, name_seq in dct.items():
                 data = df[n].values
+                if data.dtype == object:
+                    dtype = h5py.string_dtype(encoding='utf-8')
+                else:
+                    dtype = data.dtype
 
                 # Get the dataset
                 try:
@@ -399,7 +403,7 @@ class Database:
                 except KeyError:
                     if not name_seq.any():
                         name_seq = None
-                    dset = create_prop_dset(group, n, data.dtype, name_seq)
+                    dset = create_prop_dset(group, n, dtype, name_seq)
 
                 # Update the dataset
                 update_prop_dset(dset, data, hdf5_index)
@@ -484,7 +488,7 @@ class Database:
 
     @classmethod
     def _write_hdf5(cls, group: h5py.Group, df: pd.DataFrame, new_index: pd.Index,
-                    dtype: DtypeLike, database: Union[Ligand, QD] = 'ligand',
+                    dtype: DTypeLike, database: Union[Ligand, QD] = 'ligand',
                     opt: bool = False) -> pd.Index:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = False`."""
         mol_series = df.loc[new_index, MOL]
@@ -507,7 +511,7 @@ class Database:
 
     @staticmethod
     def _overwrite_hdf5(group: h5py.Group, old: pd.Series, df: pd.DataFrame,
-                        dtype: DtypeLike, opt: bool = False) -> None:
+                        dtype: DTypeLike, opt: bool = False) -> None:
         """Helper method for :meth:`update_hdf5` when :code:`overwrite = True`."""
         mol_series = df.loc[old.index, MOL]
 
@@ -522,7 +526,7 @@ class Database:
             df.loc[old.index, OPT] = True
 
     @staticmethod
-    def _sanitize_multi_idx(index: MIT, dtype: DtypeLike, database: Union[Ligand, QD]) -> MIT:
+    def _sanitize_multi_idx(index: MIT, dtype: DTypeLike, database: Union[Ligand, QD]) -> MIT:
         """Parse and sanitize the passed MultiIndex."""
         return index.values.astype(dtype)  # type: ignore
 

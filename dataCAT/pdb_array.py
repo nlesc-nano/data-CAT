@@ -67,6 +67,8 @@ API: Set Operations
 
 """  # noqa: E501
 
+from __future__ import annotations
+
 import textwrap
 from types import MappingProxyType
 from itertools import repeat, chain
@@ -85,10 +87,7 @@ from .dtype import ATOMS_DTYPE, BONDS_DTYPE, ATOM_COUNT_DTYPE, BOND_COUNT_DTYPE,
 from .functions import int_to_slice, if_exception
 
 if TYPE_CHECKING:
-    from numpy.typing import ArrayLike, DtypeLike
-else:
-    ArrayLike = 'numpy.typing.ArrayLike'
-    DtypeLike = 'numpy.typing.DtypeLike'
+    from numpy.typing import ArrayLike, DTypeLike
 
 __all__ = ['PDBContainer']
 
@@ -772,7 +771,7 @@ class PDBContainer:
             else:
                 ax0 = len(ar_self) + sum(len(ar) for ar in ar_list)
                 ax1 = max(ar_self.shape[1], *(ar.shape[1] for ar in ar_list))
-                ar_new = np.rec.array(None, dtype=cls.DTYPE[k], shape=(ax0, ax1))
+                ar_new = np.zeros((ax0, ax1), dtype=cls.DTYPE[k]).view(np.recarray)
 
                 i = 0
                 for ar in chain([ar_self], ar_list):
@@ -859,8 +858,8 @@ class PDBContainer:
 
         # Construct the to-be returned (padded) arrays
         DTYPE = cls.DTYPE
-        atom_array = np.rec.array(None, shape=atom_shape, dtype=DTYPE['atoms'])
-        bond_array = np.rec.array(None, shape=bond_shape, dtype=DTYPE['bonds'])
+        atom_array = np.zeros(atom_shape, dtype=DTYPE['atoms']).view(np.recarray)
+        bond_array = np.zeros(bond_shape, dtype=DTYPE['bonds']).view(np.recarray)
         atom_counter = np.empty(mol_count, dtype=DTYPE['atom_count'])
         bond_counter = np.empty(mol_count, dtype=DTYPE['bond_count'])
 
@@ -994,7 +993,7 @@ class PDBContainer:
     @overload  # noqa: E301
     @classmethod
     def create_hdf5_group(cls, file: h5py.Group, name: str, *,
-                          scale_dtype: DtypeLike = ..., **kwargs: Any) -> h5py.Group:
+                          scale_dtype: DTypeLike = ..., **kwargs: Any) -> h5py.Group:
         ...
     @classmethod  # noqa: E301
     def create_hdf5_group(cls, file, name, *, scale=None, scale_dtype=None, **kwargs):
@@ -1145,8 +1144,8 @@ class PDBContainer:
         """
         # Parse **idx**
         if index is None:
-            idx: Union[slice, np.ndarray] = slice(None)
-            idx_max = len(self)
+            idx: slice | np.ndarray = slice(None)
+            idx_max: int | np.integer = len(self)
         else:
             try:
                 idx = int_to_slice(index, len(self))  # type: ignore
@@ -1154,7 +1153,7 @@ class PDBContainer:
             except (AttributeError, TypeError):
                 if not isinstance(index, slice):
                     idx = np.asarray(index)
-                    idx_max = idx.max()
+                    idx_max = idx.max()  # type: ignore[assignment]
                     assert idx.ndim == 1
                     assert issubclass(idx.dtype.type, np.integer)
                 else:

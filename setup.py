@@ -33,7 +33,6 @@ tests_require = [
     'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
-    'CAT@git+https://github.com/nlesc-nano/CAT',
 ]
 tests_require += build_require
 
@@ -69,7 +68,6 @@ setup(
         'science',
         'chemistry',
         'python-3',
-        'python-3-6',
         'python-3-7',
         'python-3-8',
         'automation'
@@ -88,14 +86,13 @@ setup(
         'Natural Language :: English',
         'Operating System :: Unix',
         'Operating System :: MacOS',
-        'Programming Language :: Python :: 3.6',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
         'Topic :: Database',
         'Typing :: Typed'
     ],
     test_suite='tests',
-    python_requires='>=3.6',
+    python_requires='>=3.7',
     install_requires=[
         'h5py',
         'numpy',

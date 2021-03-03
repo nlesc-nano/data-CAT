@@ -40,11 +40,11 @@ from nanoutils import SupportsIndex, PathType
 
 if TYPE_CHECKING:
     from .pdb_array import PDBContainer, IndexLike
-    from numpy.typing import DtypeLike
+    from numpy.typing import DTypeLike
 else:
     PDBContainer = 'dataCAT.PDBContainer'
     IndexLike = 'dataCAT.pdb_array.IndexLike'
-    DtypeLike = 'numpy.typing.DtypeLike'
+    DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = [
     'df_to_mongo_dict', 'get_nan_row', 'even_index', 'int_to_slice', 'hdf5_availability',
@@ -368,7 +368,7 @@ def hdf5_availability(filename: PathType, timeout: float = 5.0,
 
 
 def _set_index(cls: Type[PDBContainer], group: h5py.Group,
-               dtype: DtypeLike, length: int, **kwargs: Any) -> h5py.Dataset:
+               dtype: DTypeLike, length: int, **kwargs: Any) -> h5py.Dataset:
     scale = group.create_dataset('index', shape=(length,), maxshape=(None,), dtype=dtype, **kwargs)
     scale.make_scale('index')
 
