@@ -23,6 +23,7 @@ Index
 .. autosummary::
     PDBContainer.from_molecules
     PDBContainer.to_molecules
+    PDBContainer.to_rdkit
     PDBContainer.create_hdf5_group
     PDBContainer.validate_hdf5
     PDBContainer.from_hdf5
