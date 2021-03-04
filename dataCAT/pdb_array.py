@@ -53,6 +53,7 @@ API: Object Interconversion
 ---------------------------
 .. automethod:: PDBContainer.from_molecules
 .. automethod:: PDBContainer.to_molecules
+.. automethod:: PDBContainer.to_rdkit
 .. automethod:: PDBContainer.create_hdf5_group
 .. automethod:: PDBContainer.validate_hdf5
 .. automethod:: PDBContainer.from_hdf5
@@ -80,6 +81,7 @@ from typing import (
 import h5py
 import numpy as np
 from scm.plams import Molecule, Atom, Bond
+from rdkit import Chem, Geometry
 from nanoutils import SupportsIndex, TypedDict, Literal
 from assertionlib import assertion
 
@@ -124,7 +126,21 @@ _ReduceTuple = Tuple[
     np.recarray,  # scale
     Literal[False]  # validate
 ]
+
 _Coords = Tuple[float, float, float]
+
+_ResInfo = Tuple[
+    str,  # Name,
+    int,  # SerialNumber,
+    str,  # AltLoc
+    str,  # ResidueName
+    int,  # ResidueNumber
+    int,  # ChainId
+    str,  # InsertionCode
+    float,  # Occupancy
+    float,  # TempFactor
+    bool,  # IsHeteroAtom
+]
 
 
 class _PDBInfo(TypedDict):
@@ -178,7 +194,9 @@ def _get_bond_info(mol: Molecule) -> List[_BondTuple]:
     return ret
 
 
-def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, _Coords, str], None, None]:
+def _iter_rec_plams(
+    atom_array: np.recarray,
+) -> Generator[Tuple[_Properties, _Coords, str], None, None]:
     """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
     for ar in atom_array:
         IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float = ar.item()  # noqa: E501
@@ -201,11 +219,14 @@ def _iter_rec(atom_array: np.recarray) -> Generator[Tuple[_Properties, _Coords, 
         yield properties, (x, y, z), symbol.decode()  # type: ignore
 
 
-def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
-                atom_len: Optional[int] = None,
-                bond_len: Optional[int] = None,
-                mol: Optional[Molecule] = None) -> Molecule:
-    """Helper function for :meth:`PDBContainer.from_molecules`: update/create a single molecule from the passed **atom_array** and **bond_array**."""  # noqa: E501
+def _rec_to_plams(
+    atom_array: np.recarray,
+    bond_array: np.recarray,
+    atom_len: None | int = None,
+    bond_len: None | int = None,
+    mol: None | Molecule = None,
+) -> Molecule:
+    """Helper function for :meth:`PDBContainer.to_molecules`: update/create a single plams molecule from the passed **atom_array** and **bond_array**."""  # noqa: E501
     if mol is None:
         ret = Molecule()
         for _ in range(len(atom_array[:atom_len])):
@@ -213,7 +234,7 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
     else:
         ret = mol
 
-    iterator = _iter_rec(atom_array[:atom_len])
+    iterator = _iter_rec_plams(atom_array[:atom_len])
     for atom, (properties, coords, symbol) in zip(ret, iterator):
         atom.coords = coords
         atom.symbol = symbol
@@ -225,6 +246,60 @@ def _rec_to_mol(atom_array: np.recarray, bond_array: np.recarray,
         bond = Bond(atom1=ret[i], atom2=ret[j], order=order, mol=ret)
         ret.add_bond(bond)
     return ret
+
+
+def _iter_rec_rdkit(
+    atom_array: np.recarray,
+) -> Generator[Tuple[str, int, _ResInfo], None, None]:
+    """Helper function for :func:`_rec_to_mol`: create an iterator yielding atom properties and attributes."""  # noqa: E501
+    for ar in atom_array:
+        IsHeteroAtom, SerialNumber, Name, ResidueName, ChainId, ResidueNumber, x, y, z, Occupancy, TempFactor, symbol, charge, charge_float = ar.item()  # noqa: E501
+        res_info = (
+            Name,
+            SerialNumber,
+            "",
+            ResidueName,
+            ResidueNumber,
+            ChainId,
+            "",
+            Occupancy,
+            TempFactor,
+            IsHeteroAtom,
+        )
+        yield symbol, charge, res_info
+
+
+def _rec_to_rdkit(
+    atom_array: np.recarray,
+    bond_array: np.recarray,
+    atom_len: None | int = None,
+    bond_len: None | int = None,
+    sanitize: bool = True,
+) -> Chem.Mol:
+    """Helper function for :meth:`PDBContainer.to_rdkit`: create a single rdkit molecule from the passed **atom_array** and **bond_array**."""  # noqa: E501
+    edit_mol = Chem.EditableMol(Chem.Mol())
+
+    iterator1 = _iter_rec_rdkit(atom_array[:atom_len])
+    for symbol, charge, res_info in iterator1:
+        atom = Chem.Atom(symbol)
+        atom.SetFormalCharge(charge)
+        atom.SetMonomerInfo(Chem.AtomPDBResidueInfo(*res_info))
+        edit_mol.AddAtom(Chem.Atom(symbol))
+
+    for void in bond_array[:bond_len]:
+        i, j, order = void.item()
+        edit_mol.AddBond(i - 1, j - 1, Chem.BondType(order))
+
+    mol = edit_mol.GetMol()
+    if sanitize:
+        Chem.SanitizeMol(mol)
+
+    conf = Chem.Conformer()
+    iterator2 = (void.item()[6:9] for void in atom_array[:atom_len])
+    for i, xyz in enumerate(iterator2):
+        conf.SetAtomPosition(i, Geometry.Point3D(*xyz))
+    mol.AddConformer(conf)
+    return mol
 
 
 IndexLike = Union[None, SupportsIndex, Sequence[int], slice, np.ndarray]
@@ -245,8 +320,8 @@ class PDBContainer:
 
     The methods implemented in this class can roughly be divided into three categories:
 
-    * Molecule-interconversion: :meth:`~PDBContainer.to_molecules` &
-      :meth:`~PDBContainer.from_molecules`.
+    * Molecule-interconversion: :meth:`~PDBContainer.to_molecules`,
+      :meth:`~PDBContainer.from_molecules` & :meth:`~PDBContainer.to_rdkit`.
     * hdf5-interconversion: :meth:`~PDBContainer.create_hdf5_group`,
       :meth:`~PDBContainer.validate_hdf5`,
       :meth:`~PDBContainer.to_hdf5` & :meth:`~PDBContainer.from_hdf5`.
@@ -973,7 +1048,7 @@ class PDBContainer:
         bond_count = self.bond_count[i]
 
         if not is_seq:
-            return _rec_to_mol(atoms, bonds, atom_count, bond_count, mol)
+            return _rec_to_plams(atoms, bonds, atom_count, bond_count, mol)
 
         if mol is None:
             mol_list = repeat(None)
@@ -983,7 +1058,88 @@ class PDBContainer:
             mol_list = mol
 
         iterator = zip(atoms, bonds, atom_count, bond_count, mol_list)
-        return [_rec_to_mol(*args) for args in iterator]
+        return [_rec_to_plams(*args) for args in iterator]
+
+    @overload
+    def to_rdkit(
+        self,
+        index: None | Sequence[int] | slice | np.ndarray = ...,
+        sanitize: bool = ...,
+    ) -> List[Chem.Mol]:
+        ...
+    @overload  # noqa: E301
+    def to_rdkit(
+        self,
+        index: SupportsIndex,
+        sanitize: bool = ...,
+    ) -> Chem.Mol:
+        ...
+    def to_rdkit(self, index=None, sanitize=True):  # noqa: E301
+        """Create an rdkit molecule or list of rdkit molecules from this instance.
+
+        Examples
+        --------
+        .. testsetup:: python
+
+            >>> from dataCAT.testing_utils import PDB as pdb
+
+        An example where one or more new molecules are created.
+
+        .. code:: python
+
+            >>> from dataCAT import PDBContainer
+            >>> from rdkit.Chem import Mol
+
+            >>> pdb = PDBContainer(...)  # doctest: +SKIP
+
+            # Create a single new molecule from `pdb`
+            >>> pdb.to_rdkit(index=0)  # doctest: +ELLIPSIS
+            <rdkit.Chem.rdchem.Mol object at ...>
+
+            # Create three new molecules from `pdb`
+            >>> pdb.to_rdkit(index=[0, 1])  # doctest: +ELLIPSIS,+NORMALIZE_WHITESPACE
+            [<rdkit.Chem.rdchem.Mol object at ...>,
+             <rdkit.Chem.rdchem.Mol object at ...>]
+
+        Parameters
+        ----------
+        index : :class:`int`, :class:`Sequence[int]<Collections.abc.Sequence>` or :class:`slice`, optional
+            An object for slicing the arrays embedded within this instance.
+            Follows the standard numpy broadcasting rules (*e.g.* :code:`self.atoms[index]`).
+            If a scalar is provided (*e.g.* an integer) then a single molecule will be returned.
+            If a sequence, range, slice, *etc.* is provided then
+            a list of molecules will be returned.
+        sanitize : bool
+            Whether to sanitize the molecule before returning or not.
+
+        Returns
+        -------
+        :class:`~rdkit.Chem.rdchem.Mol` or :class:`list[Mol]<list>`
+            A molecule or list of molecules,
+            depending on whether or not **index** is a scalar or sequence / slice.
+
+        """  # noqa: E501
+        if index is None:
+            i = slice(None)
+            is_seq = True
+        else:
+            try:
+                i = index.__index__()
+                is_seq = False
+            except (AttributeError, TypeError):
+                i = index
+                is_seq = True
+
+        atoms = self.atoms[i]
+        bonds = self.bonds[i]
+        atom_count = self.atom_count[i]
+        bond_count = self.bond_count[i]
+
+        if not is_seq:
+            return _rec_to_rdkit(atoms, bonds, atom_count, bond_count, sanitize)
+
+        iterator = zip(atoms, bonds, atom_count, bond_count, repeat(sanitize))
+        return [_rec_to_rdkit(*args) for args in iterator]
 
     @overload
     @classmethod
