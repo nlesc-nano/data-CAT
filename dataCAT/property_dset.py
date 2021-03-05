@@ -8,6 +8,7 @@ Index
     create_prop_dset
     update_prop_dset
     validate_prop_group
+    index_to_pandas
     prop_to_dataframe
 
 API
@@ -16,9 +17,12 @@ API
 .. autofunction:: create_prop_dset
 .. autofunction:: update_prop_dset
 .. autofunction:: validate_prop_group
+.. autofunction:: index_to_pandas
 .. autofunction:: prop_to_dataframe
 
 """
+
+from __future__ import annotations
 
 from typing import Union, Sequence, Any, Optional, Dict, TYPE_CHECKING
 
@@ -34,7 +38,7 @@ else:
     DTypeLike = 'numpy.typing.DTypeLike'
 
 __all__ = ['create_prop_group', 'create_prop_dset', 'update_prop_dset',
-           'validate_prop_group', 'prop_to_dataframe']
+           'validate_prop_group', 'prop_to_dataframe', 'index_to_pandas']
 
 PROPERTY_DOC = r"""A h5py Group containing an arbitrary number of quantum-mechanical properties.
 
@@ -340,7 +344,7 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DTypeLike = None) -> pd.DataFra
     # Construct the index
     dim0 = dset.dims[0]
     scale0 = dim0[0]
-    index = _dset_to_index(scale0)
+    index = index_to_pandas(scale0)
 
     # Construct the columns
     if dset.ndim == 1:
@@ -366,28 +370,77 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DTypeLike = None) -> pd.DataFra
         return pd.DataFrame(dset[:].astype(dtype), index=index, columns=columns)
 
 
-def _dset_to_index(index: h5py.Dataset) -> pd.Index:
-    """Construct an Index from the passed **index** Dataset.
+def index_to_pandas(dset: h5py.Dataset, fields: None | Sequence[str] = None) -> pd.MultiIndex:
+    """Construct an MultiIndex from the passed ``index`` dataset.
 
-    Returns a :class:`pandas.Index` if the **index** dtype lacks any fields;
-    a :class:`pandas.MultiIndex` is returned otherwise.
+    Examples
+    --------
+    .. testsetup:: python
+
+        >>> from dataCAT.testing_utils import HDF5_READ as filename
+
+    .. code:: python
+
+        >>> from dataCAT import index_to_pandas
+        >>> import h5py
+
+        >>> filename = str(...)  # doctest: +SKIP
+
+        # Convert the entire dataset
+        >>> with h5py.File(filename, "r") as f:
+        ...     dset: h5py.Dataset = f["ligand"]["index"]
+        ...     index_to_pandas(dset)
+        MultiIndex([('O=C=O', 'O1'),
+                    ('O=C=O', 'O3'),
+                    ( 'CCCO', 'O4')],
+                   names=['ligand', 'ligand anchor'])
+
+        # Convert a subset of fields
+        >>> with h5py.File(filename, "r") as f:
+        ...     dset = f["ligand"]["index"]
+        ...     index_to_pandas(dset, fields=["ligand"])
+        MultiIndex([('O=C=O',),
+                    ('O=C=O',),
+                    ( 'CCCO',)],
+                   names=['ligand'])
+
+    Parameters
+    ----------
+    dset : :class:`h5py.Dataset`
+        The relevant ``index`` dataset.
+    fields : :class:`Sequence[str]<collections.abc.Sequence>`
+        The names of the ``index`` fields that are to-be included in the
+        returned MultiIndex. If :data:`None`, include all fields.
+
+    Returns
+    -------
+    :class:`pandas.MultiIndex`
+        A multi-index constructed from the passed dataset.
 
     """
-    # Create an Index
-    if index.dtype.fields is None:
-        if h5py.check_string_dtype(index.dtype):
-            _index = index[:].astype(str)
+    # Fast-path for non-void-based datasets
+    if dset.dtype.fields is None:
+        if h5py.check_string_dtype(dset.dtype):
+            ar = dset[:].astype(str)
+        elif h5py.check_vlen_dtype(dset.dtype):
+            ar = _vlen_to_tuples(dset[:])
         else:
-            _index = index[:]
-        return pd.Index(_index, name=index.label)
+            ar = dset[:]
+        return pd.MultiIndex.from_arrays([ar])
 
-    # It's a structured array; create a MultiIndex
-    fields = []
-    field_names = []
-    index_ar = index[:]
-    dtype = index.dtype
+    # Parse the `fields` parameter
+    if fields is None:
+        field_names = list(dset.dtype.fields.keys())
+        iterator = ((name, f_dtype) for name, (f_dtype, *_) in dset.dtype.fields.items())
+    else:
+        field_names = list(fields)
+        iterator = ((name, dset.dtype.fields[name][0]) for name in fields)
+    if len(field_names) == 0:
+        raise ValueError("At least one field is required")
 
-    for name, (field_dtype, *_) in dtype.fields.items():
+    fields_lst = []
+    index_ar = dset[:]
+    for name, field_dtype in iterator:
         # It's a bytes-string; decode it
         if h5py.check_string_dtype(field_dtype):
             ar = index_ar[name].astype(str)
@@ -398,10 +451,8 @@ def _dset_to_index(index: h5py.Dataset) -> pd.Index:
 
         else:
             ar = index_ar[name]
-
-        fields.append(ar)
-        field_names.append(name)
-    return pd.MultiIndex.from_arrays(fields, names=field_names)
+        fields_lst.append(ar)
+    return pd.MultiIndex.from_arrays(fields_lst, names=field_names)
 
 
 def _vlen_to_tuples(array: np.ndarray) -> np.ndarray:
