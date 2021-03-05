@@ -285,7 +285,7 @@ def _rec_to_rdkit(
         atom = Chem.Atom(symbol)
         atom.SetFormalCharge(charge)
         atom.SetMonomerInfo(Chem.AtomPDBResidueInfo(*res_info))
-        edit_mol.AddAtom(Chem.Atom(symbol))
+        edit_mol.AddAtom(atom)
 
     for void in bond_array[:bond_len]:
         i, j, order = void.item()
