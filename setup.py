@@ -70,6 +70,7 @@ setup(
         'python-3',
         'python-3-7',
         'python-3-8',
+        'python-3-9',
         'automation'
     ],
     package_data={
@@ -88,6 +89,7 @@ setup(
         'Operating System :: MacOS',
         'Programming Language :: Python :: 3.7',
         'Programming Language :: Python :: 3.8',
+        'Programming Language :: Python :: 3.9',
         'Topic :: Database',
         'Typing :: Typed'
     ],
