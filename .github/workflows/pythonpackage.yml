@@ -17,11 +17,11 @@ jobs:
             fail-fast: false
             matrix:
                 os: [ubuntu-latest, macos-latest, windows-latest]
-                version: [3.7, 3.8]
+                version: [3.7, 3.8, 3.9]
 
         steps:
             - name: Cancel Previous Runs
-              uses: styfle/cancel-workflow-action@0.6.0
+              uses: styfle/cancel-workflow-action@0.9.0
               with:
                 access_token: ${{ github.token }}
 
@@ -35,7 +35,7 @@ jobs:
                 conda-channels: anaconda
 
             - name: Install Conda-based dependencies
-              run: conda install -c conda-forge h5py rdkit
+              run: conda install -c conda-forge rdkit
 
             - name: Install dependencies
               run: pip install -e .[test]
@@ -44,7 +44,7 @@ jobs:
 
             - name: Install MongoDB
               if: matrix.os == 'ubuntu-latest'
-              uses: supercharge/mongodb-github-action@1.3.0
+              uses: supercharge/mongodb-github-action@1.6.0
 
             - name: Info MongDB
               if: matrix.os == 'ubuntu-latest'

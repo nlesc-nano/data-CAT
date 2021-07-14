@@ -448,7 +448,7 @@ class PDBContainer:
         Used as dimensional scale in the h5py Group.
 
         """  # noqa: E501
-        return self._scale
+        return self._scale  # type: ignore[no-any-return]
 
     @overload
     def __init__(self, atoms: np.recarray, bonds: np.recarray,
@@ -1310,7 +1310,7 @@ class PDBContainer:
             except (AttributeError, TypeError):
                 if not isinstance(index, slice):
                     idx = np.asarray(index)
-                    idx_max = idx.max()  # type: ignore[assignment]
+                    idx_max = idx.max()
                     assert idx.ndim == 1
                     assert issubclass(idx.dtype.type, np.integer)
                 else:

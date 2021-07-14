@@ -229,12 +229,12 @@ def _null_value(dtype_like: DTypeLike) -> np.generic:
     if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
         return generic(False)
     elif not issubclass(generic, np.void):  # Strings, bytes & datetime64
-        return generic('')
+        return generic('')  # type: ignore[no-any-return]
 
     # Structured dtypes
     values = (v[0] for v in dtype.fields.values())  # type: ignore[union-attr]
     data = tuple(_null_value(field_dtype) for field_dtype in values)
-    return np.array(data, dtype=dtype).take(0)
+    return np.array(data, dtype=dtype).take(0)  # type: ignore[no-any-return]
 
 
 def _resize_prop_dset(dset: h5py.Dataset) -> None:

@@ -65,6 +65,17 @@ class JobRecipe(TypedDict):
     value: Union[str, Settings]
 
 
+def _to_int64_array(ar: np.ndarray) -> np.ndarray:
+    ret = ar.astype(np.int64)
+    if ar.dtype.kind in "SU":
+        return ret
+
+    is_eq = (ret == ar)
+    if not isinstance(is_eq, (np.ndarray, np.bool_)) or not is_eq.all():
+        raise TypeError(f"Cannot safelly cast {ar.dtype} to {ret.dtype}")
+    return ret
+
+
 class Database:
     """The Database class."""
 
@@ -383,6 +394,11 @@ class Database:
 
             # Define the indices
             hdf5_index = df[HDF5_INDEX].values
+
+            # "Fix" for rare bug wherein the index dtype is incorrect
+            if hdf5_index.dtype.kind != "i":
+                warnings.warn(f"Invalid {HDF5_INDEX!r} dtype: {hdf5_index.dtype}")
+                hdf5_index = df[HDF5_INDEX] = _to_int64_array(hdf5_index)
 
             # Define the properties
             lvl0_ignore = {OPT[0], HDF5_INDEX[0], MOL[0]}
