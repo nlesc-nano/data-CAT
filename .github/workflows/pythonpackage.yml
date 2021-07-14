@@ -44,7 +44,7 @@ jobs:
 
             - name: Install MongoDB
               if: matrix.os == 'ubuntu-latest'
-              uses: supercharge/mongodb-github-action@1.3.0
+              uses: supercharge/mongodb-github-action@1.6.0
 
             - name: Info MongDB
               if: matrix.os == 'ubuntu-latest'
