@@ -667,6 +667,10 @@ class Database:
             pdb = PDBContainer.from_hdf5(f[database], index)
             mol_list_ = pdb.to_molecules(mol=mol_list)
 
+        is_opt = not ('no_opt' in database)
+        for mol in mol_list_:
+            mol.properties.is_opt = is_opt
+
         if rdmol:
             return [from_rdmol(mol) for mol in mol_list_]
         return mol_list_
