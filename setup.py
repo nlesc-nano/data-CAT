@@ -102,7 +102,7 @@ setup(
         'pymongo',
         'Nano-Utils>=0.4.3',
         'AssertionLib>=2.2.0',
-        'plams@git+https://github.com/SCM-NV/PLAMS@master',
+        'plams>=1.5.1',
         'CAT@git+https://github.com/nlesc-nano/CAT@master',
     ],
     setup_requires=[
