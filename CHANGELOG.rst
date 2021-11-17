@@ -6,6 +6,13 @@ All notable changes to this project will be documented in this file.
 This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 
+0.7.0
+*****
+* Add a new ``PDBContainer`` method for creating rdkit molecules.
+* Expose the ``index_to_pandas`` function.
+* Various fixes.
+
+
 0.5.1
 *****
 * Fixed an issue where not all properties were copied from the .csv to the .hdf5 file.
