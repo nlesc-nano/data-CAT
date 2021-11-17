@@ -448,7 +448,7 @@ class PDBContainer:
         Used as dimensional scale in the h5py Group.
 
         """  # noqa: E501
-        return self._scale  # type: ignore[no-any-return]
+        return self._scale
 
     @overload
     def __init__(self, atoms: np.recarray, bonds: np.recarray,

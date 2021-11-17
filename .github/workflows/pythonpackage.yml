@@ -57,7 +57,14 @@ jobs:
               run: conda list
 
             - name: Run tests
+              if: matrix.os == 'ubuntu-latest'
               run: pytest -m "not slow" --mypy
+              env:
+                CONDA_PREFIX: /usr/share/miniconda
+
+            - name: Run tests (no mypy)
+              if: matrix.os != 'ubuntu-latest'
+              run: pytest -m "not slow"
               env:
                 CONDA_PREFIX: /usr/share/miniconda
 

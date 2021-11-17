@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import importlib
+import sys
 import os
 
 from typing import Dict
@@ -39,13 +40,11 @@ tests_require += build_require
 # Check if rdkit is manually installed (as it is not available via pypi)
 try:
     importlib.import_module("rdkit")
-except ModuleNotFoundError as ex:
-    import warnings
-    exc = ImportWarning(
-        "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
+except ModuleNotFoundError:
+    print(
+        "`Nano-CAT` requires the `rdkit` package: https://anaconda.org/conda-forge/rdkit",
+        file=sys.stderr,
     )
-    exc.__cause__ = ex
-    warnings.warn(exc)
 
 setup(
     name='Data-CAT',
@@ -83,7 +82,7 @@ setup(
     classifiers=[
         'Development Status :: 3 - Alpha',
         'Intended Audience :: Science/Research',
-        'License :: OSI Approved :: GNU Lesser General Public License',
+        'License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)',
         'Natural Language :: English',
         'Operating System :: Unix',
         'Operating System :: MacOS',
@@ -96,17 +95,14 @@ setup(
     test_suite='tests',
     python_requires='>=3.7',
     install_requires=[
-        'h5py',
+        'h5py>=3.0.0',
         'numpy',
         'pandas',
         'pymongo',
         'Nano-Utils>=0.4.3',
         'AssertionLib>=2.2.0',
         'plams>=1.5.1',
-        'CAT@git+https://github.com/nlesc-nano/CAT@master',
-    ],
-    setup_requires=[
-        'pytest-runner'
+        'nlesc-CAT>=0.10.0',
     ],
     tests_require=tests_require,
     extras_require={

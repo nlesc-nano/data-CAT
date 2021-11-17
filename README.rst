@@ -15,7 +15,7 @@
 
 
 ##############
-Data-CAT 0.6.0
+Data-CAT 0.7.0
 ##############
 
 Data-CAT is a databasing framework for the Compound Attachment Tools package (CAT_).
@@ -51,7 +51,7 @@ Package installation
 --------------------
 Finally, install **Data-CAT** using pip:
 
-- **Data-CAT**: ``pip install git+https://github.com/nlesc-nano/Data-CAT@master --upgrade``
+- **Data-CAT**: ``pip install data-CAT --upgrade``
 
 Now you are ready to use **Data-CAT**.
 
