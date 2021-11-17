@@ -51,7 +51,7 @@ Package installation
 --------------------
 Finally, install **Data-CAT** using pip:
 
-- **Data-CAT**: ``pip install git+https://github.com/nlesc-nano/Data-CAT@master --upgrade``
+- **Data-CAT**: ``pip install data-CAT --upgrade``
 
 Now you are ready to use **Data-CAT**.
 
