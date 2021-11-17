@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import importlib
+import sys
 import os
 
 from typing import Dict
@@ -39,13 +40,11 @@ tests_require += build_require
 # Check if rdkit is manually installed (as it is not available via pypi)
 try:
     importlib.import_module("rdkit")
-except ModuleNotFoundError as ex:
-    import warnings
-    exc = ImportWarning(
-        "'Data-CAT' requires the 'rdkit' package: https://anaconda.org/conda-forge/rdkit"
+except ModuleNotFoundError:
+    print(
+        "`Nano-CAT` requires the `rdkit` package: https://anaconda.org/conda-forge/rdkit",
+        file=sys.stderr,
     )
-    exc.__cause__ = ex
-    warnings.warn(exc)
 
 setup(
     name='Data-CAT',
