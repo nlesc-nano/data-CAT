@@ -229,7 +229,7 @@ def _null_value(dtype_like: DTypeLike) -> np.generic:
     if issubclass(generic, (np.number, np.bool_)):  # Numerical scalars
         return generic(False)
     elif not issubclass(generic, np.void):  # Strings, bytes & datetime64
-        return generic('')  # type: ignore[no-any-return]
+        return generic('')
 
     # Structured dtypes
     values = (v[0] for v in dtype.fields.values())  # type: ignore[union-attr]

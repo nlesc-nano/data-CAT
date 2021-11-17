@@ -83,7 +83,7 @@ version_created : attribute
 def _get_now() -> np.recarray:
     now = datetime.now()
     tup = tuple(getattr(now, k) for k in DT_DTYPE.fields.keys())  # type: ignore[union-attr]
-    return np.rec.array(tup, dtype=DT_DTYPE)  # type: ignore[no-any-return]
+    return np.rec.array(tup, dtype=DT_DTYPE)
 
 
 def create_hdf5_log(file: h5py.Group,
