@@ -364,8 +364,7 @@ def prop_to_dataframe(dset: h5py.Dataset, dtype: DTypeLike = None) -> pd.DataFra
     # If possible, let h5py handle the datatype conversion
     # This will often fail when dset.dtype consists of variable-length bytes-strings
     try:
-        with dset.astype(dtype):
-            return pd.DataFrame(dset[:], index=index, columns=columns)
+        return pd.DataFrame(dset.astype(dtype)[:], index=index, columns=columns)
     except (ValueError, TypeError):
         return pd.DataFrame(dset[:].astype(dtype), index=index, columns=columns)
 
