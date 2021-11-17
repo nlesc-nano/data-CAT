@@ -105,9 +105,6 @@ setup(
         'plams>=1.5.1',
         'nlesc-CAT>=0.10.0',
     ],
-    setup_requires=[
-        'pytest-runner'
-    ],
     tests_require=tests_require,
     extras_require={
         'test': tests_require,
