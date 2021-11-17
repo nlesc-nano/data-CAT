@@ -103,7 +103,7 @@ setup(
         'Nano-Utils>=0.4.3',
         'AssertionLib>=2.2.0',
         'plams>=1.5.1',
-        'CAT@git+https://github.com/nlesc-nano/CAT@master',
+        'nlesc-CAT>=0.10.0',
     ],
     setup_requires=[
         'pytest-runner'
