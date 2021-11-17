@@ -95,7 +95,7 @@ setup(
     test_suite='tests',
     python_requires='>=3.7',
     install_requires=[
-        'h5py',
+        'h5py>=3.0.0',
         'numpy',
         'pandas',
         'pymongo',
