@@ -3,6 +3,8 @@
     :target: https://github.com/nlesc-nano/data-CAT/actions?query=workflow%3A%22Build+with+Conda%22
 .. image:: https://codecov.io/gh/nlesc-nano/data-CAT/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/nlesc-nano/data-CAT
+.. image:: https://badge.fury.io/py/Data-CAT.svg
+    :target: https://badge.fury.io/py/Data-CAT
 
 |
 
