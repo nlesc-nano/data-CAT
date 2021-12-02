@@ -16,6 +16,7 @@ import pandas as pd
 from scm.plams import readpdb
 from nanoutils import delete_finally
 from assertionlib import assertion
+from CAT.utils import get_formula
 from CAT.workflows import MOL, HDF5_INDEX, OPT, V_BULK, JOB_SETTINGS_CDFT
 
 from dataCAT import Database, OpenLig, OpenQD
@@ -87,12 +88,12 @@ def test_from_hdf5() -> None:
     idx1 = slice(0, None)
     mol_list1 = DB.from_hdf5(idx1, 'ligand', rdmol=False)
     for mol, ref in zip(mol_list1, ref_tup):
-        assertion.eq(mol.get_formula(), ref)
+        assertion.eq(get_formula(mol), ref)
 
     idx2 = np.arange(0, 2)
     mol_list2 = DB.from_hdf5(idx2, 'ligand', rdmol=False)
     for mol, ref in zip(mol_list2, ref_tup[0:2]):
-        assertion.eq(mol.get_formula(), ref)
+        assertion.eq(get_formula(mol), ref)
 
 
 def test_from_csv() -> None:
@@ -115,7 +116,7 @@ def test_from_csv() -> None:
     ref_tup = ('C1H3O1', 'C2H5O1', 'C3H7O1')
     out2: pd.Series = DB.from_csv(df, 'ligand', get_mol=True, inplace=False)
     for mol, ref in zip(out2, ref_tup):
-        assertion.eq(mol.get_formula(), ref)
+        assertion.eq(get_formula(mol), ref)
 
 
 @delete_finally(DB_PATH_UPDATE)

@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Build with Conda
+name: Tests
 
 on:
     push:
@@ -11,65 +11,104 @@ on:
 
 jobs:
     build:
-        name: Python ${{ matrix.version }} on ${{ matrix.os }}
+        name: ${{ matrix.os }} (py ${{ matrix.version }}${{ matrix.special }})
         runs-on: ${{ matrix.os }}
         strategy:
             fail-fast: false
             matrix:
-                os: [ubuntu-latest, macos-latest, windows-latest]
+                os: [ubuntu-latest, macos-latest]
                 version: [3.7, 3.8, 3.9]
+                special: [""]
+                include:
+                    -   os: ubuntu-latest
+                        special: "; pre-release"
+                        version: "3.9"
 
         steps:
-            - name: Cancel Previous Runs
-              uses: styfle/cancel-workflow-action@0.9.0
-              with:
-                access_token: ${{ github.token }}
+            -   name: Cancel Previous Runs
+                uses: styfle/cancel-workflow-action@0.9.1
+                with:
+                    access_token: ${{ github.token }}
 
-            - uses: actions/checkout@v2
+            -   uses: actions/checkout@v2
 
-            - name: Set up Conda with Python ${{ matrix.version }} on ${{ matrix.os }}
-              uses: s-weigand/setup-conda@v1
-              with:
-                update-conda: true
-                python-version: ${{ matrix.version }}
-                conda-channels: anaconda
+            -   name: Setup Conda
+                uses: s-weigand/setup-conda@v1
+                with:
+                    update-conda: false
 
-            - name: Install Conda-based dependencies
-              run: conda install -c conda-forge rdkit
+            -   name: Install dependencies
+                run: |
+                    conda create -n test -c conda-forge python=${{ matrix.version }} "rdkit>=2021.03.4"
+                    source $CONDA/bin/activate test
+                    case "${{ matrix.special }}" in
+                        "; pre-release")
+                            pip install -e .[test] --pre --upgrade --force-reinstall
+                            pip install git+https://github.com/SCM-NV/PLAMS@master --upgrade
+                            ;;
+                        *)
+                            pip install -e .[test] ;;
+                    esac
 
-            - name: Install dependencies
-              run: pip install -e .[test]
-              env:
-                CONDA_PREFIX: /usr/share/miniconda
 
-            - name: Install MongoDB
-              if: matrix.os == 'ubuntu-latest'
-              uses: supercharge/mongodb-github-action@1.6.0
+            -   name: Install MongoDB
+                if: matrix.os == 'ubuntu-latest'
+                uses: supercharge/mongodb-github-action@1.7.0
 
-            - name: Info MongDB
-              if: matrix.os == 'ubuntu-latest'
-              run: mongo --version
+            -   name: Info MongDB
+                if: matrix.os == 'ubuntu-latest'
+                run: mongo --version
 
-            - name: Info Conda
-              run: conda info
+            -   name: Info Conda
+                run: |
+                    source $CONDA/bin/activate test
+                    conda info
 
-            - name: Info installed packages
-              run: conda list
+            -   name: Info installed packages
+                run: conda list -n test
 
-            - name: Run tests
-              if: matrix.os == 'ubuntu-latest'
-              run: pytest -m "not slow" --mypy
-              env:
-                CONDA_PREFIX: /usr/share/miniconda
+            -   name: Run tests
+                run: |
+                    source $CONDA/bin/activate test
+                    pytest -m "not slow"
 
-            - name: Run tests (no mypy)
-              if: matrix.os != 'ubuntu-latest'
-              run: pytest -m "not slow"
-              env:
-                CONDA_PREFIX: /usr/share/miniconda
+            -   name: Run codecov
+                uses: codecov/codecov-action@v2
+                with:
+                    file: ./coverage.xml
+                    name: codecov-umbrella
 
-            - name: Run codecov
-              uses: codecov/codecov-action@v1
-              with:
-                file: ./coverage.xml
-                name: codecov-umbrella
+    Linting:
+        runs-on: ubuntu-latest
+        steps:
+            -   uses: actions/checkout@v2
+
+            -   name: Set up Python 3.9 on ubuntu-latest
+                uses: actions/setup-python@v2
+                with:
+                    python-version: 3.9
+
+            -   name: Install dependencies
+                run: |
+                    pip install -e .
+                    pip install "flake8>=3.8.0" "pydocstyle>=5.0.0" mypy nano-CAT
+
+            -   name: Python info
+                run: |
+                    which python
+                    python --version
+
+            -   name: Installed packages
+                run: pip list
+
+            -   name: Run flake8
+                run: flake8 dataCAT tests
+                continue-on-error: true
+
+            -   name: Run pydocstyle
+                run: pydocstyle dataCAT tests
+                continue-on-error: true
+
+            -   name: Run mypy
+                run: python tools/run_mypy.py
+                continue-on-error: true
