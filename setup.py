@@ -34,6 +34,7 @@ tests_require = [
     'pydocstyle>=5.0.0',
     'pytest-pydocstyle>=2.1',
     'pytest-mypy>=0.6.2',
+    'nlesc-CAT>=0.10.1',
 ]
 tests_require += build_require
 
