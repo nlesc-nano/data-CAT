@@ -28,7 +28,6 @@ build_require = [
 tests_require = [
     'pytest>=5.4.0',
     'pytest-cov',
-    'pytest-mypy>=0.6.2',
     'nlesc-CAT>=0.10.1',
 ]
 tests_require += build_require

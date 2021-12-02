@@ -70,12 +70,7 @@ jobs:
             -   name: Run tests
                 run: |
                     source $CONDA/bin/activate test
-                    case "${{ matrix.os }}" in
-                        "ubuntu-latest")
-                            pytest -m "not slow" --mypy ;;
-                        *)
-                            pytest -m "not slow" ;;
-                    esac
+                    pytest -m "not slow"
 
             -   name: Run codecov
                 uses: codecov/codecov-action@v2
@@ -93,8 +88,10 @@ jobs:
                 with:
                     python-version: 3.9
 
-            -   name: Install linters
-                run: pip install "flake8>=3.8.0" "pydocstyle>=5.0.0"
+            -   name: Install dependencies
+                run: |
+                    pip install -e .
+                    pip install "flake8>=3.8.0" "pydocstyle>=5.0.0" mypy nano-CAT
 
             -   name: Python info
                 run: |
@@ -110,4 +107,8 @@ jobs:
 
             -   name: Run pydocstyle
                 run: pydocstyle dataCAT tests
+                continue-on-error: true
+
+            -   name: Run mypy
+                run: python tools/run_mypy.py
                 continue-on-error: true
