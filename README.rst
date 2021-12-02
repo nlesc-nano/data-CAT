@@ -3,6 +3,8 @@
     :target: https://github.com/nlesc-nano/data-CAT/actions?query=workflow%3A%22Build+with+Conda%22
 .. image:: https://codecov.io/gh/nlesc-nano/data-CAT/branch/master/graph/badge.svg
     :target: https://codecov.io/gh/nlesc-nano/data-CAT
+.. image:: https://badge.fury.io/py/Data-CAT.svg
+    :target: https://badge.fury.io/py/Data-CAT
 
 |
 
@@ -15,7 +17,7 @@
 
 
 ##############
-Data-CAT 0.7.1
+Data-CAT 0.7.2
 ##############
 
 Data-CAT is a databasing framework for the Compound Attachment Tools package (CAT_).
