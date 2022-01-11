@@ -519,7 +519,7 @@ class PDBContainer:
                 setattr(self, f'_{name}', array)
 
             if scale is None:
-                self._scale = np.array(scale, ndmin=1, copy=copy).view(np.recarray)
+                self._scale: np.recarray = np.array(scale, ndmin=1, copy=copy).view(np.recarray)
             else:
                 dtype = cls.DTYPE['scale']
                 self._scale = np.arange(len(array), dtype=dtype).view(np.recarray)
