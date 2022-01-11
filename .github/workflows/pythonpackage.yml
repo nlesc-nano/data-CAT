@@ -45,6 +45,8 @@ jobs:
                         "; pre-release")
                             pip install -e .[test] --pre --upgrade --force-reinstall
                             pip install git+https://github.com/SCM-NV/PLAMS@master --upgrade
+                            pip install git+https://github.com/SCM-NV/qmflows@master --upgrade
+                            pip install git+https://github.com/nlesc-nano/CAT@master --upgrade
                             ;;
                         *)
                             pip install -e .[test] ;;
