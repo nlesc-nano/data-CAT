@@ -8,6 +8,7 @@ on:
         branches:
             - master
     pull_request:
+    workflow_dispatch:
 
 jobs:
     build:
@@ -104,12 +105,10 @@ jobs:
 
             -   name: Run flake8
                 run: flake8 dataCAT tests
-                continue-on-error: true
 
             -   name: Run pydocstyle
-                run: pydocstyle dataCAT tests
-                continue-on-error: true
+                run: pydocstyle dataCAT
 
             -   name: Run mypy
-                run: python tools/run_mypy.py
+                run: mypy dataCAT
                 continue-on-error: true
