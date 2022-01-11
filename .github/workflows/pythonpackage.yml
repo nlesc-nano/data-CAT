@@ -8,6 +8,7 @@ on:
         branches:
             - master
     pull_request:
+    workflow_dispatch:
 
 jobs:
     build:
@@ -17,12 +18,12 @@ jobs:
             fail-fast: false
             matrix:
                 os: [ubuntu-latest, macos-latest]
-                version: [3.7, 3.8, 3.9]
+                version: ["3.7", "3.8", "3.9", "3.10"]
                 special: [""]
                 include:
                     -   os: ubuntu-latest
                         special: "; pre-release"
-                        version: "3.9"
+                        version: "3.10"
 
         steps:
             -   name: Cancel Previous Runs
@@ -32,24 +33,23 @@ jobs:
 
             -   uses: actions/checkout@v2
 
-            -   name: Setup Conda
-                uses: s-weigand/setup-conda@v1
+            -   name: Set up Python
+                uses: actions/setup-python@v2
                 with:
-                    update-conda: false
+                    python-version: ${{ matrix.version }}
 
             -   name: Install dependencies
                 run: |
-                    conda create -n test -c conda-forge python=${{ matrix.version }} "rdkit>=2021.03.4"
-                    source $CONDA/bin/activate test
                     case "${{ matrix.special }}" in
                         "; pre-release")
-                            pip install -e .[test] --pre --upgrade --force-reinstall
+                            pip install -e .[test] --pre
                             pip install git+https://github.com/SCM-NV/PLAMS@master --upgrade
+                            pip install git+https://github.com/SCM-NV/qmflows@master --upgrade
+                            pip install git+https://github.com/nlesc-nano/CAT@master --upgrade
                             ;;
                         *)
                             pip install -e .[test] ;;
                     esac
-
 
             -   name: Install MongoDB
                 if: matrix.os == 'ubuntu-latest'
@@ -59,18 +59,16 @@ jobs:
                 if: matrix.os == 'ubuntu-latest'
                 run: mongo --version
 
-            -   name: Info Conda
+            -   name: Python info
                 run: |
-                    source $CONDA/bin/activate test
-                    conda info
+                    which python
+                    python --version
 
-            -   name: Info installed packages
-                run: conda list -n test
+            -   name: Installed packages
+                run: pip list
 
             -   name: Run tests
-                run: |
-                    source $CONDA/bin/activate test
-                    pytest -m "not slow"
+                run: pytest -m "not slow"
 
             -   name: Run codecov
                 uses: codecov/codecov-action@v2
@@ -83,10 +81,10 @@ jobs:
         steps:
             -   uses: actions/checkout@v2
 
-            -   name: Set up Python 3.9 on ubuntu-latest
+            -   name: Set up Python 3.10 on ubuntu-latest
                 uses: actions/setup-python@v2
                 with:
-                    python-version: 3.9
+                    python-version: "3.10"
 
             -   name: Install dependencies
                 run: |
@@ -103,12 +101,10 @@ jobs:
 
             -   name: Run flake8
                 run: flake8 dataCAT tests
-                continue-on-error: true
 
             -   name: Run pydocstyle
-                run: pydocstyle dataCAT tests
-                continue-on-error: true
+                run: pydocstyle dataCAT
 
             -   name: Run mypy
-                run: python tools/run_mypy.py
+                run: mypy dataCAT
                 continue-on-error: true
