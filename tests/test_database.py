@@ -4,7 +4,6 @@ import sys
 import copy
 import shutil
 import pickle
-import warnings
 from types import MappingProxyType
 from os.path import join, abspath
 from pathlib import Path
@@ -12,6 +11,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import pandas as pd
+import pytest
 
 from scm.plams import readpdb
 from nanoutils import delete_finally
@@ -220,10 +220,7 @@ def test_update_hdf5_settinga() -> None:
                 pass
 
 
+@pytest.mark.skipif(DB.mongodb is None, reason="MongoDB server not found")
 def test_update_mbongodb() -> None:
     """Test :meth:`~dataCAT.Database.update_mbongodb`."""
-    if DB.mongodb is None:
-        warnings.warn("MongoDB server not found; skipping test", category=RuntimeWarning)
-        return
-
     DB.update_mongodb('ligand')
