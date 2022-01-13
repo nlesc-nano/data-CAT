@@ -262,7 +262,7 @@ def even_index(df1: pd.DataFrame, df2: pd.DataFrame) -> pd.DataFrame:
     nan_row = get_nan_row(df1)
     idx = df2.index[~bool_ar]
     df_tmp = pd.DataFrame(len(idx) * [nan_row], index=idx, columns=df1.columns)
-    return df1.append(df_tmp, sort=True)
+    return pd.concat([df1, df_tmp], sort=True)
 
 
 def int_to_slice(int_like: SupportsIndex, seq_len: int) -> slice:
