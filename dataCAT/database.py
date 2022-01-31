@@ -492,7 +492,7 @@ class Database:
             group = f[database]
             dtype = IDX_DTYPE[database]
 
-            if new.any():
+            if len(new):
                 ret = self._write_hdf5(group, df, new.index, dtype, database, opt=opt)
             else:
                 ret = pd.Series(name=HDF5_INDEX, dtype=int)
