@@ -8,7 +8,8 @@ This project adheres to `Semantic Versioning <http://semver.org/>`_.
 
 0.7.2
 *****
-* *placeholder*.
+* Replace ``pd.DataFrame.append`` with ``pd.concat``.
+* Fix size-1 molecular dataframes not being correctly updated.
 
 
 0.7.1
