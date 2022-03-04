@@ -19,7 +19,7 @@
 
 
 ##############
-Data-CAT 0.7.2
+Data-CAT 0.7.3
 ##############
 
 Data-CAT is a databasing framework for the Compound Attachment Tools package (CAT_).
