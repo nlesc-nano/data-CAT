@@ -96,7 +96,7 @@ setup(
         'numpy',
         'pandas',
         'pymongo',
-        'Nano-Utils>=0.4.3',
+        'Nano-Utils>=2.3.1',
         'AssertionLib>=2.2.0',
         'plams>=1.5.1',
         'nlesc-CAT>=0.10.0',
