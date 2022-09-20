@@ -1277,7 +1277,8 @@ class PDBContainer:
 
     @if_exception(validate_hdf5.__func__)  # type: ignore
     def to_hdf5(self, group: h5py.Group, index: IndexLike, update_scale: bool = True) -> None:
-        """Update all datasets in **group** positioned at **index** with its counterpart from **pdb**.
+        """Update all datasets in **group** positioned at **index** with its \
+        counterpart from **pdb**.
 
         Follows the standard broadcasting rules as employed by h5py.
 
