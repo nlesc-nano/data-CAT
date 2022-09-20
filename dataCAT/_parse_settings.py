@@ -46,7 +46,9 @@ def _read_inp(job_paths: Sequence[str], ax2: int = 0, ax3: int = 0) -> np.ndarra
     ret = np.zeros((ax1, ax2, ax3), dtype='S120')
     for i, list1, list2 in zip(count(), line_count, job_paths):
         for j, k, filename in zip(count(), list1, list2):
-            ret[i, j, :k] = np.loadtxt(filename, dtype='S120', comments=None, delimiter='\n')
+            with open(filename, "rb") as f:
+                iterator = (i.strip(b"\n") for i in f)
+                ret[i, j, :k] = [i for i in iterator if i]
     return ret
 
 
