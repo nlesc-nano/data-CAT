@@ -96,7 +96,7 @@ setup(
     install_requires=[
         'h5py>=3.0.0',
         'numpy',
-        'pandas',
+        'pandas<=2.0.0',
         'pymongo',
         'Nano-Utils>=2.3.1',
         'AssertionLib>=2.2.0',
